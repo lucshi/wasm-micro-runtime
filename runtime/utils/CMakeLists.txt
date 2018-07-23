@@ -1,0 +1,7 @@
+include_directories (. ../include ../platform/include ../platform/${PLATFORM}
+                     coap/er-coap coap/extension)
+
+file (GLOB_RECURSE source_all *.c )
+
+add_library (vmutilslib ${source_all})
+
