@@ -343,15 +343,25 @@ typedef struct IndexSpace {
 
 typedef struct WASMModule {
   FeatureSpec feature_spec;
+  /* vector of FunctionType */
   Vector types;
+  /* IndexSpace of <FunctionImport, FunctionDef> */
   IndexSpace functions;
+  /* IndexSpace of <TableImport, TableDef> */
   IndexSpace tables;
+  /* IndexSpace of <MemoryImport, MemoryDef> */
   IndexSpace memories;
+  /* IndexSpace of <GlobalImport, GlobalDef> */
   IndexSpace globals;
+  /* IndexSpace of <ExceptionTypeImport, ExceptionTypeDef> */
   IndexSpace exception_types;
+  /* vector of Export */
   Vector exports;
+  /* vector of DataSegment */
   Vector data_segments;
+  /* vector of TableSegment */
   Vector table_segments;
+  /* vector of UserSection */
   Vector user_sections;
   uintptr_t start_function_index;
 } WASMModule;
@@ -535,45 +545,166 @@ align_uint (unsigned v, unsigned b)
 char*
 wasm_value_to_string(Value* v);
 
+/**
+ * Return whether two values are equal.
+ */
 bool
-wasm_value_equal(Value *v1, Value *v2);
+wasm_value_eq(Value *v1, Value *v2);
 
+/**
+ * Return whether obj is type of type.
+ */
 bool
 wasm_object_is_type(Object *obj, uint8 type);
+
+/**
+ * Return the type of obj.
+ */
+uint8
+wasm_object_get_type(Object *obj);
+
+/**
+ * Create a type tuple.
+ */
+TypeTuple*
+wasm_type_tuple_create(uint32 num_elems, uint8 *elem_data);
+
+/**
+ * Destroy a type tuple.
+ */
+void
+wasm_type_tuple_destroy(TypeTuple *type_tuple);
+
+/**
+ * Return element number of a type tuple.
+ */
+uint32
+wasm_type_tuple_get_num_elems(TypeTuple *type_tuple);
+
+/**
+ * Return an element of a type tuple.
+ */
+uint8
+wasm_type_tuple_get_elem(TypeTuple *type, uint32 index);
+
+/**
+ * Return the elements buffer of a type tuple.
+ */
+uint8*
+wasm_type_tuple_get_elems(TypeTuple *type);
+
+/**
+ * Set an element of a type tuple.
+ */
+bool
+wasm_type_tuple_set_elem(TypeTuple *type, uint32 index, uint8 elem);
+
+/**
+ * Set elements of a type tuple.
+ */
+bool
+wasm_type_tuple_set_elems(TypeTuple *type, uint32 offset,
+                          uint8 *elems, uint32 length);
+
+/**
+ * Initialize function def.
+ */
+bool
+wasm_function_def_init(FunctionDef *func_def);
+
+/**
+ * Destroy function def.
+ */
+void
+wasm_function_def_destroy(FunctionDef *func_def);
+
+/**
+ * Initialize data segment.
+ */
+bool
+wasm_data_segment_init(DataSegment *data_seg);
+
+/**
+ * Destroy data segment.
+ */
+void
+wasm_data_segment_destroy(DataSegment *data_seg);
+
+/**
+ * Initialize table segment.
+ */
+bool
+wasm_table_segment_init(TableSegment *table_seg);
+
+/**
+ * Destroy table segment.
+ */
+void
+wasm_table_segment_destroy(TableSegment *table_seg);
+
+/**
+ * Initialize user section.
+ */
+bool
+wasm_user_section_init(UserSection *user_sec);
+
+/**
+ * Destroy user section.
+ */
+void
+wasm_user_section_destroy(UserSection *user_sec);
 
 char *
 wasm_memory_type_to_string(const MemoryType *type);
 
-uint8
-wasm_object_get_type(Object *obj);
-
-void
-wasm_gc_pointer_create(GCPointer *ptr, Object *obj);
-
-void
-wasm_gc_pointer_destroy(GCPointer *ptr);
-
+/**
+ * Return whether two global types are equal.
+ */
 bool
-wasm_global_type_equal(GlobalType *type1, GlobalType *type2);
+wasm_global_type_eq(GlobalType *type1, GlobalType *type2);
 
-bool
+/**
+ * Compare two global types.
+ */
+int
 wasm_global_type_cmp(GlobalType *type1, GlobalType *type2);
 
 char*
 wasm_global_type_to_string(GlobalType *type);
 
+/**
+ * Return whether two exception types are equal.
+ */
 bool
-wasm_exception_type_equal(const ExceptionType *type1,
-                          const ExceptionType *type2);
+wasm_exception_type_eq(const ExceptionType *type1,
+                       const ExceptionType *type2);
 
+/**
+ * Calculate the bytes number of exception data.
+ */
 static inline uint32
 wasm_exception_data_calc_num_bytes(uint32 num_arguments)
 {
   return offsetof(ExceptionData, arguments) + num_arguments * sizeof(UntaggedValue);
 }
 
+/**
+ * Return the size of index space.
+ */
 uint32
-wasm_index_space_size();
+wasm_index_space_size(IndexSpace *index_space);
+
+/**
+ * Initialize gc pointer.
+ */
+bool
+wasm_gc_pointer_init(GCPointer *ptr, Object *obj);
+
+/**
+ * Destroy gc pointer.
+ */
+void
+wasm_gc_pointer_destroy(GCPointer *ptr);
 
 
 #ifdef __cplusplus
