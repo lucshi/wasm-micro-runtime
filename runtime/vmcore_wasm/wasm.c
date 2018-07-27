@@ -24,135 +24,121 @@
  */
 
 #include "wasm.h"
+#include "bh_memory.h"
+#include "bh_vector.h"
 
 
 char*
-wasm_value_to_string(Value* v)
+wasm_value_to_string(const Value* v)
 {
   /* TODO */
   return NULL;
 }
 
 bool
-wasm_value_eq(Value *v1, Value *v2)
+wasm_type_tuple_init(TypeTuple *type_tuple,
+                     uint32 num_elems, uint8 *elem_data)
 {
-  /* TODO */
-  return false;
-}
+  TypeTupleImpl *impl;
 
-bool
-wasm_object_is_type(Object *obj, uint8 type)
-{
-  /* TODO */
-  return false;
-}
+  if (!(impl = bh_malloc(offsetof(TypeTupleImpl, elems) +
+                         sizeof(uint8) * num_elems)))
+    return false;
 
-uint8
-wasm_object_get_type(Object *obj)
-{
-  /* TODO */
-  return 0;
-}
+  impl->num_elems = num_elems;
+  if (elem_data)
+    memcpy(impl->elems, elem_data, sizeof(uint8) *num_elems);
+  type_tuple->impl = impl;
 
-TypeTuple*
-wasm_type_tuple_create(uint32 num_elems, uint8 *elem_data)
-{
-  /* TODO */
-  return NULL;
+  return true;
 }
 
 void
 wasm_type_tuple_destroy(TypeTuple *type_tuple)
 {
-  /* TODO */
-}
-
-uint32
-wasm_type_tuple_get_num_elems(TypeTuple *type_tuple)
-{
-  /* TODO */
-  return 0;
-}
-
-uint8
-wasm_type_tuple_get_elem(TypeTuple *type, uint32 index)
-{
-  /* TODO */
-  return 0;
-}
-
-uint8*
-wasm_type_tuple_get_elems(TypeTuple *type)
-{
-  /* TODO */
-  return NULL;
-}
-
-bool
-wasm_type_tuple_set_elem(TypeTuple *type, uint32 index, uint8 elem)
-{
-  /* TODO */
-  return false;
-}
-
-bool
-wasm_type_tuple_set_elems(TypeTuple *type, uint32 offset,
-                          uint8 *elems, uint32 length)
-{
-  /* TODO */
-  return false;
+  bh_free(type_tuple->impl);
+  type_tuple->impl = NULL;
 }
 
 bool
 wasm_function_def_init(FunctionDef *func_def)
 {
-  /* TODO */
+  memset(func_def, 0, sizeof(FunctionDef));
+
+  if (!bh_vector_init(&func_def->non_parameter_local_types,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(uint8)))
+    return false;
+
+  if (!bh_vector_init(&func_def->code,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(uint8)))
+    goto fail1;
+
+  if (!bh_vector_init(&func_def->branch_tables,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(Vector)))
+    goto fail2;
+
+  return true;
+
+fail2:
+  bh_vector_destroy(&func_def->branch_tables);
+
+fail1:
+  bh_vector_destroy(&func_def->code);
   return false;
 }
 
 void
 wasm_function_def_destroy(FunctionDef *func_def)
 {
-  /* TODO */
+  bh_vector_destroy(&func_def->non_parameter_local_types);
+  bh_vector_destroy(&func_def->code);
+  bh_vector_destroy(&func_def->branch_tables);
+  memset(func_def, 0, sizeof(FunctionDef));
 }
 
 bool
 wasm_data_segment_init(DataSegment *data_seg)
 {
-  /* TODO */
-  return false;
+  memset(data_seg, 0, sizeof(DataSegment));
+  return bh_vector_init(&data_seg->data, DEFAULT_VECTOR_INIT_SIZE,
+                        sizeof(uint8));
 }
 
 void
 wasm_data_segment_destroy(DataSegment *data_seg)
 {
-  /* TODO */
+  bh_vector_destroy(&data_seg->data);
+  memset(data_seg, 0, sizeof(DataSegment));
 }
 
 bool
 wasm_table_segment_init(TableSegment *table_seg)
 {
-  /* TODO */
-  return false;
+  memset(table_seg, 0, sizeof(TableSegment));
+  return bh_vector_init(&table_seg->indices, DEFAULT_VECTOR_INIT_SIZE,
+                        sizeof(uintptr_t));
 }
 
 void
 wasm_table_segment_destroy(TableSegment *table_seg)
 {
-  /* TODO */
+  bh_vector_destroy(&table_seg->indices);
+  memset(table_seg, 0, sizeof(TableSegment));
 }
 
 bool
 wasm_user_section_init(UserSection *user_sec)
 {
-  /* TODO */
-  return false;
+  memset(user_sec, 0, sizeof(UserSection));
+  return bh_vector_init(&user_sec->data, DEFAULT_VECTOR_INIT_SIZE,
+                        sizeof(uint8));
 }
 
 void
 wasm_user_section_destroy(UserSection *user_sec)
 {
-  /* TODO */
+  bh_vector_destroy(&user_sec->data);
+  memset(user_sec, 0, sizeof(UserSection));
 }
 
 char *
@@ -162,40 +148,11 @@ wasm_memory_type_to_string(const MemoryType *type)
   return NULL;
 }
 
-bool
-wasm_global_type_eq(GlobalType *type1, GlobalType *type2)
-{
-  /* TODO */
-  return false;
-}
-
-int
-wasm_global_type_cmp(GlobalType *type1, GlobalType *type2)
-{
-  /* TODO */
-  return false;
-}
-
 char*
-wasm_global_type_to_string(GlobalType *type)
+wasm_global_type_to_string(const GlobalType *type)
 {
   /* TODO */
   return false;
-}
-
-bool
-wasm_exception_type_eq(const ExceptionType *type1,
-                       const ExceptionType *type2)
-{
-  /* TODO */
-  return false;
-}
-
-uint32
-wasm_index_space_size(IndexSpace *index_space)
-{
-  /* TODO */
-  return 0;
 }
 
 bool

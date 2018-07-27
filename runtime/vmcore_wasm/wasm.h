@@ -30,6 +30,7 @@
 #include "bh_hashmap.h"
 #include "bh_vector.h"
 #include "wasm-import.h"
+#include "bh_assert.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -543,31 +544,58 @@ align_uint (unsigned v, unsigned b)
 }
 
 char*
-wasm_value_to_string(Value* v);
+wasm_value_to_string(const Value* v);
 
 /**
  * Return whether two values are equal.
  */
-bool
-wasm_value_eq(Value *v1, Value *v2);
+static inline bool
+wasm_value_eq(const Value *v1, const Value *v2)
+{
+  if (v1->type != v2->type)
+    return false;
+  switch (v1->type) {
+    case VALUE_TYPE_I32:
+    case VALUE_TYPE_F32:
+      return v1->value.i32 == v2->value.i32;
+    case VALUE_TYPE_I64:
+    case VALUE_TYPE_F64:
+      return v1->value.i64 == v2->value.i64;
+    case VALUE_TYPE_V128:
+      return v1->value.v128.u64[0] == v2->value.v128.u64[0] &&
+             v1->value.v128.u64[1] == v2->value.v128.u64[1];
+    default:
+      bh_assert(0);
+  }
+  return false;
+}
 
 /**
  * Return whether obj is type of type.
  */
-bool
-wasm_object_is_type(Object *obj, uint8 type);
+static inline bool
+wasm_object_is_type(const Object *obj, uint8 type)
+{
+  if (type <= OBJ_KIND_EXCEPTION_TYPE_INSTANCE
+      && obj->kind == type)
+    return true;
+  return false;
+}
 
 /**
  * Return the type of obj.
  */
-uint8
-wasm_object_get_type(Object *obj);
+static inline uint8
+wasm_object_get_type(const Object *obj)
+{
+  return obj->kind;
+}
 
 /**
  * Create a type tuple.
  */
 TypeTuple*
-wasm_type_tuple_create(uint32 num_elems, uint8 *elem_data);
+wasm_type_tuple_create(uint32 num_elems, const uint8 *elem_data);
 
 /**
  * Destroy a type tuple.
@@ -578,33 +606,63 @@ wasm_type_tuple_destroy(TypeTuple *type_tuple);
 /**
  * Return element number of a type tuple.
  */
-uint32
-wasm_type_tuple_get_num_elems(TypeTuple *type_tuple);
+static inline uint32
+wasm_type_tuple_get_num_elems(const TypeTuple *type_tuple)
+{
+  return type_tuple->impl->num_elems;
+}
 
 /**
  * Return an element of a type tuple.
  */
-uint8
-wasm_type_tuple_get_elem(TypeTuple *type, uint32 index);
+static inline uint8
+wasm_type_tuple_get_elem(const TypeTuple *type_tuple, uint32 index)
+{
+  bh_assert(index < type_tuple->impl->num_elems);
+  return type_tuple->impl->elems[index];
+}
 
 /**
  * Return the elements buffer of a type tuple.
  */
-uint8*
-wasm_type_tuple_get_elems(TypeTuple *type);
+static inline uint8*
+wasm_type_tuple_get_elems(const TypeTuple *type_tuple)
+{
+  return type_tuple->impl->elems;
+}
 
 /**
  * Set an element of a type tuple.
  */
-bool
-wasm_type_tuple_set_elem(TypeTuple *type, uint32 index, uint8 elem);
+static inline void
+wasm_type_tuple_set_elem(TypeTuple *type_tuple, uint32 index, uint8 elem)
+{
+  bh_assert(index < type_tuple->impl->num_elems);
+  type_tuple->impl->elems[index] = elem;
+}
 
 /**
  * Set elements of a type tuple.
  */
-bool
-wasm_type_tuple_set_elems(TypeTuple *type, uint32 offset,
-                          uint8 *elems, uint32 length);
+static inline void
+wasm_type_tuple_set_elems(TypeTuple *type_tuple, uint32 offset,
+                          const uint8 *elems, uint32 length)
+{
+  bh_assert(offset < offset + length
+            && offset + length <= type_tuple->impl->num_elems
+            && elems != NULL);
+  memcpy(type_tuple->impl->elems + offset, elems, length);
+}
+
+/**
+ * Return whether two type tuples are equal.
+ */
+static inline bool
+wasm_type_tuple_eq(const TypeTuple *t1, const TypeTuple *t2)
+{
+  return (t1->impl->num_elems == t2->impl->num_elems)
+         && !memcmp(t1->impl->elems, t2->impl->elems, t1->impl->num_elems);
+}
 
 /**
  * Initialize function def.
@@ -660,24 +718,34 @@ wasm_memory_type_to_string(const MemoryType *type);
 /**
  * Return whether two global types are equal.
  */
-bool
-wasm_global_type_eq(GlobalType *type1, GlobalType *type2);
+static inline bool
+wasm_global_type_eq(const GlobalType *type1, const GlobalType *type2)
+{
+  return type1->value_type == type2->value_type
+         && type1->is_mutable == type2->is_mutable;
+}
 
 /**
  * Compare two global types.
  */
-int
-wasm_global_type_cmp(GlobalType *type1, GlobalType *type2);
+static inline int
+wasm_global_type_cmp(const GlobalType *type1, const GlobalType *type2)
+{
+  return wasm_global_type_eq(type1, type2) ? 0 : 1;
+}
 
 char*
-wasm_global_type_to_string(GlobalType *type);
+wasm_global_type_to_string(const GlobalType *type);
 
 /**
  * Return whether two exception types are equal.
  */
-bool
+static inline bool
 wasm_exception_type_eq(const ExceptionType *type1,
-                       const ExceptionType *type2);
+                       const ExceptionType *type2)
+{
+  return wasm_type_tuple_eq(&type1->params, &type2->params);
+}
 
 /**
  * Calculate the bytes number of exception data.
@@ -691,8 +759,12 @@ wasm_exception_data_calc_num_bytes(uint32 num_arguments)
 /**
  * Return the size of index space.
  */
-uint32
-wasm_index_space_size(IndexSpace *index_space);
+static inline uint32
+wasm_index_space_size(const IndexSpace *index_space)
+{
+  return bh_vector_size(&index_space->imports) +
+         bh_vector_size(&index_space->defs);
+}
 
 /**
  * Initialize gc pointer.

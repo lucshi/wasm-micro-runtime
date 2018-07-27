@@ -25,13 +25,8 @@
 
 #include "bh_hashmap.h"
 #include "bh_thread.h"
-#include <stdlib.h>
-#include <string.h>
+#include "bh_memory.h"
 
-/* TODO: key equal func */
-
-#define bh_malloc malloc
-#define bh_free free
 
 typedef struct HashMapElem {
   void *key;

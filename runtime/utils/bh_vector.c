@@ -24,6 +24,7 @@
  */
 
 #include "bh_vector.h"
+#include "bh_memory.h"
 
 
 static uint8*
@@ -36,7 +37,7 @@ alloc_vector_data(uint32 length, uint32 size_elem)
     return NULL;
   }
 
-  if ((data = malloc((uint32)total_size))) {
+  if ((data = bh_malloc((uint32)total_size))) {
     memset(data, 0, (uint32)total_size);
   }
 
@@ -217,8 +218,8 @@ bh_vector_destroy(Vector *vector)
     return false;
   }
 
-  free(vector->data);
+  if (vector->data)
+    bh_free(vector->data);
   memset(vector, 0, sizeof(Vector));
-
   return true;
 }

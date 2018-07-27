@@ -215,21 +215,135 @@ wasm_wasm_module_load(const uint8 *buf, uint32 size)
     return NULL;
   }
 
+  memset(module, 0, sizeof(WASMModule));
   module->start_function_index = UINTPTR_MAX;
 
-  serialize(buf, buf + size, module);
-  /* TODO */
+  if (!bh_vector_init(&module->types,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(FunctionType)))
+    goto fail;
+
+  if (!bh_vector_init(&module->functions.imports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(FunctionImport)))
+    goto fail;
+
+  if (!bh_vector_init(&module->functions.defs,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(FunctionDef)))
+    goto fail;
+
+  if (!bh_vector_init(&module->tables.imports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(TableImport)))
+    goto fail;
+
+  if (!bh_vector_init(&module->tables.defs,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(TableDef)))
+    goto fail;
+
+  if (!bh_vector_init(&module->memories.imports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(MemoryImport)))
+    goto fail;
+
+  if (!bh_vector_init(&module->memories.defs,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(MemoryDef)))
+    goto fail;
+
+  if (!bh_vector_init(&module->globals.imports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(GlobalImport)))
+    goto fail;
+
+  if (!bh_vector_init(&module->globals.defs,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(GlobalDef)))
+    goto fail;
+
+  if (!bh_vector_init(&module->exception_types.imports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(ExceptionTypeImport)))
+    goto fail;
+
+  if (!bh_vector_init(&module->exception_types.defs,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(ExceptionTypeDef)))
+    goto fail;
+
+  if (!bh_vector_init(&module->exports,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(Export)))
+    goto fail;
+
+  if (!bh_vector_init(&module->data_segments,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(DataSegment)))
+    goto fail;
+
+  if (!bh_vector_init(&module->table_segments,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(TableSegment)))
+    goto fail;
+
+  if (!bh_vector_init(&module->user_sections,
+                      DEFAULT_VECTOR_INIT_SIZE, sizeof(UserSection)))
+    goto fail;
+
+  if (!serialize(buf, buf + size, module))
+    goto fail;
+
   return module;
+
+fail:
+  wasm_wasm_module_unload(module);
+  return NULL;
 }
 
 bool
 wasm_wasm_module_unload(WASMModule *module)
 {
-  /* TODO */
-  if (module) {
-    bh_free(module);
-    return false;
-  }
+  uint32 i, size;
+  FunctionDef func_def;
+  DataSegment data_seg;
+  TableSegment table_seg;
+  UserSection user_sec;
 
+  if (!module)
+    return false;
+
+  bh_vector_destroy(&module->types);
+  bh_vector_destroy(&module->functions.imports);
+
+  size = bh_vector_size(&module->functions.defs);
+  for (i = 0; i < size; i++) {
+    bh_vector_get(&module->functions.defs, i, &func_def);
+    bh_vector_destroy(&func_def.non_parameter_local_types);
+    bh_vector_destroy(&func_def.code);
+    /* TODO: destroy each branch */
+    bh_vector_destroy(&func_def.branch_tables);
+  }
+  bh_vector_destroy(&module->functions.defs);
+
+  bh_vector_destroy(&module->functions.imports);
+  bh_vector_destroy(&module->functions.defs);
+  bh_vector_destroy(&module->memories.imports);
+  bh_vector_destroy(&module->memories.defs);
+  bh_vector_destroy(&module->globals.imports);
+  bh_vector_destroy(&module->globals.defs);
+  bh_vector_destroy(&module->exception_types.imports);
+  bh_vector_destroy(&module->exception_types.defs);
+  bh_vector_destroy(&module->exports);
+
+  size = bh_vector_size(&module->data_segments);
+  for (i = 0; i < size; i++) {
+    bh_vector_get(&module->data_segments, i, &data_seg);
+    bh_vector_destroy(&data_seg.data);
+  }
+  bh_vector_destroy(&module->data_segments);
+
+  size = bh_vector_size(&module->table_segments);
+  for (i = 0; i < size; i++) {
+    bh_vector_get(&module->table_segments, i, &table_seg);
+    bh_vector_destroy(&table_seg.indices);
+  }
+  bh_vector_destroy(&module->table_segments);
+
+  size = bh_vector_size(&module->user_sections);
+  for (i = 0; i < size; i++) {
+    bh_vector_get(&module->user_sections, i, &user_sec);
+    bh_vector_destroy(&user_sec.data);
+  }
+  bh_vector_destroy(&module->user_sections);
+
+  bh_free(module);
   return true;
 }

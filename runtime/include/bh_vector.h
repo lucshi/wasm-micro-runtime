@@ -33,6 +33,8 @@
 extern "C" {
 #endif
 
+#define DEFAULT_VECTOR_INIT_SIZE 8
+
 typedef struct Vector {
   /* size of each element */
   uint32 size_elem;
