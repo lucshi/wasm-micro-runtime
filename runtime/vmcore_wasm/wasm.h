@@ -36,17 +36,6 @@
 extern "C" {
 #endif
 
-/** Object Kind */
-#define OBJ_KIND_FUNCTION 0
-#define OBJ_KIND_TABLE 1
-#define OBJ_KIND_MEMORY 2
-#define OBJ_KIND_GLOBAL 3
-#define OBJ_KIND_EXCEPTION_TYPE_INSTANCE 4
-#define OBJ_KIND_MODULE 5
-#define OBJ_KIND_CONTEXT 6
-#define OBJ_KIND_COMPARTMENT 7
-#define OBJ_KIND_INVALID 0xff
-
 /** Value Type */
 #define VALUE_TYPE_ANY 0
 #define VALUE_TYPE_I32 1
@@ -104,324 +93,11 @@ extern "C" {
 #define SECTION_TYPE_FUNC_DEFS 10
 #define SECTION_TYPE_DATA 11
 
-typedef union V128 {
-  uint8 u8[16];
-  int8 i8[16];
-  uint16 u16[8];
-  int16 i16[8];
-  uint32 u32[4];
-  int32 i32[4];
-  float32 f32[4];
-  uint64 u64[2];
-  int64 i64[2];
-  float64 f64[2];
-} V128;
-
-typedef union UntaggedValue {
-  int32 i32;
-  uint32 u32;
-  int64 i64;
-  uint64 u64;
-  float32 f32;
-  float64 f64;
-  V128 v128;
-  uint8 bytes[16];
-} UntaggedValue;
-
-typedef struct Value {
-  UntaggedValue value;
-  /* Value Type, must be VALUE_TYPE_XXX */
-  uint8 type;
-} Value;
-
-typedef struct Object {
-  /* Object Kind, must be OBJ_KIND_XXX */
-  uint8 kind;
-} Object;
-
-typedef struct ModuleImpl {
-  /* HashMap of <char*, Function*> */
-  HashMap *function_map;
-  /* HashMap of <char*, Global*> */
-  HashMap *global_map;
-  /* HashMap of <char*, Memory*> */
-  HashMap *memory_map;
-  /* HashMap of <char*, Table*> */
-  HashMap *table_map;
-} ModuleImpl;
-
-typedef struct Module {
-  ModuleImpl *impl;
-} Module;
-
-typedef struct TypeTupleImpl {
-  uint32 hash;
-  uint32 num_elems;
-  /* each elem is type of VALUE_TYPE_XXX */
-  uint8 elems[1];
-} TypeTupleImpl;
-
-typedef struct TypeTuple {
-  TypeTupleImpl *impl;
-} TypeTuple;
-
-typedef struct FunctionTypeImpl {
-  uint32 hash;
-  TypeTuple results;
-  TypeTuple params;
-} FunctionTypeImpl;
-
-typedef struct FunctionType {
-  FunctionTypeImpl *impl;
-} FunctionType;
-
-typedef struct Function {
-  const char *name;
-  FunctionType type;
-  void *native_function;
-  /* type of CALLING_CONV_XXX */
-  uint8 calling_convention;
-} Function;
-
-typedef struct Global {
-  const char *name;
-  /* type of VALUE_TYPE_XXX */
-  uint8 type;
-  Value value;
-} Global;
-
-typedef struct GlobalType {
-  uint8 value_type;
-  bool is_mutable;
-} GlobalType;
-
-typedef struct MemoryType {
-  bool is_shared;
-  uint64 size_min;
-  uint64 size_max;
-} MemoryType;
-
-typedef struct Memory {
-  const char* name;
-  const MemoryType type;
-} Memory;
-
-typedef struct TableType {
-  /* must be TABLE_ELEM_TYPE_ANY_FUNC */
-  uint8 element_type;
-  bool is_shared;
-  uint64 size_min;
-  uint64 size_max;
-} TableType;
-
-typedef struct Table {
-  const char* name;
-  const TableType type;
-} Table;
-
-typedef struct ExceptionType {
-  TypeTuple params;
-} ExceptionType;
-
-typedef struct InitializerExpression {
-  /* type of INIT_EXPR_TYPE_XXX */
-  uint8 type;
-  union {
-    int32 i32;
-    int64 i64;
-    float32 f32;
-    float64 f64;
-    uintptr_t global_index;
-  } u;
-} InitializerExpression;
-
-typedef struct IndexedFunctionType {
-  uintptr_t index;
-} IndexedFunctionType;
-
-typedef struct FunctionDef {
-  IndexedFunctionType type;
-  /* vector of uint8, VALUE_TYPE_XXX */
-  Vector non_parameter_local_types;
-  /* vector of uint8 */
-  Vector code;
-  /* Vector of Vector<uint32> */
-  Vector branch_tables;
-} FunctionDef;
-
-typedef struct TableDef {
-  TableType type;
-} TableDef;
-
-typedef struct MemoryDef {
-  MemoryType type;
-} MemoryDef;
-
-typedef struct GlobalDef {
-  GlobalType type;
-  InitializerExpression initializer;
-} GlobalDef;
-
-typedef struct ExceptionTypeDef {
-  ExceptionType type;
-} ExceptionTypeDef;
-
-typedef struct FunctionImport {
-  IndexedFunctionType type;
-  char *module_name;
-  char *export_name;
-} FunctionImport;
-
-typedef struct TableImport {
-  TableType type;
-  char *module_name;
-  char *export_name;
-} TableImport;
-
-typedef struct MemoryImport {
-  MemoryType type;
-  char *module_name;
-  char *export_name;
-} MemoryImport;
-
-typedef struct GlobalImport {
-  GlobalType type;
-  char *module_name;
-  char *export_name;
-} GlobalImport;
-
-typedef struct ExceptionTypeImport {
-  TypeTuple type;
-  char *module_name;
-  char *export_name;
-} ExceptionTypeImport;
-
-typedef struct Export {
-  char *name;
-  /* kind of OBJECT_KIND_XXX */
-  uint8 kind;
-  uintptr_t index;
-} Export;
-
-typedef struct DataSegment {
-  uintptr_t memory_index;
-  InitializerExpression base_offset;
-  /* vector of uint8 */
-  Vector data;
-} DataSegment;
-
-typedef struct TableSegment {
-  uintptr_t table_index;
-  InitializerExpression base_offset;
-  /* vector of uintptr_t */
-  Vector indices;
-} TableSegment;
-
-typedef struct UserSection {
-  char *name;
-  /* vector of uint8 */
-  Vector data;
-} UserSection;
-
-typedef struct FeatureSpec {
-  bool mvp;
-  bool import_export_mutable_globals;
-  bool extended_name_section;
-  bool simd;
-  bool atomics;
-  bool exception_handling;
-  bool non_trapping_float_to_int;
-  bool extended_sign_extension;
-  bool multiple_results_and_block_params;
-  bool shared_tables;
-  bool required_shared_flag_for_atomic_operators;
-} FeatureSpec;
-
-typedef struct IndexSpace {
-  Vector imports;
-  Vector defs;
-} IndexSpace;
-
-typedef struct WASMModule {
-  FeatureSpec feature_spec;
-  /* vector of FunctionType */
-  Vector types;
-  /* IndexSpace of <FunctionImport, FunctionDef> */
-  IndexSpace functions;
-  /* IndexSpace of <TableImport, TableDef> */
-  IndexSpace tables;
-  /* IndexSpace of <MemoryImport, MemoryDef> */
-  IndexSpace memories;
-  /* IndexSpace of <GlobalImport, GlobalDef> */
-  IndexSpace globals;
-  /* IndexSpace of <ExceptionTypeImport, ExceptionTypeDef> */
-  IndexSpace exception_types;
-  /* vector of Export */
-  Vector exports;
-  /* vector of DataSegment */
-  Vector data_segments;
-  /* vector of TableSegment */
-  Vector table_segments;
-  /* vector of UserSection */
-  Vector user_sections;
-  uintptr_t start_function_index;
-} WASMModule;
-
+#if 0
 struct ModuleInstance;
 struct Compartment;
 struct ContextRuntimeData;
 struct CompartmentRuntimeData;
-
-typedef struct GCPointer {
-  Object *value;
-} GCPointer;
-
-typedef struct RootResolver {
-  struct Compartment *compartment;
-  /* hash map of <char*, ModuleInstance*> */
-  HashMap *module_name_to_instance_map;
-} RootResolver;
-
-typedef struct EmscriptenInstance {
-  /* GCPointer of ModuleInstance */
-  GCPointer env;
-  /* GCPointer of ModuleInstance */
-  GCPointer global;
-  /* GCPointer of ModuleInstance */
-  GCPointer emscripten_memory;
-} EmscriptenInstance;
-
-typedef struct MissingImport {
-  char *module_name;
-  char *export_name;
-  /* type of object, OBJECT_TYPE_XXX */
-  uint8 type;
-} MissingImport;
-
-typedef struct ImportBindings {
-  /* vector of FunctionInstance* */
-  Vector functions;
-  /* vector of TableInstance* */
-  Vector tables;
-  /* vector of MemoryInstance* */
-  Vector memories;
-  /* vector of GlobalInstance* */
-  Vector globals;
-  /* vector of ExceptionTypeInstance* */
-  Vector exception_types;
-} ImportBindings;
-
-typedef struct LinkResult {
-  /* vector of MissingImport */
-  Vector missing_imports;
-  ImportBindings resolved_imports;
-  bool success;
-} LinkResult;
-
-typedef struct ObjectImpl {
-  Object obj;
-  uint32 num_root_references;
-} ObjectImpl;
 
 typedef struct FunctionInstance {
   ObjectImpl obj_impl;
@@ -526,7 +202,130 @@ typedef struct CompartmentRuntimeData {
   FunctionElement *tables[MaxTables];
   ContextRuntimeData contexts[1];
 } CompartmentRuntimeData;
+#endif
 
+typedef struct InitializerExpression {
+  /* type of INIT_EXPR_TYPE_XXX */
+  uint8 type;
+  union {
+    int32 i32;
+    int64 i64;
+    float32 f32;
+    float64 f64;
+    uint32 global_index;
+    /* pointer of global data after linked */
+    void *global_data_ptr;
+  } u;
+} InitializerExpression;
+
+typedef struct WASMType {
+  uint16 param_count;
+  /* only one result is supported currently */
+  uint16 result_count;
+  /* types of params and results */
+  uint8 types[1];
+} WASMType;
+
+typedef struct WASMTable {
+  uint32 flags;
+  uint32 init_size;
+  /* specified if (flags & 1), else it is 0x10000 */
+  uint32 max_size;
+} WASMTable;
+
+typedef struct WASMMemory {
+  uint32 flags;
+  /* 64 kbytes one page by default */
+  uint32 page_count;
+} WASMMemory;
+
+typedef struct WASMImport {
+  char *module_name;
+  char *field_name;
+  uint8 kind;
+  union {
+    struct {
+      /* function type */
+      WASMType *func_type;
+      /* function pointer */
+      void *func_ptr;
+    } function;
+    WASMTable table;
+    WASMMemory memory;
+    struct {
+      uint8 type;
+      bool is_mutable;
+      /* global data pointer after linked */
+      void *global_data_ptr;
+    } global;
+  } u;
+} WASMImport;
+
+typedef struct WASMFunction {
+  /* the type of function */
+  WASMType *func_type;
+  Vector branches;
+  uint32 local_count;
+  uint32 code_size;
+  uint8 code[1];
+} WASMFunction;
+
+typedef struct WASMGlobal {
+  uint8 type;
+  bool is_mutable;
+  InitializerExpression init_expr;
+} WASMGlobal;
+
+typedef struct WASMExport {
+  char *name;
+  uint8 kind;
+  uint32 index;
+  union {
+    WASMFunction function;
+    WASMTable table;
+    WASMMemory memory;
+    WASMGlobal global;
+  } u;
+} WASMExport;
+
+typedef struct WASMTableSeg {
+  uint32 table_index;
+  InitializerExpression base_offset;
+  uint32 function_count;
+  void *functions;
+} WASMTableSeg;
+
+typedef struct WASMDataSeg {
+  uint32 memory_index;
+  InitializerExpression base_offset;
+  uint32 data_length;
+  uint8 data[1];
+} WASMDataSeg;
+
+typedef struct WASMModule {
+  uint32 type_count;
+  uint32 import_count;
+  uint32 function_count;
+  uint32 table_count;
+  uint32 memory_count;
+  uint32 global_count;
+  uint32 export_count;
+  uint32 table_seg_count;
+  uint32 data_seg_count;
+
+  WASMType **types;
+  WASMImport *imports;
+  WASMFunction **functions;
+  WASMTable *tables;
+  WASMMemory *memories;
+  WASMGlobal *globals;
+  WASMExport *exports;
+  WASMTableSeg *table_segments;
+  WASMDataSeg **data_segments;
+  WASMFunction *start_function;
+
+  HashMap *const_str_set;
+} WASMModule;
 
 /**
  * Align an unsigned value on a alignment boundary.
@@ -542,242 +341,6 @@ align_uint (unsigned v, unsigned b)
   unsigned m = b - 1;
   return (v + m) & ~m;
 }
-
-char*
-wasm_value_to_string(const Value* v);
-
-/**
- * Return whether two values are equal.
- */
-static inline bool
-wasm_value_eq(const Value *v1, const Value *v2)
-{
-  if (v1->type != v2->type)
-    return false;
-  switch (v1->type) {
-    case VALUE_TYPE_I32:
-    case VALUE_TYPE_F32:
-      return v1->value.i32 == v2->value.i32;
-    case VALUE_TYPE_I64:
-    case VALUE_TYPE_F64:
-      return v1->value.i64 == v2->value.i64;
-    case VALUE_TYPE_V128:
-      return v1->value.v128.u64[0] == v2->value.v128.u64[0] &&
-             v1->value.v128.u64[1] == v2->value.v128.u64[1];
-    default:
-      bh_assert(0);
-  }
-  return false;
-}
-
-/**
- * Return whether obj is type of type.
- */
-static inline bool
-wasm_object_is_type(const Object *obj, uint8 type)
-{
-  if (type <= OBJ_KIND_EXCEPTION_TYPE_INSTANCE
-      && obj->kind == type)
-    return true;
-  return false;
-}
-
-/**
- * Return the type of obj.
- */
-static inline uint8
-wasm_object_get_type(const Object *obj)
-{
-  return obj->kind;
-}
-
-/**
- * Create a type tuple.
- */
-TypeTuple*
-wasm_type_tuple_create(uint32 num_elems, const uint8 *elem_data);
-
-/**
- * Destroy a type tuple.
- */
-void
-wasm_type_tuple_destroy(TypeTuple *type_tuple);
-
-/**
- * Return element number of a type tuple.
- */
-static inline uint32
-wasm_type_tuple_get_num_elems(const TypeTuple *type_tuple)
-{
-  return type_tuple->impl->num_elems;
-}
-
-/**
- * Return an element of a type tuple.
- */
-static inline uint8
-wasm_type_tuple_get_elem(const TypeTuple *type_tuple, uint32 index)
-{
-  bh_assert(index < type_tuple->impl->num_elems);
-  return type_tuple->impl->elems[index];
-}
-
-/**
- * Return the elements buffer of a type tuple.
- */
-static inline uint8*
-wasm_type_tuple_get_elems(const TypeTuple *type_tuple)
-{
-  return type_tuple->impl->elems;
-}
-
-/**
- * Set an element of a type tuple.
- */
-static inline void
-wasm_type_tuple_set_elem(TypeTuple *type_tuple, uint32 index, uint8 elem)
-{
-  bh_assert(index < type_tuple->impl->num_elems);
-  type_tuple->impl->elems[index] = elem;
-}
-
-/**
- * Set elements of a type tuple.
- */
-static inline void
-wasm_type_tuple_set_elems(TypeTuple *type_tuple, uint32 offset,
-                          const uint8 *elems, uint32 length)
-{
-  bh_assert(offset < offset + length
-            && offset + length <= type_tuple->impl->num_elems
-            && elems != NULL);
-  memcpy(type_tuple->impl->elems + offset, elems, length);
-}
-
-/**
- * Return whether two type tuples are equal.
- */
-static inline bool
-wasm_type_tuple_eq(const TypeTuple *t1, const TypeTuple *t2)
-{
-  return (t1->impl->num_elems == t2->impl->num_elems)
-         && !memcmp(t1->impl->elems, t2->impl->elems, t1->impl->num_elems);
-}
-
-/**
- * Initialize function def.
- */
-bool
-wasm_function_def_init(FunctionDef *func_def);
-
-/**
- * Destroy function def.
- */
-void
-wasm_function_def_destroy(FunctionDef *func_def);
-
-/**
- * Initialize data segment.
- */
-bool
-wasm_data_segment_init(DataSegment *data_seg);
-
-/**
- * Destroy data segment.
- */
-void
-wasm_data_segment_destroy(DataSegment *data_seg);
-
-/**
- * Initialize table segment.
- */
-bool
-wasm_table_segment_init(TableSegment *table_seg);
-
-/**
- * Destroy table segment.
- */
-void
-wasm_table_segment_destroy(TableSegment *table_seg);
-
-/**
- * Initialize user section.
- */
-bool
-wasm_user_section_init(UserSection *user_sec);
-
-/**
- * Destroy user section.
- */
-void
-wasm_user_section_destroy(UserSection *user_sec);
-
-char *
-wasm_memory_type_to_string(const MemoryType *type);
-
-/**
- * Return whether two global types are equal.
- */
-static inline bool
-wasm_global_type_eq(const GlobalType *type1, const GlobalType *type2)
-{
-  return type1->value_type == type2->value_type
-         && type1->is_mutable == type2->is_mutable;
-}
-
-/**
- * Compare two global types.
- */
-static inline int
-wasm_global_type_cmp(const GlobalType *type1, const GlobalType *type2)
-{
-  return wasm_global_type_eq(type1, type2) ? 0 : 1;
-}
-
-char*
-wasm_global_type_to_string(const GlobalType *type);
-
-/**
- * Return whether two exception types are equal.
- */
-static inline bool
-wasm_exception_type_eq(const ExceptionType *type1,
-                       const ExceptionType *type2)
-{
-  return wasm_type_tuple_eq(&type1->params, &type2->params);
-}
-
-/**
- * Calculate the bytes number of exception data.
- */
-static inline uint32
-wasm_exception_data_calc_num_bytes(uint32 num_arguments)
-{
-  return offsetof(ExceptionData, arguments) + num_arguments * sizeof(UntaggedValue);
-}
-
-/**
- * Return the size of index space.
- */
-static inline uint32
-wasm_index_space_size(const IndexSpace *index_space)
-{
-  return bh_vector_size(&index_space->imports) +
-         bh_vector_size(&index_space->defs);
-}
-
-/**
- * Initialize gc pointer.
- */
-bool
-wasm_gc_pointer_init(GCPointer *ptr, Object *obj);
-
-/**
- * Destroy gc pointer.
- */
-void
-wasm_gc_pointer_destroy(GCPointer *ptr);
-
 
 #ifdef __cplusplus
 } /* end of extern "C" */

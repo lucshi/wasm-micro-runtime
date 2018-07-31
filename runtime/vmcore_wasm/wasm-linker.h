@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+#if 0
 bool
 wasm_root_resolver_resolve(const char *module_name, const char *export_name,
                            uint8 obj_type, Object* p_out_obj);
@@ -50,6 +51,7 @@ void
 wasm_emsc_inst_inject_command_args(EmscriptenInstance *instance,
                                    const Vector *arg_strings,
                                    Vector **p_out_invoke_args);
+#endif
 
 
 #ifdef __cplusplus

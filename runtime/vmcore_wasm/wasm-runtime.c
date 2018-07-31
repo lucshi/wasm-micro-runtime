@@ -27,21 +27,3 @@
 #include "wasm-import.h"
 
 
-void
-wasm_runtime_add_gc_root(Object *obj)
-{
-  /* TODO */
-}
-
-void
-wasm_runtime_remove_gc_root(Object *obj)
-{
-  /* TODO */
-}
-
-void
-wasm_runtime_collect_garbage()
-{
-  /* TODO */
-}
-

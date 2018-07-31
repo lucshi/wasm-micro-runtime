@@ -32,14 +32,6 @@
 extern "C" {
 #endif
 
-void
-wasm_runtime_add_gc_root(Object *obj);
-
-void
-wasm_runtime_remove_gc_root(Object *obj);
-
-void
-wasm_runtime_collect_garbage();
 
 #ifdef __cplusplus
 }

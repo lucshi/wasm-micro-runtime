@@ -26,6 +26,7 @@
 #include "wasm-linker.h"
 
 
+#if 0
 bool
 wasm_root_resolver_resolve(const char *module_name, const char *export_name,
                            uint8 obj_type, Object* p_out_obj)
@@ -62,4 +63,5 @@ wasm_emsc_inst_inject_command_args(EmscriptenInstance *instance,
 {
   /* TODO */
 }
+#endif
 
