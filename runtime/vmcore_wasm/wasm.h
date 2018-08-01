@@ -83,14 +83,14 @@ extern "C" {
 #define SECTION_TYPE_USER 0
 #define SECTION_TYPE_TYPE 1
 #define SECTION_TYPE_IMPORT 2
-#define SECTION_TYPE_FUNC_DECL 3
+#define SECTION_TYPE_FUNC 3
 #define SECTION_TYPE_TABLE 4
 #define SECTION_TYPE_MEMORY 5
 #define SECTION_TYPE_GLOBAL 6
 #define SECTION_TYPE_EXPORT 7
 #define SECTION_TYPE_START 8
 #define SECTION_TYPE_ELEM 9
-#define SECTION_TYPE_FUNC_DEFS 10
+#define SECTION_TYPE_CODE 10
 #define SECTION_TYPE_DATA 11
 
 #if 0
@@ -219,9 +219,9 @@ typedef struct InitializerExpression {
 } InitializerExpression;
 
 typedef struct WASMType {
-  uint16 param_count;
+  uint32 param_count;
   /* only one result is supported currently */
-  uint16 result_count;
+  uint32 result_count;
   /* types of params and results */
   uint8 types[1];
 } WASMType;
@@ -340,6 +340,24 @@ align_uint (unsigned v, unsigned b)
 {
   unsigned m = b - 1;
   return (v + m) & ~m;
+}
+
+inline static uint32
+wasm_string_hash(const char *str)
+{
+  unsigned h = strlen(str);
+  const uint8 *p = (uint8*)str;
+  const uint8 *end = p + h;
+
+  while (p != end)
+    h = ((h << 5) - h) + *p++;
+  return h;
+}
+
+inline static bool
+wasm_string_equal(const char *s1, const char *s2)
+{
+  return strcmp(s1, s2) == 0 ? true : false;
 }
 
 #ifdef __cplusplus
