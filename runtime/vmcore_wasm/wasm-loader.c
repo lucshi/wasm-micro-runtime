@@ -144,6 +144,7 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 
       p_org = p;
       CHECK_BUF(p, p_end, param_count);
+      p += param_count;
       read_leb_uint32(p, p_end, result_count);
       bh_assert(result_count == 1);
       CHECK_BUF(p, p_end, result_count);
