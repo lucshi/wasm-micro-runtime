@@ -98,6 +98,11 @@ extern "C" {
 #define IMPORT_KIND_MEMORY 2
 #define IMPORT_KIND_GLOBAL 3
 
+#define EXPORT_KIND_FUNC 0
+#define EXPORT_KIND_TABLE 1
+#define EXPORT_KIND_MEMORY 2
+#define EXPORT_KIND_GLOBAL 3
+
 #if 0
 struct ModuleInstance;
 struct Compartment;
@@ -211,7 +216,7 @@ typedef struct CompartmentRuntimeData {
 
 typedef struct InitializerExpression {
   /* type of INIT_EXPR_TYPE_XXX */
-  uint8 type;
+  uint8 init_expr_type;
   union {
     int32 i32;
     int64 i64;
@@ -288,19 +293,13 @@ typedef struct WASMExport {
   char *name;
   uint8 kind;
   uint32 index;
-  union {
-    WASMFunction function;
-    WASMTable table;
-    WASMMemory memory;
-    WASMGlobal global;
-  } u;
 } WASMExport;
 
 typedef struct WASMTableSeg {
   uint32 table_index;
   InitializerExpression base_offset;
   uint32 function_count;
-  void *functions;
+  uint32 *func_indexes;
 } WASMTableSeg;
 
 typedef struct WASMDataSeg {
@@ -321,6 +320,11 @@ typedef struct WASMModule {
   uint32 table_seg_count;
   uint32 data_seg_count;
 
+  uint32 import_function_count;
+  uint32 import_table_count;
+  uint32 import_memory_count;
+  uint32 import_global_count;
+
   WASMType **types;
   WASMImport *imports;
   WASMFunction **functions;
@@ -330,7 +334,7 @@ typedef struct WASMModule {
   WASMExport *exports;
   WASMTableSeg *table_segments;
   WASMDataSeg **data_segments;
-  WASMFunction *start_function;
+  uint32 start_function;
 
   HashMap *const_str_set;
 } WASMModule;

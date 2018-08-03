@@ -39,7 +39,11 @@
 #define read_uint16(p) TEMPLATE_READ_VALUE(uint16, p)
 #define read_int16(p)  TEMPLATE_READ_VALUE(int16, p)
 #define read_uint32(p) TEMPLATE_READ_VALUE(uint32, p)
+#define read_uint64(p) TEMPLATE_READ_VALUE(uint64, p)
 #define read_int32(p)  TEMPLATE_READ_VALUE(int32, p)
+#define read_float32(p) TEMPLATE_READ_VALUE(float32, p)
+#define read_float64(p) TEMPLATE_READ_VALUE(float64, p)
+#define read_bool(p)   TEMPLATE_READ_VALUE(bool, p)
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
   if (buf + length > buf_end) {                                 \
@@ -83,6 +87,15 @@ read_leb(const uint8 *buf, const uint8 *buf_end,
   *p_result = result;
   return true;
 }
+
+#define read_leb_uint64(p, p_end, res) do {         \
+  uint32 off = 0;                                   \
+  uint64 res64;                                     \
+  if (!read_leb(p, p_end, &off, 64, false, &res64)) \
+    return false;                                   \
+  p += off;                                         \
+  res = (uint64)res64;                              \
+} while (0)
 
 #define read_leb_uint32(p, p_end, res) do {         \
   uint32 off = 0;                                   \
@@ -139,6 +152,50 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module)
   return c_str;
 }
 
+bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpression *init_expr)
+{
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint8 flag, end_byte;
+
+  CHECK_BUF(p, p_end, 1);
+  init_expr->init_expr_type = read_uint8(p);
+  flag = init_expr->init_expr_type;
+
+  switch (flag) {
+    /* i32.const */
+    case INIT_EXPR_TYPE_I32_CONST:
+      read_leb_uint32(p, p_end, init_expr->u.i32);
+      break;
+    /* i64.const */
+    case INIT_EXPR_TYPE_I64_CONST:
+      read_leb_uint64(p, p_end, init_expr->u.i64);
+      break;
+    /* f32.const */
+    case INIT_EXPR_TYPE_F32_CONST:
+      CHECK_BUF(p, p_end, 4);
+      init_expr->u.f32 = read_float32(p);
+      break;
+    /* f64.const */
+    case INIT_EXPR_TYPE_F64_CONST:
+      CHECK_BUF(p, p_end, 8);
+      init_expr->u.f64 = read_float64(p);
+      break;
+    /* get_global */
+    case INIT_EXPR_TYPE_GET_GLOBAL:
+      read_leb_uint32(p, p_end, init_expr->u.global_index);
+      break;
+    default:
+      printf("Load table segment section failed: init expression failed.\n");
+      return false;
+  }
+  CHECK_BUF(p, p_end, 1);
+  end_byte = read_uint8(p);
+  bh_assert(end_byte == 0x0b);
+  *p_buf = p;
+
+  return true;
+}
+
 static bool
 load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
@@ -186,11 +243,15 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
       /* Resolve param types and result types */
       type->param_count = param_count;
       type->result_count = result_count;
-      for (j = 0; j < param_count; j++)
+      for (j = 0; j < param_count; j++) {
+        CHECK_BUF(p, p_end, 1);
         type->types[j] = read_uint8(p);
+      }
       read_leb_uint32(p, p_end, result_count);
-      for (j = 0; j < result_count; j++)
+      for (j = 0; j < result_count; j++) {
+        CHECK_BUF(p, p_end, 1);
         type->types[param_count + j] = read_uint8(p);
+      }
     }
   }
 
@@ -287,22 +348,26 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
             return false;
           }
           import->u.function.func_type = module->types[type_index];
+          module->import_function_count++;
           break;
 
         case IMPORT_KIND_TABLE: /* import table */
           if (!load_table(&p, p_end, &import->u.table))
             return false;
+          module->import_table_count++;
           break;
 
         case IMPORT_KIND_MEMORY: /* import memory */
           if (!load_memory(&p, p_end, &import->u.memory))
             return false;
+          module->import_memory_count++;
           break;
 
         case IMPORT_KIND_GLOBAL: /* import global */
           read_leb_uint8(p, p_end, import->u.global.type);
           read_leb_uint8(p, p_end, mutable);
           import->u.global.is_mutable = mutable & 1 ? true : false;
+          module->import_global_count++;
           break;
 
         default:
@@ -535,43 +600,284 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 static bool
 load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size, global_count, i;
+  WASMGlobal *global;
+  uint8 end_byte;
+
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+  *p_buf = p;
+  read_leb_uint32(p, p_end, global_count);
+
+  if (global_count) {
+    module->global_count = global_count;
+    if (!(module->globals = bh_malloc(sizeof(WASMGlobal) * global_count))) {
+      printf("Load global section failed: alloc memory failed.\n");
+      return false;
+    }
+
+    memset(module->globals, 0, sizeof(WASMGlobal) * global_count);
+
+    global = module->globals;
+
+    for(i = 0; i < global_count; i++, global++) {
+      CHECK_BUF(p, p_end, 1);
+      global->type = read_uint8(p);
+      CHECK_BUF(p, p_end, 1);
+      global->is_mutable = read_bool(p);
+
+      /* initialize expression */
+      if (!load_init_expr(&p, p_end, &(global->init_expr)))
+        return false;
+    }
+  }
+
+  if (section_size != (uint32)(p - *p_buf)) {
+    printf("Load global section failed: invalid section size.\n");
+    return false;
+  }
+
+  *p_buf = p;
+  printf("Load global section success.\n");
+  return true;
 }
 
 static bool
 load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size, export_count, i, index;
+  uint8 str_len;
+  WASMExport *export;
+
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+  *p_buf = p;
+  read_leb_uint32(p, p_end, export_count);
+
+  if (export_count) {
+    module->export_count = export_count;
+    if (!(module->exports = bh_malloc(sizeof(WASMExport) * export_count))) {
+      printf("Load export section failed: alloc memory failed.\n");
+      return false;
+    }
+
+    memset(module->exports, 0, sizeof(WASMExport) * export_count);
+
+    export = module->exports;
+    for (i = 0; i < export_count; i++, export++) {
+      read_leb_uint32(p, p_end, str_len);
+      CHECK_BUF(p, p_end, str_len);
+      if (!(export->name = const_str_set_insert(p, str_len, module))) {
+        return false;
+      }
+      p += str_len;
+      CHECK_BUF(p, p_end, 1);
+      export->kind = read_uint8(p);
+      read_leb_uint32(p, p_end, index);
+      export->index = index;
+
+      switch(export->kind) {
+        /*function index*/
+        case EXPORT_KIND_FUNC:
+          if (index >= module->function_count + module->import_function_count) {
+            printf("Load export section failed: function index is out of range.\n");
+            return false;
+          }
+          break;
+        /*table index*/
+        case EXPORT_KIND_TABLE:
+          if (index >= module->table_count + module->import_table_count) {
+            printf("Load export section failed: table index is out of range.\n");
+            return false;
+            }
+          break;
+        /*memory index*/
+        case EXPORT_KIND_MEMORY:
+          if (index >= module->memory_count + module->import_memory_count) {
+            printf("Load export section failed: memory index is out of range.\n");
+            return false;
+            }
+          break;
+        /*global index*/
+        case EXPORT_KIND_GLOBAL:
+          if (index >= module->global_count + module->import_global_count) {
+            printf("Load export section failed: global index is out of range.\n");
+            return false;
+            }
+          break;
+        default:
+          printf("Load export section failed: kind flag is unexpected.\n");
+          return false;
+      }
+    }
+  }
+
+  if (section_size != (uint32)(p - *p_buf)) {
+    printf("Load export section failed: invalid section size.\n");
+    return false;
+  }
+
+  *p_buf = p;
+  printf("Load export section success.\n");
+  return true;
 }
 
 static bool
 load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size, table_segment_count, i, j, table_index, function_count, function_index;
+  uint8 end_byte;
+  WASMTableSeg *table_segment;
+
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+  *p_buf = p;
+  read_leb_uint32(p, p_end, table_segment_count);
+
+  if (table_segment_count) {
+    module->table_seg_count = table_segment_count;
+    if (!(module->table_segments = bh_malloc(sizeof(WASMTableSeg) * table_segment_count))) {
+      printf("Load table segment section failed: alloc memory failed.\n");
+      return false;
+    }
+
+    memset(module->table_segments, 0, sizeof(WASMTableSeg) * table_segment_count);
+
+    table_segment = module->table_segments;
+    for (i = 0; i < table_segment_count; i++, table_segment++) {
+      read_leb_uint32(p, p_end, table_index);
+      table_segment->table_index = table_index;
+
+      /* initialize expression */
+      if (!load_init_expr(&p, p_end, &(table_segment->base_offset)))
+        return false;
+
+      read_leb_uint32(p, p_end, function_count);
+      table_segment->function_count = function_count;
+      if (!(table_segment->func_indexes = (uint32 *)bh_malloc(sizeof(uint32) * function_count))) {
+        printf("Load table segment section failed: alloc memory failed.\n");
+        return false;
+      }
+      for (j = 0; j < function_count; j++) {
+        read_leb_uint32(p, p_end, function_index);
+        table_segment->func_indexes[j] = function_index;
+      }
+    }
+  }
+
+  if (section_size != (uint32)(p - *p_buf)) {
+    printf("Load table segment section failed, invalid section size.\n");
+    return false;
+  }
+
+  *p_buf = p;
+  printf("Load table segment section success.\n");
+  return true;
 }
 
 static bool
 load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
-}
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size, data_seg_count, i, mem_index, data_seg_len;
+  uint8 end_byte;
+  WASMDataSeg *dataseg;
+  InitializerExpression init_expr;
 
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+  *p_buf = p;
+  read_leb_uint32(p, p_end, data_seg_count);
+
+  if (data_seg_count) {
+    module->data_seg_count = data_seg_count;
+    if (!(module->data_segments = bh_malloc(sizeof(WASMDataSeg*) * data_seg_count))) {
+      printf("Load data segment section failed, alloc memory failed.\n");
+      return false;
+    }
+
+    memset(module->data_segments, 0, sizeof(WASMDataSeg*) * data_seg_count);
+
+    for (i = 0; i < data_seg_count; i++) {
+      read_leb_uint32(p, p_end, mem_index);
+
+      if (!load_init_expr(&p, p_end, &init_expr))
+        return false;
+
+      read_leb_uint32(p, p_end, data_seg_len);
+
+      if (!(dataseg = module->data_segments[i] = bh_malloc(offsetof(WASMDataSeg, data) + data_seg_len))) {
+        printf("Load data segment section failed: alloc memory failed.\n");
+        return false;
+      }
+
+      memcpy(&dataseg->base_offset, &init_expr, sizeof(init_expr));
+
+      dataseg->memory_index = mem_index;
+      dataseg->data_length = data_seg_len;
+      CHECK_BUF(p, p_end, data_seg_len);
+      memcpy(dataseg->data, p, data_seg_len);
+      p += data_seg_len;
+    }
+  }
+
+  if (section_size != (uint32)(p - *p_buf)) {
+    printf("Load data segment section failed, invalid section size.\n");
+    return false;
+  }
+
+  *p_buf = p;
+  printf("Load data segment section success.\n");
+  return true;
+}
 static bool
 load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size;
+
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+
+  /* code has been loaded in function section, so pass it here */
+  /* TODO: should check if there really have section_size code bytes */
+  p += section_size;
+  *p_buf = p;
+  printf("Load code segment section success.\n");
+
+  return true;
 }
 
 static bool
 load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {
-  /* TODO */
-  return false;
+  const uint8 *p = *p_buf, *p_end = buf_end;
+  uint32 section_size, start_function;
+
+  read_leb_uint32(p, p_end, section_size);
+  CHECK_BUF(p, p_end, section_size);
+  *p_buf = p;
+  read_leb_uint32(p, p_end, start_function);
+
+  if (start_function) {
+    if (start_function >= module->function_count + module->import_function_count) {
+      printf("Load start section failed: function index is out of range.\n");
+      return false;
+    }
+    module->start_function = start_function;
+  }
+
+  if (section_size != (uint32)(p - *p_buf)) {
+    printf("Load start section failed: invalid section size.\n");
+    return false;
+  }
+
+  *p_buf = p;
+  printf("Load start section success.\n");
+  return true;
 }
 
 static bool
@@ -594,6 +900,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
   }
 
   while (p < p_end) {
+    CHECK_BUF(p, p_end, 1);
     uint8 section_type = read_uint8(p);
     printf("section_type: %d\n", section_type);
 
@@ -696,8 +1003,10 @@ wasm_wasm_module_unload(WASMModule *module)
     return true;
 
   if (module->types) {
-    for (i = 0; i < module->type_count; i++)
-      bh_free(module->types[i]);
+    for (i = 0; i < module->type_count; i++) {
+      if (module->types[i])
+        bh_free(module->types[i]);
+    }
     bh_free(module->types);
   }
 
@@ -705,8 +1014,10 @@ wasm_wasm_module_unload(WASMModule *module)
     bh_free(module->imports);
 
   if (module->functions) {
-    for (i = 0; i < module->function_count; i++)
-      bh_free(module->functions[i]);
+    for (i = 0; i < module->function_count; i++) {
+      if (module->functions[i])
+        bh_free(module->functions[i]);
+    }
     bh_free(module->functions);
   }
 
@@ -715,6 +1026,28 @@ wasm_wasm_module_unload(WASMModule *module)
 
   if (module->memories)
     bh_free(module->memories);
+
+  if (module->globals)
+    bh_free(module->globals);
+
+  if (module->exports)
+    bh_free(module->exports);
+
+  if (module->table_segments) {
+    for (i = 0; i < module->table_seg_count; i++) {
+      if (module->table_segments[i].func_indexes)
+        bh_free(module->table_segments[i].func_indexes);
+    }
+    bh_free(module->table_segments);
+  }
+
+  if (module->data_segments) {
+    for (i = 0; i < module->data_seg_count; i++) {
+      if (module->data_segments[i])
+        bh_free(module->data_segments[i]);
+    }
+    bh_free(module->data_segments);
+  }
 
   /* TODO: destroy the resource */
 
