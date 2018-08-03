@@ -93,6 +93,11 @@ extern "C" {
 #define SECTION_TYPE_CODE 10
 #define SECTION_TYPE_DATA 11
 
+#define IMPORT_KIND_FUNC 0
+#define IMPORT_KIND_TABLE 1
+#define IMPORT_KIND_MEMORY 2
+#define IMPORT_KIND_GLOBAL 3
+
 #if 0
 struct ModuleInstance;
 struct Compartment;
@@ -227,6 +232,7 @@ typedef struct WASMType {
 } WASMType;
 
 typedef struct WASMTable {
+  uint8 elem_type;
   uint32 flags;
   uint32 init_size;
   /* specified if (flags & 1), else it is 0x10000 */
@@ -236,7 +242,8 @@ typedef struct WASMTable {
 typedef struct WASMMemory {
   uint32 flags;
   /* 64 kbytes one page by default */
-  uint32 page_count;
+  uint32 init_page_count;
+  uint32 max_page_count;
 } WASMMemory;
 
 typedef struct WASMImport {
@@ -266,6 +273,7 @@ typedef struct WASMFunction {
   WASMType *func_type;
   Vector branches;
   uint32 local_count;
+  uint8 *local_types;
   uint32 code_size;
   uint8 code[1];
 } WASMFunction;
