@@ -32,9 +32,24 @@
 extern "C" {
 #endif
 
+/**
+ * Load WASM module from specified byte buffer.
+ *
+ * @param buf the byte buffer contains the WASM binary data
+ * @param size the size of the buffer
+ *
+ * @return return module loaded, NULL if failed
+ */
 WASMModule*
 wasm_wasm_module_load(const uint8 *buf, uint32 size);
 
+/**
+ * Unload WASM module.
+ *
+ * @param module the module to be unloaded
+ *
+ * @return true if success, false otherwise
+ */
 bool
 wasm_wasm_module_unload(WASMModule *module);
 

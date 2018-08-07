@@ -32,6 +32,64 @@
 extern "C" {
 #endif
 
+typedef struct WASMMemoryInstance {
+  /* Current page count */
+  uint32 cur_page_count;
+  /* Maximum page count */
+  uint32 max_page_count;
+  /* Base address */
+  uint8 base_addr[1];
+} WASMMemoryInstance;
+
+typedef struct WASMTableInstance {
+  /* The element type, TABLE_ELEM_TYPE_ANY_FUNC currently */
+  uint8 elem_type;
+  /* Current size */
+  uint32 cur_size;
+  /* Maximum size */
+  uint32 max_size;
+  /* Base address */
+  uint8 base_addr[1];
+} WASMTableInstance;
+
+typedef struct WASMGlobalInstance {
+  /* value type, VALUE_TYPE_I32/I64/F32/F64 */
+  uint8 type;
+  /* mutable or constant */
+  bool is_mutable;
+  /* data offset to WASMModuleInstance.global_data if mutalbe */
+  uint32 mutable_data_offset;
+  /* initial value if constant */
+  WASMValue initial_value;
+} WASMGlobalInstance;
+
+typedef struct WASMFunctionInstance {
+  /* whether it is import function or WASM function */
+  bool is_import_func;
+  union {
+    WASMFunctionImport *func_import;
+    WASMFunction *func;
+  } u;
+} WASMFunctionInstance;
+
+typedef struct WASMModuleInstance {
+  uint32 memory_count;
+  uint32 table_count;
+  uint32 global_count;
+  uint32 function_count;
+
+  WASMMemoryInstance **memories;
+  WASMTableInstance **tables;
+  WASMGlobalInstance *globals;
+  WASMFunctionInstance *functions;
+
+  WASMMemoryInstance *default_memory;
+  WASMTableInstance *default_table;
+
+  /* global data for mutable globals */
+  uint8 global_data[1];
+} WASMModuleInstance;
+
 
 #ifdef __cplusplus
 }

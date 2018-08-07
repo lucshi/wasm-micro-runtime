@@ -23,45 +23,39 @@
  * Intel in writing.
  */
 
-#include "wasm-linker.h"
+#ifndef _WASM_NATIVE_H
+#define _WASM_NATIVE_H
 
+#include "wasm.h"
 
-#if 0
-bool
-wasm_root_resolver_resolve(const char *module_name, const char *export_name,
-                           uint8 obj_type, Object* p_out_obj)
-{
-  /* TODO */
-  return false;
-}
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-Object*
-wasm_root_resolver_get_stub_object(const char *export_name, uint8 obj_type)
-{
-  /* TODO */
-  return NULL;
-}
+/**
+ * Lookup native function implementation of a given import function.
+ *
+ * @param module_name the module name of the import function
+ * @param func_name the function name of the import function
+ *
+ * @return return the native function pointer if success, NULL otherwise
+ */
+void*
+wasm_native_func_lookup(const char *module_name, const char *func_name);
 
-EmscriptenInstance*
-wasm_emsc_inst_instantiate (Compartment *compartment, WASMModule *module)
-{
-  /* TODO */
-  return NULL;
-}
+/**
+ * Lookup global variable of a given import global
+ *
+ * @param module_name the module name of the import global
+ * @param global_name the global name of the import global
+ *
+ * @param return pointer point to the import global if success, NULL otherwise
+ */
+void*
+wasm_native_global_lookup(const char *module_name, const char *global_name);
 
-void
-wasm_emsc_inst_init_globals(Context *context, WASMModule *module,
-                            ModuleInstance *module_instance)
-{
-  /* TODO */
-}
-
-void
-wasm_emsc_inst_inject_command_args(EmscriptenInstance *instance,
-                                   const Vector *arg_strings,
-                                   Vector **p_out_invoke_args)
-{
-  /* TODO */
+#ifdef __cplusplus
 }
 #endif
 
+#endif /* end of _WASM_NATIVE_H */

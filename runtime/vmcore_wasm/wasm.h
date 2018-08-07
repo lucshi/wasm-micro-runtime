@@ -37,21 +37,10 @@ extern "C" {
 #endif
 
 /** Value Type */
-#define VALUE_TYPE_ANY 0
-#define VALUE_TYPE_I32 1
-#define VALUE_TYPE_I64 2
-#define VALUE_TYPE_F32 3
-#define VALUE_TYPE_F64 4
-#define VALUE_TYPE_V128 5
-#define VALUE_TYPE_NUM 6
-#define VALUE_TYPE_MAX 5
-
-/** Calling Convention */
-#define CALLING_CONV_WASM 0
-#define CALLING_CONV_INTRINSIC 1
-#define CALLING_CONV_INSTRINSIC_WITH_CONTEXT_SWITCH 2
-#define CALLING_CONV_INSTRINSIC_WITH_MEM_AND_TABLE 3
-#define CALLING_CONV_C 5
+#define VALUE_TYPE_I32 0x7F
+#define VALUE_TYPE_I64 0X7E
+#define VALUE_TYPE_F32 0x7D
+#define VALUE_TYPE_F64 0x7C
 
 /* Table Element Type */
 #define TABLE_ELEM_TYPE_ANY_FUNC 0x70
@@ -214,6 +203,15 @@ typedef struct CompartmentRuntimeData {
 } CompartmentRuntimeData;
 #endif
 
+typedef union WASMValue {
+  int32 i32;
+  uint32 u32;
+  int64 i64;
+  uint64 u64;
+  float32 f32;
+  float64 f64;
+} WASMValue;
+
 typedef struct InitializerExpression {
   /* type of INIT_EXPR_TYPE_XXX */
   uint8 init_expr_type;
@@ -223,8 +221,8 @@ typedef struct InitializerExpression {
     float32 f32;
     float64 f64;
     uint32 global_index;
-    /* pointer of global data after linked */
-    void *global_data_ptr;
+    /* global data after linked */
+    WASMValue global_data_linked;
   } u;
 } InitializerExpression;
 
@@ -251,25 +249,29 @@ typedef struct WASMMemory {
   uint32 max_page_count;
 } WASMMemory;
 
+typedef struct WASMFunctionImport {
+  /* function type */
+  WASMType *func_type;
+  /* function pointer after linked */
+  void *func_ptr_linked;
+} WASMFunctionImport;
+
+typedef struct WASMGlobalImport {
+  uint8 type;
+  bool is_mutable;
+  /* global data after linked */
+  WASMValue global_data_linked;
+} WASMGlobalImport;
+
 typedef struct WASMImport {
   char *module_name;
   char *field_name;
   uint8 kind;
   union {
-    struct {
-      /* function type */
-      WASMType *func_type;
-      /* function pointer */
-      void *func_ptr;
-    } function;
+    WASMFunctionImport function;
     WASMTable table;
     WASMMemory memory;
-    struct {
-      uint8 type;
-      bool is_mutable;
-      /* global data pointer after linked */
-      void *global_data_ptr;
-    } global;
+    WASMGlobalImport global;
   } u;
 } WASMImport;
 
@@ -354,6 +356,9 @@ align_uint (unsigned v, unsigned b)
   return (v + m) & ~m;
 }
 
+/**
+ * Return the hash value of c string.
+ */
 inline static uint32
 wasm_string_hash(const char *str)
 {
@@ -366,6 +371,9 @@ wasm_string_hash(const char *str)
   return h;
 }
 
+/**
+ * Whether two c strings are equal.
+ */
 inline static bool
 wasm_string_equal(const char *s1, const char *s2)
 {

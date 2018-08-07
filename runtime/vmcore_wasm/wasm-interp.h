@@ -27,11 +27,28 @@
 #define _WASM_INTERP_H
 
 #include "wasm.h"
+#include "wasm-runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+typedef struct WASMInterpFrame {
+  /* The frame of the caller that are calling the current function. */
+  struct WASMInterpFrame *prev_frame;
+
+  /* The current WASM function. */
+  WASMFunctionInstance *function;
+
+  /* Instruction pointer of the bytecode array.  */
+  uint8 *ip;
+
+  /* Operand stack top pointer of the current frame.  The bottom of
+     the stack is the next cell after the last local variable.  */
+  uint32 *sp;
+
+  uint32 lp[1];
+} WASMInterpFrame;
 
 #ifdef __cplusplus
 }

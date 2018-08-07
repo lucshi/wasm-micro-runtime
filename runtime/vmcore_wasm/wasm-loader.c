@@ -24,6 +24,7 @@
  */
 
 #include "wasm-loader.h"
+#include "wasm-native.h"
 #include "wasm.h"
 #include "bh_memory.h"
 
@@ -35,12 +36,7 @@
     (p += sizeof(Type), *(Type *)(p - sizeof(Type)))
 
 #define read_uint8(p)  TEMPLATE_READ_VALUE(uint8, p)
-#define read_int8(p)   TEMPLATE_READ_VALUE(int8, p)
-#define read_uint16(p) TEMPLATE_READ_VALUE(uint16, p)
-#define read_int16(p)  TEMPLATE_READ_VALUE(int16, p)
 #define read_uint32(p) TEMPLATE_READ_VALUE(uint32, p)
-#define read_uint64(p) TEMPLATE_READ_VALUE(uint64, p)
-#define read_int32(p)  TEMPLATE_READ_VALUE(int32, p)
 #define read_float32(p) TEMPLATE_READ_VALUE(float32, p)
 #define read_float64(p) TEMPLATE_READ_VALUE(float64, p)
 #define read_bool(p)   TEMPLATE_READ_VALUE(bool, p)
@@ -185,12 +181,15 @@ bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpres
       read_leb_uint32(p, p_end, init_expr->u.global_index);
       break;
     default:
-      printf("Load table segment section failed: init expression failed.\n");
+      printf("Load initializer expression failed: invalid init type.\n");
       return false;
   }
   CHECK_BUF(p, p_end, 1);
   end_byte = read_uint8(p);
-  bh_assert(end_byte == 0x0b);
+  if (end_byte != 0x0b) {
+      printf("Load initializer expression failed: invalid end byte.\n");
+      return false;
+  }
   *p_buf = p;
 
   return true;
@@ -307,6 +306,7 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   uint32 section_size, import_count, name_len, type_index, i;
   WASMImport *import;
   uint8 mutable;
+  void *global_data_ptr;
 
   read_leb_uint32(p, p_end, section_size);
   *p_buf = p;
@@ -349,6 +349,13 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           }
           import->u.function.func_type = module->types[type_index];
           module->import_function_count++;
+
+          if (!(import->u.function.func_ptr_linked = wasm_native_func_lookup
+                (import->module_name, import->field_name))) {
+            printf("Load import section failed: resolve import function (%s, %s) "
+                   "failed.\n", import->module_name, import->field_name);
+            return false;
+          }
           break;
 
         case IMPORT_KIND_TABLE: /* import table */
@@ -368,6 +375,30 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           read_leb_uint8(p, p_end, mutable);
           import->u.global.is_mutable = mutable & 1 ? true : false;
           module->import_global_count++;
+          if (!(global_data_ptr = wasm_native_global_lookup
+                (import->module_name, import->field_name))) {
+            printf("Load import section failed: resolve import global (%s, %s) "
+                   "failed.\n", import->module_name, import->field_name);
+            return false;
+          }
+          switch (import->u.global.type) {
+            case VALUE_TYPE_I32:
+              import->u.global.global_data_linked.i32 = *(int32*)global_data_ptr;
+              break;
+            case VALUE_TYPE_I64:
+              import->u.global.global_data_linked.i64 = *(int64*)global_data_ptr;
+              break;
+            case VALUE_TYPE_F32:
+              import->u.global.global_data_linked.f32 = *(float32*)global_data_ptr;
+              break;
+            case VALUE_TYPE_F64:
+              import->u.global.global_data_linked.f64 = *(float64*)global_data_ptr;
+              break;
+            default:
+              printf("Load import section failed: invalid global type %d\n",
+                     import->u.global.type);
+              return false;
+          }
           break;
 
         default:
@@ -603,7 +634,6 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, global_count, i;
   WASMGlobal *global;
-  uint8 end_byte;
 
   read_leb_uint32(p, p_end, section_size);
   CHECK_BUF(p, p_end, section_size);
@@ -729,7 +759,6 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, table_segment_count, i, j, table_index, function_count, function_index;
-  uint8 end_byte;
   WASMTableSeg *table_segment;
 
   read_leb_uint32(p, p_end, section_size);
@@ -783,7 +812,6 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, data_seg_count, i, mem_index, data_seg_len;
-  uint8 end_byte;
   WASMDataSeg *dataseg;
   InitializerExpression init_expr;
 
@@ -833,6 +861,7 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
   printf("Load data segment section success.\n");
   return true;
 }
+
 static bool
 load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 {

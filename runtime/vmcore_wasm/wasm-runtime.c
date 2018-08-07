@@ -24,6 +24,7 @@
  */
 
 #include "wasm-runtime.h"
+#include "wasm-thread.h"
 #include "wasm-import.h"
 
 
