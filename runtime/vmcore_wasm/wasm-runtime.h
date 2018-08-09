@@ -27,6 +27,8 @@
 #define _WASM_RUNTIME_H
 
 #include "wasm.h"
+#include "wasm-import.h"
+#include "wasm-thread.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,24 +74,85 @@ typedef struct WASMFunctionInstance {
   } u;
 } WASMFunctionInstance;
 
+typedef struct WASMExportFuncInstance {
+  char *name;
+  WASMFunction *function;
+} WASMExportFuncInstance;
+
 typedef struct WASMModuleInstance {
   uint32 memory_count;
   uint32 table_count;
   uint32 global_count;
   uint32 function_count;
+  uint32 export_func_count;
 
   WASMMemoryInstance **memories;
   WASMTableInstance **tables;
   WASMGlobalInstance *globals;
   WASMFunctionInstance *functions;
+  WASMExportFuncInstance *export_functions;
 
   WASMMemoryInstance *default_memory;
   WASMTableInstance *default_table;
+
+  WASMFunctionInstance *start_function;
 
   /* global data for mutable globals */
   uint8 global_data[1];
 } WASMModuleInstance;
 
+typedef struct WASMInterpFrame WASMRuntimeFrame;
+
+/**
+ * Return the current thread.
+ *
+ * @return the current thread
+ */
+static inline WASMThread*
+wasm_runtime_get_self()
+{
+  return (WASMThread*)vmci_get_tl_root();
+}
+
+/**
+ * Set self as the current thread.
+ *
+ * @param self the thread to be set as current thread
+ */
+static inline void
+wasm_runtime_set_tlr(WASMThread *self)
+{
+  vmci_set_tl_root(self);
+}
+
+/**
+ * Call the given WASM function with the arguments.
+ *
+ * @param function the function to be called
+ * @param argc the number of arguments
+ * @param argv the arguments.  If the function method has return value,
+ * the first (or first two in case 64-bit return value) element of
+ * argv stores the return value of the called WASM function after this
+ * function returns.
+ */
+void
+wasm_runtime_call_wasm(WASMFunction *function,
+                       unsigned argc, uint32 argv[]);
+
+WASMModuleInstance*
+wasm_runtime_instantiate(const WASMModule *module);
+
+void
+wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
+
+WASMVmInstance*
+wasm_runtime_create_instance(WASMModuleInstance *module_inst,
+                             unsigned stack_size,
+                             void *(*start_routine)(void*), void *arg,
+                             void (*cleanup_routine)(void));
+
+void
+wasm_runtime_destroy_instance(WASMVmInstance *vm);
 
 #ifdef __cplusplus
 }

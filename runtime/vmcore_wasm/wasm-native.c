@@ -24,7 +24,7 @@
  */
 
 #include "wasm-native.h"
-#include "wasm-thread.h"
+#include "wasm-runtime.h"
 
 
 #define MEMORY(self) (self->vm_instance->module->default_memory)

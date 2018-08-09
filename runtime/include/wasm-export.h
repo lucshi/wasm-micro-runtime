@@ -33,12 +33,62 @@ extern "C" {
 #endif
 
 struct WASMModule;
+typedef struct WASMModule *wasm_module_t;
 
-struct WASMModule*
-wasm_wasm_module_load(const uint8 *buf, uint32 size);
+struct WASMModuleInstance;
+typedef struct WASMModuleInstance *wasm_module_inst_t;
 
-bool
-wasm_wasm_module_unload(struct WASMModule *module);
+struct WASMVmInstance;
+typedef struct WASMVmInstance *wasm_vm_instance_t;
+
+/**
+ * Load a WASM module from a specified byte buffer.
+ *
+ * @param buf the byte buffer which contains the WASM binary data
+ * @param size the size of the buffer
+ *
+ * @return return module loaded, NULL if failed
+ */
+wasm_module_t
+wasm_runtime_load(const uint8 *buf, uint32 size);
+
+/**
+ * Unload a WASM module.
+ *
+ * @param module the module to be unloaded
+ */
+void
+wasm_runtime_unload(wasm_module_t module);
+
+/**
+ * Instantiate a WASM module
+ *
+ * @param module the WASM module to instantiate
+ *
+ * @return return the instantiated WASM module instance, NULL if failed
+ */
+wasm_module_inst_t
+wasm_runtime_instantiate(const wasm_module_t module);
+
+/**
+ * Destroy a WASM module instance
+ *
+ * @param module_inst the WASM module instance to destroy
+ */
+void
+wasm_runtime_deinstantiate(wasm_module_inst_t module_inst);
+
+wasm_vm_instance_t
+wasm_runtime_create_instance(wasm_module_inst_t module_inst,
+                             unsigned stack_size,
+                             void *(*start_routine)(void*), void *arg,
+                             void (*cleanup_routine)(void));
+
+void
+wasm_runtime_destroy_instance(wasm_vm_instance_t vm);
+
+void
+wasm_runtime_wait_for_instance(wasm_vm_instance_t vm);
 
 
 #ifdef __cplusplus

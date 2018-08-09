@@ -221,8 +221,6 @@ typedef struct InitializerExpression {
     float32 f32;
     float64 f64;
     uint32 global_index;
-    /* global data after linked */
-    WASMValue global_data_linked;
   } u;
 } InitializerExpression;
 
@@ -378,6 +376,26 @@ inline static bool
 wasm_string_equal(const char *s1, const char *s2)
 {
   return strcmp(s1, s2) == 0 ? true : false;
+}
+
+/**
+ * Return the byte size of value type.
+ *
+ */
+inline static uint32
+wasm_value_type_size(uint8 value_type)
+{
+  switch (value_type) {
+    case VALUE_TYPE_I32:
+    case VALUE_TYPE_F32:
+      return sizeof(int32);
+    case VALUE_TYPE_I64:
+    case VALUE_TYPE_F64:
+      return sizeof(int64);
+    default:
+      bh_assert(0);
+  }
+  return 0;
 }
 
 #ifdef __cplusplus

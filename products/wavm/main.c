@@ -49,7 +49,8 @@ main(int argc, char *argv[])
   const char *func_name = NULL;
   uint8 *wasm_file_buf = NULL;
   int wasm_file_size;
-  struct WASMModule *wasm_module = NULL;
+  wasm_module_t wasm_module = NULL;
+  wasm_module_inst_t wasm_module_inst = NULL;
 
   /* Process options.  */
   for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -78,13 +79,19 @@ main(int argc, char *argv[])
     return -1;
   }
 
-  if (!(wasm_module = wasm_wasm_module_load(wasm_file_buf, wasm_file_size))) {
+  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size))) {
     goto fail1;
   }
 
-  /* TODO: link module */
+  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))
+    goto fail2;
 
-  wasm_wasm_module_unload(wasm_module);
+  /* TODO: create runtime instance */
+
+  wasm_runtime_deinstantiate(wasm_module_inst);
+
+fail2:
+  wasm_runtime_unload(wasm_module);
 
 fail1:
   bh_free(wasm_file_buf);

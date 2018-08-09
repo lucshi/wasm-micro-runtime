@@ -26,7 +26,6 @@
 #ifndef _WASM_THREAD_H
 #define _WASM_THREAD_H
 
-#include "wasm-runtime.h"
 #include "wasm-import.h"
 
 #ifdef __cplusplus
@@ -84,7 +83,7 @@ typedef struct WASMVmInstance {
   /* Previous VM instance in the global VM instance list.  */
   struct WASMVmInstance *next;
 
-  WASMModuleInstance *module;
+  struct WASMModuleInstance *module;
 
   /* Default stack size of threads of this VM instance.  */
   uint32 stack_size;

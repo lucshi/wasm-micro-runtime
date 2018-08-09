@@ -995,7 +995,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
 }
 
 WASMModule*
-wasm_wasm_module_load(const uint8 *buf, uint32 size)
+wasm_loader_load(const uint8 *buf, uint32 size)
 {
   WASMModule *module = bh_malloc(sizeof(WASMModule));
 
@@ -1019,17 +1019,17 @@ wasm_wasm_module_load(const uint8 *buf, uint32 size)
   return module;
 
 fail:
-  wasm_wasm_module_unload(module);
+  wasm_loader_unload(module);
   return NULL;
 }
 
-bool
-wasm_wasm_module_unload(WASMModule *module)
+void
+wasm_loader_unload(WASMModule *module)
 {
   uint32 i;
 
   if (!module)
-    return true;
+    return;
 
   if (module->types) {
     for (i = 0; i < module->type_count; i++) {
@@ -1078,11 +1078,8 @@ wasm_wasm_module_unload(WASMModule *module)
     bh_free(module->data_segments);
   }
 
-  /* TODO: destroy the resource */
-
   if (module->const_str_set)
     bh_hash_map_destroy(module->const_str_set);
 
   bh_free(module);
-  return true;
 }
