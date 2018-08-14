@@ -46,6 +46,16 @@ int vm_thread_sys_init()
   return vm_mutex_init(&thread_list_lock, false);
 }
 
+void vm_thread_sys_destroy()
+{
+  unsigned i;
+
+  for (i = 0; i < BH_MAX_TLS_NUM; i++)
+    pthread_key_delete(thread_local_storage_key[i]);
+
+  vm_mutex_destroy(&thread_list_lock);
+}
+
 typedef struct {
   thread_start_routine_t start;
   void* stack;
@@ -64,8 +74,9 @@ static void *vm_thread_wrapper(void *arg)
   return NULL;
 }
 
-int vm_thread_create_with_prio(korp_tid *tid, thread_start_routine_t start, void *arg,
-                                unsigned int stack_size, int prio)
+int vm_thread_create_with_prio(korp_tid *tid,
+                               thread_start_routine_t start, void *arg,
+                               unsigned int stack_size, int prio)
 {
   pthread_attr_t tattr;
   thread_wrapper_arg *targ;
@@ -86,8 +97,10 @@ int vm_thread_create_with_prio(korp_tid *tid, thread_start_routine_t start, void
   }
 
   targ = (thread_wrapper_arg*) bh_malloc(sizeof(*targ));
-  if(!targ)
+  if(!targ) {
+    pthread_attr_destroy(&tattr);
     return BHT_ERROR;
+  }
 
   targ->start = start;
   targ->arg = arg;
@@ -112,7 +125,7 @@ int vm_thread_create(korp_tid *tid, thread_start_routine_t start, void *arg,
 
 korp_tid vm_self_thread()
 {
-    return (korp_tid) pthread_self();
+  return (korp_tid) pthread_self();
 }
 
 void vm_thread_exit(void * code)

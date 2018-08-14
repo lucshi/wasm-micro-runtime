@@ -33,6 +33,15 @@ extern "C" {
 #endif
 
 /**
+ * Initialize the native module, e.g. sort the function defs
+ * and the global defs.
+ *
+ * @return true if success, false otherwise
+ */
+bool
+wasm_native_init();
+
+/**
  * Lookup native function implementation of a given import function.
  *
  * @param module_name the module name of the import function

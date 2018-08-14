@@ -26,10 +26,22 @@
 #include "wasm-import.h"
 
 
+bool
+vmci_thread_sys_init()
+{
+  return vm_thread_sys_init();
+}
+
+void
+vmci_thread_sys_destroy()
+{
+  vm_thread_sys_destroy();
+}
+
 int
 vmci_thread_create_with_prio(vmci_thread_t *thread,
                              vmci_thread_start_routine_t start_routine, void *arg,
-                             void *heap_for_stack, unsigned stack_size, int prio)
+                             unsigned stack_size, int prio)
 {
   return vm_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
 }
@@ -37,7 +49,7 @@ vmci_thread_create_with_prio(vmci_thread_t *thread,
 int
 vmci_thread_create(vmci_thread_t *thread,
                    vmci_thread_start_routine_t start_routine, void *arg,
-                   void *heap_for_stack, unsigned stack_size)
+                   unsigned stack_size)
 {
   return vm_thread_create(thread, start_routine, arg, stack_size);
 }

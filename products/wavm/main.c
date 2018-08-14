@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include "bh_platform.h"
+#include "bh_thread.h"
 #include "wasm-export.h"
 #include "bh_memory.h"
 
@@ -32,14 +33,42 @@
 static int app_argc;
 static char **app_argv;
 
+void*
+vmci_get_tl_root(void)
+{
+  return vm_tls_get(0);
+}
+
+void
+vmci_set_tl_root(void *tlr)
+{
+  vm_tls_put(0, tlr);
+}
+
 static int
 print_help()
 {
   printf("Usage: wavm [-options] wasm_file [args...]\n");
   printf("options:\n");
-  printf("  -f|--function name     Specify function name to run in module rather than main\n");
+  printf("  -f|--function name     Specify function name to run "
+         "in module rather than main\n");
 
   return 1;
+}
+
+static void
+app_instance_cleanup(void)
+{
+}
+
+/**
+ * The start routine of the main thread of app instance.
+ */
+static void*
+app_instance_main(void *arg)
+{
+  printf("WASM app_instance_main called.\n");
+  return NULL;
 }
 
 int
@@ -51,6 +80,7 @@ main(int argc, char *argv[])
   int wasm_file_size;
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
+  wasm_vm_instance_t vm = NULL;
 
   /* Process options.  */
   for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -74,27 +104,52 @@ main(int argc, char *argv[])
   app_argc = argc - 1;
   app_argv = argv + 1;
 
-  if (!(wasm_file_buf = (uint8*)
-        bh_read_file_to_buffer(wasm_file, &wasm_file_size))) {
+  /* initialize runtime environment */
+  if (!wasm_runtime_init())
     return -1;
-  }
 
-  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size))) {
+  /* load WASM byte buffer from WASM bin file */
+  if (!(wasm_file_buf = (uint8*)
+        bh_read_file_to_buffer(wasm_file, &wasm_file_size)))
     goto fail1;
-  }
 
-  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))
+  /* load WASM module */
+  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size)))
     goto fail2;
 
-  /* TODO: create runtime instance */
+  /* instantiate the module */
+  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))
+    goto fail3;
 
+  /* create vm instance */
+  if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
+                                          32 * 1024, /* TODO, define macro */
+                                          32 * 1024, /* TODO, define macro */
+                                          app_instance_main, NULL,
+                                          app_instance_cleanup)))
+    goto fail4;
+
+  /* wait for the instance to terminate */
+  wasm_runtime_wait_for_instance(vm, -1);
+
+  /* destroy the instance */
+  wasm_runtime_destroy_instance(vm);
+
+fail4:
+  /* destroy the module instance */
   wasm_runtime_deinstantiate(wasm_module_inst);
 
-fail2:
+fail3:
+  /* unload the module */
   wasm_runtime_unload(wasm_module);
 
-fail1:
+fail2:
+  /* free the file buffer */
   bh_free(wasm_file_buf);
+
+fail1:
+  /* destroy runtime environment */
+  wasm_runtime_destroy();
 
   (void)func_name;
   return 0;

@@ -50,12 +50,17 @@ extern "C" {
 #define BHT_WAIT_FOREVER 0xFFFFFFFF
 
 /**
- * vm_thread_sys_init
- *    initiation function for beihai thread system. Invoked at the beginning of beihai intiation.
+ * Initialization function for vm thread system.
+ * Invoked at the beginning of runtime initialization.
  *
  * @return BH_SUCCESS if succuess.
  */
 int vm_thread_sys_init(void);
+
+/**
+ * Destroy the vm thread system.
+ */
+void vm_thread_sys_destroy();
 
 /**
  * This function creates a thread

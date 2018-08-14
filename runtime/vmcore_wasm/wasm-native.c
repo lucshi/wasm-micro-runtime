@@ -293,3 +293,11 @@ wasm_native_global_lookup(const char *module_name, const char *global_name)
 
   return NULL;
 }
+
+bool
+wasm_native_init()
+{
+  /* TODO: qsort the function defs and global defs. */
+  return true;
+}
+

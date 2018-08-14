@@ -101,6 +101,7 @@ typedef struct WASMModuleInstance {
   uint8 global_data[1];
 } WASMModuleInstance;
 
+struct WASMInterpFrame;
 typedef struct WASMInterpFrame WASMRuntimeFrame;
 
 /**
@@ -139,20 +140,6 @@ void
 wasm_runtime_call_wasm(WASMFunction *function,
                        unsigned argc, uint32 argv[]);
 
-WASMModuleInstance*
-wasm_runtime_instantiate(const WASMModule *module);
-
-void
-wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
-
-WASMVmInstance*
-wasm_runtime_create_instance(WASMModuleInstance *module_inst,
-                             unsigned stack_size,
-                             void *(*start_routine)(void*), void *arg,
-                             void (*cleanup_routine)(void));
-
-void
-wasm_runtime_destroy_instance(WASMVmInstance *vm);
 
 #ifdef __cplusplus
 }

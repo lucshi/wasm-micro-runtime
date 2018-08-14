@@ -40,47 +40,85 @@ typedef korp_tid vmci_thread_t;
 typedef korp_mutex vmci_thread_mutex_t;
 typedef thread_start_routine_t vmci_thread_start_routine_t;
 
+#define vmci_thread_start_routine_modifier BH_ROUTINE_MODIFIER
+
+#define vmci_reserved_native_stack_size \
+    BH_APPLET_PRESERVED_NATIVE_STACK_SIZE
+
+#define vmci_reserved_wasm_stack_size \
+    BH_APPLET_PRESERVED_WASM_STACK_SIZE
+
+
+/**
+ * Initialize the thread system.
+ *
+ * @return true if success, false otherwise.
+ */
+bool
+vmci_thread_sys_init();
+
+/**
+ * Destroy the thread system.
+ */
+void
+vmci_thread_sys_destroy();
+
 /**
  * Return a thread local pointer.
  *
  * @return the thread local pointer
  */
-void* vmci_get_tl_root(void);
+void*
+vmci_get_tl_root(void);
 
 /**
  * Set the thread local pointer.
  *
  * @param tlr the pointer to be stored in the thread local storage
  */
-void vmci_set_tl_root(void *tlr);
+void
+vmci_set_tl_root(void *tlr);
 
-int vmci_thread_create_with_prio(vmci_thread_t *thread,
-                                 vmci_thread_start_routine_t start_routine, void *arg,
-                                 void *heap_for_stack, unsigned stack_size, int prio);
+int
+vmci_thread_create_with_prio(vmci_thread_t *thread,
+                             vmci_thread_start_routine_t start_routine,
+                             void *arg,
+                             unsigned stack_size, int prio);
 
-int vmci_thread_create(vmci_thread_t *thread,
-                        vmci_thread_start_routine_t start_routine, void *arg,
-                        void *heap_for_stack, unsigned stack_size);
+int
+vmci_thread_create(vmci_thread_t *thread,
+                   vmci_thread_start_routine_t start_routine, void *arg,
+                   unsigned stack_size);
 
-int vmci_thread_cancel(vmci_thread_t thread);
+int
+vmci_thread_cancel(vmci_thread_t thread);
 
-int vmci_thread_join(vmci_thread_t thread, void **value_ptr, int mills);
+int
+vmci_thread_join(vmci_thread_t thread, void **value_ptr, int mills);
 
-int vmci_thread_detach(vmci_thread_t thread);
+int
+vmci_thread_detach(vmci_thread_t thread);
 
-void vmci_thread_exit(void *value_ptr);
+void
+vmci_thread_exit(void *value_ptr);
 
-vmci_thread_t vmci_thread_self();
+vmci_thread_t
+vmci_thread_self();
 
-int vmci_thread_mutex_init(vmci_thread_mutex_t *mutex, bool is_recursive);
+int
+vmci_thread_mutex_init(vmci_thread_mutex_t *mutex, bool is_recursive);
 
-void vmci_thread_mutex_lock(vmci_thread_mutex_t *mutex);
+void
+vmci_thread_mutex_lock(vmci_thread_mutex_t *mutex);
 
-int vmci_thread_mutex_trylock(vmci_thread_mutex_t *mutex);
+int
+vmci_thread_mutex_trylock(vmci_thread_mutex_t *mutex);
 
-void vmci_thread_mutex_unlock(vmci_thread_mutex_t *mutex);
+void
+vmci_thread_mutex_unlock(vmci_thread_mutex_t *mutex);
 
-int vmci_thread_mutex_destroy(vmci_thread_mutex_t *mutex);
+int
+vmci_thread_mutex_destroy(vmci_thread_mutex_t *mutex);
 
 #ifdef __cplusplus
 }

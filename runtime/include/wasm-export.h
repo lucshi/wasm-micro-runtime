@@ -78,17 +78,60 @@ wasm_runtime_instantiate(const wasm_module_t module);
 void
 wasm_runtime_deinstantiate(wasm_module_inst_t module_inst);
 
+/**
+ * Initialize the runtime environment (global locks,
+ * supervisor instance etc.) of the VM.
+ */
+bool
+wasm_runtime_init();
+
+/**
+ * Destroy the runtime environment (global locks,
+ * supervisor instance etc.) of the VM.
+ */
+void
+wasm_runtime_destroy();
+
+/**
+ * Create a WASM VM instance with the given WASM module instance.
+ *
+ * @param module_inst the WASM module instance
+ * @param native_stack_size the stack size of WASM native stack
+ * @param wasm_stack_size the stack size of WASM functions of
+ * the new instance
+ * @param start_routine start routine of the main thread
+ * @param arg the instance argument that will be passed to
+ * the start routine
+ * @param cleanup_routine the optional cleanup routine for the
+ * instance, which may be NULL
+ *
+ * @return the VM instance handle if succeeds, NULL otherwise
+ */
 wasm_vm_instance_t
 wasm_runtime_create_instance(wasm_module_inst_t module_inst,
-                             unsigned stack_size,
+                             uint32 native_stack_size,
+                             uint32 wasm_stack_size,
                              void *(*start_routine)(void*), void *arg,
                              void (*cleanup_routine)(void));
 
+/**
+ * Destroy the given VM instance. It can be called from any VM thread.
+ * If there are alive threads of the instance, they will be terminated
+ * mandatorily and then the cleanup routine is called if it's not NULL.
+ *
+ * @param handle the handle of the instance to be destroyed
+ */
 void
-wasm_runtime_destroy_instance(wasm_vm_instance_t vm);
+wasm_runtime_destroy_instance(wasm_vm_instance_t handle);
 
+/**
+ * Wait for the given VM instance to terminate.
+ *
+ * @param handle the VM instance to be waited for
+ * @param mills wait millseconds to return
+ */
 void
-wasm_runtime_wait_for_instance(wasm_vm_instance_t vm);
+wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
 
 
 #ifdef __cplusplus

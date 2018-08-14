@@ -27,8 +27,76 @@
 #include "wasm-thread.h"
 #include "wasm-import.h"
 #include "wasm-loader.h"
+#include "wasm-native.h"
 #include "bh_memory.h"
 
+
+/* The supervisor VM instance. */
+static WASMVmInstance *supervisor_instance;
+
+/* The mutex for protecting the VM instance list. */
+static vmci_thread_mutex_t instance_list_lock;
+
+
+static bool
+wasm_runtime_create_supervisor_il_env()
+{
+  WASMVmInstance *ilr;
+
+  /* Ensure this is a new thread that has not been initialized. */
+  bh_assert(!wasm_runtime_get_self());
+
+  if (!(ilr = wasm_thread_create_ilr(NULL,
+                                     vmci_reserved_native_stack_size,
+                                     vmci_reserved_wasm_stack_size,
+                                     NULL, NULL, NULL)))
+    return false;
+
+  /* Set thread local root. */
+  wasm_runtime_set_tlr(&ilr->main_tlr);
+  /* The current instance is the supervisor instance. */
+  supervisor_instance = ilr;
+  /* Initialize the circular linked list of VM instances. */
+  ilr->prev = ilr->next = ilr;
+  return true;
+}
+
+bool
+wasm_runtime_init()
+{
+  if (vmci_thread_sys_init() != 0)
+    return false;
+
+  if (vmci_thread_mutex_init(&instance_list_lock, false))
+    goto fail1;
+
+  if (!wasm_runtime_create_supervisor_il_env())
+    goto fail2;
+
+  wasm_runtime_set_tlr(NULL);
+  wasm_native_init();
+  return true;
+
+fail2:
+  vmci_thread_mutex_destroy(&instance_list_lock);
+
+fail1:
+  vmci_thread_sys_destroy();
+
+  return false;
+}
+
+void
+wasm_runtime_destroy()
+{
+  wasm_thread_destroy_ilr(supervisor_instance);
+  supervisor_instance = NULL;
+
+  vmci_thread_mutex_destroy(&instance_list_lock);
+
+  wasm_runtime_set_tlr(NULL);
+  vmci_thread_sys_destroy();
+}
 
 void
 wasm_runtime_call_wasm(WASMFunction *function,
@@ -378,6 +446,9 @@ export_functions_instantiate(const WASMModule *module,
   return export_funcs;
 }
 
+void
+wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
+
 /**
  * Instantiate module
  */
@@ -530,19 +601,144 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   bh_free(module_inst);
 }
 
-WASMVmInstance*
-wasm_runtime_create_instance(WASMModuleInstance *module_inst,
-                             unsigned stack_size,
-                             void *(*start_routine)(void*), void *arg,
-                             void (*cleanup_routine)(void))
+static void*
+wasm_thread_start(void *arg)
 {
-  /* TODO */
   return NULL;
 }
 
-void
-wasm_runtime_destroy_instance(WASMVmInstance *vm)
+static void
+app_instance_cleanup(WASMVmInstance *ilr)
 {
-  /* TODO */
+  void (*cleanup_routine)();
+
+  /* Remove vm from the VM instance list before it's actually
+     destroyed to avoid operations by other threads after it's
+     destroyed.  */
+  vmci_thread_mutex_lock(&instance_list_lock);
+  ilr->prev->next = ilr->next;
+  ilr->next->prev = ilr->prev;
+  ilr->next = ilr->prev = NULL;
+  vmci_thread_mutex_unlock(&instance_list_lock);
+
+  /* Set the cleanup routine.  */
+  cleanup_routine = ilr->cleanup_routine;
+
+  /* Release resources in vm and set it to destroyed state (whose
+     main_file is set to NULL). */
+  wasm_thread_destroy_ilr(ilr);
+
+  /* Call the cleanup routine at the last step after unlock.  */
+  if (cleanup_routine)
+    (*cleanup_routine)();
+}
+
+/**
+ * Entry point of the main thread of VM instance.
+ *
+ * @param arg pointer to the current VM instance
+ *
+ * @return return value of the start routine (pointed to by
+ * start_routine) of the instance or NULL if initialization fails
+ */
+static void* vmci_thread_start_routine_modifier
+app_instance_start (void *arg)
+{
+  void *retval = NULL;
+  WASMVmInstance *ilr = (WASMVmInstance*)arg;
+  WASMThread *self = &ilr->main_tlr;
+  vmci_thread_t handle = self->handle;
+
+  /* This must be a new thread that has not been initialized. */
+  bh_assert(!wasm_runtime_get_self());
+
+  /* Set the native stack boundary for this thread. */
+  wasm_thread_set_native_stack_boundary(self);
+
+  /* Set the thread local root. */
+  wasm_runtime_set_tlr(self);
+
+  /* Run the start routine. */
+  retval = (*ilr->start_routine)(ilr->start_routine_arg);
+
+  /* WASM stack must be empty.  */
+  bh_assert(self->wasm_stack.s.top == self->wasm_stack.s.bottom);
+
+  /* Change to ZOMBIE state before dying (and locks being destroyed)
+     so that possible destroying thread won't be blocked.  If the
+     destroying thread find that the main thread of an instance is in
+     ZOMBIE state, it should't cancel the threads of that instance
+     though ZOMBIE is a safe state because in this case that "ZOMBIE"
+     thread is doing cleanup, which shall not be killed.  */
+  /*TODO: modify to wasm_runtime_change_state(WASM_THREAD_ZOMBIE);*/
+  self->state = WASM_THREAD_ZOMBIE;
+
+  /* Cleanup app instance */
+  app_instance_cleanup(ilr);
+
+  /* Release system resource by ourselves when exit normally. */
+  vmci_thread_detach(handle);
+
+  /* Call exit explicitly because some systems may need to do
+     something in the exit function.  */
+  vmci_thread_exit(retval);
+  return NULL;
+}
+
+WASMVmInstance*
+wasm_runtime_create_instance(WASMModuleInstance *module_inst,
+                             uint32 native_stack_size,
+                             uint32 wasm_stack_size,
+                             void *(*start_routine)(void*), void *arg,
+                             void (*cleanup_routine)(void))
+{
+  WASMVmInstance *ilr;
+  uint32 native_stack_size1 = native_stack_size +
+                              vmci_reserved_native_stack_size;
+  uint32 wasm_stack_size1 = wasm_stack_size +
+                            vmci_reserved_wasm_stack_size;
+
+  if (!(ilr = wasm_thread_create_ilr(module_inst,
+                                     native_stack_size1, wasm_stack_size1,
+                                     start_routine, arg, cleanup_routine)))
+    return NULL;
+
+  /* Set this to make the main thread to be a WASM thread. */
+  ilr->main_tlr.start_routine = wasm_thread_start;
+
+  if (vmci_thread_create(&ilr->main_tlr.handle,
+                         &app_instance_start, ilr,
+                         ilr->native_stack_size)) {
+    wasm_thread_destroy_ilr(ilr);
+    return NULL;
+  }
+
+  /* Insert the new VM instance to the VM instance list. */
+  vmci_thread_mutex_lock(&instance_list_lock);
+  supervisor_instance->next->prev = ilr;
+  ilr->next = supervisor_instance->next;
+  ilr->prev = supervisor_instance;
+  supervisor_instance->next = ilr;
+  vmci_thread_mutex_unlock(&instance_list_lock);
+
+  return ilr;
+}
+
+void
+wasm_runtime_destroy_instance(WASMVmInstance *ilr)
+{
+  WASMThread *self = wasm_runtime_get_self();
+  WASMVmInstance *self_ilr = self->vm_instance;
+
+  /* We cannot destroy ourselves. */
+  bh_assert(self_ilr != ilr);
+
+  (void)self_ilr;
+}
+
+void
+wasm_runtime_wait_for_instance(WASMVmInstance *ilr, int mills)
+{
+  wasm_thread_wait_for_instance(ilr, mills);
 }
 
