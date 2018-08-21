@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 struct WASMVmInstance;
-struct WASMRuntimeFrame;
+struct WASMInterpFrame;
 
 typedef enum WASMThreadState {
   WASM_THREAD_ZOMBIE    = 0, /* terminated */
@@ -70,8 +70,11 @@ typedef struct WASMThread {
   /* Current state of this thread. */
   WASMThreadState state;
 
+  /* The cell num of the stack */
+  uint16 stack_cell_num;
+
   /* Current frame of a WASM thread. */
-  struct WASMRuntimeFrame *cur_frame;
+  struct WASMInterpFrame *cur_frame;
 
   /* The boundary of native stack. When interpreter detects that native
      frame may overrun this boundary, it will throw a stack overflow
@@ -262,8 +265,7 @@ wasm_thread_wait_for_instance(WASMVmInstance *ilr, int mills);
  * @param frame the WASM frame to be set for the current thread
  */
 static inline void
-wasm_thread_set_cur_frame(WASMThread *tlr,
-                          struct WASMRuntimeFrame *frame)
+wasm_thread_set_cur_frame(WASMThread *tlr, struct WASMInterpFrame *frame)
 {
   tlr->cur_frame = frame;
 }
@@ -275,7 +277,7 @@ wasm_thread_set_cur_frame(WASMThread *tlr,
  *
  * @return the current frame pointer
  */
-static inline struct WASMRuntimeFrame*
+static inline struct WASMInterpFrame*
 wasm_thread_get_cur_frame(WASMThread *tlr)
 {
   return tlr->cur_frame;

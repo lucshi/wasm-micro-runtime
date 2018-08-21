@@ -39,7 +39,13 @@ typedef struct WASMMemoryInstance {
   uint32 cur_page_count;
   /* Maximum page count */
   uint32 max_page_count;
-  /* Base address */
+  /* Base address, the layout is:
+     memory data + global data
+     memory data size is NumBytesPerPage * cur_page_count
+     global data size is calculated in module instantiating
+     Note: when memory is re-allocated, the global data must
+           be copied again.
+   */
   uint8 base_addr[1];
 } WASMMemoryInstance;
 
@@ -59,15 +65,21 @@ typedef struct WASMGlobalInstance {
   uint8 type;
   /* mutable or constant */
   bool is_mutable;
-  /* data offset to WASMModuleInstance.global_data if mutalbe */
-  uint32 mutable_data_offset;
-  /* initial value if constant */
+  /* data offset to base_addr of WASMMemoryInstance */
+  uint32 data_offset;
+  /* initial value */
   WASMValue initial_value;
 } WASMGlobalInstance;
 
 typedef struct WASMFunctionInstance {
   /* whether it is import function or WASM function */
   bool is_import_func;
+  /* cell num of parameters */
+  uint16 param_cell_num;
+  /* cell num of return type */
+  uint16 ret_cell_num;
+  /* cell num of local variables, 0 for import function */
+  uint16 local_cell_num;
   union {
     WASMFunctionImport *func_import;
     WASMFunction *func;
@@ -76,7 +88,7 @@ typedef struct WASMFunctionInstance {
 
 typedef struct WASMExportFuncInstance {
   char *name;
-  WASMFunction *function;
+  WASMFunctionInstance *function;
 } WASMExportFuncInstance;
 
 typedef struct WASMModuleInstance {
@@ -97,8 +109,9 @@ typedef struct WASMModuleInstance {
 
   WASMFunctionInstance *start_function;
 
-  /* global data for mutable globals */
-  uint8 global_data[1];
+  /* global data of globals, point to
+     default_memory->base_addr + memory size */
+  uint8 *global_data;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
@@ -127,6 +140,33 @@ wasm_runtime_set_tlr(WASMThread *self)
 }
 
 /**
+ * Return the code block of a function.
+ *
+ * @param func the WASM function instance
+ *
+ * @return the code block of the function
+ */
+static inline uint8*
+wasm_runtime_get_func_code(WASMFunctionInstance *func)
+{
+  return func->is_import_func ? NULL : func->u.func->code;
+}
+
+/**
+ * Return the code block end of a function.
+ *
+ * @param func the WASM function instance
+ *
+ * @return the code block end of the function
+ */
+static inline uint8*
+wasm_runtime_get_func_code_end(WASMFunctionInstance *func)
+{
+  return func->is_import_func
+         ? NULL : func->u.func->code + func->u.func->code_size;
+}
+
+/**
  * Call the given WASM function with the arguments.
  *
  * @param function the function to be called
@@ -137,7 +177,7 @@ wasm_runtime_set_tlr(WASMThread *self)
  * function returns.
  */
 void
-wasm_runtime_call_wasm(WASMFunction *function,
+wasm_runtime_call_wasm(WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[]);
 
 

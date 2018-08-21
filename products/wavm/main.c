@@ -67,7 +67,8 @@ app_instance_cleanup(void)
 static void*
 app_instance_main(void *arg)
 {
-  printf("WASM app_instance_main called.\n");
+  wasm_application_execute_main(app_argc, app_argv);
+  /* TODO: check exception */
   return NULL;
 }
 

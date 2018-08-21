@@ -48,42 +48,6 @@
   }                                                             \
 } while (0)
 
-static bool
-read_leb(const uint8 *buf, const uint8 *buf_end,
-         uint32 *p_offset, uint32 maxbits,
-         bool sign, uint64 *p_result)
-{
-  uint64 result = 0;
-  uint32 shift = 0;
-  uint32 bcnt = 0;
-  uint32 start_pos = *p_offset;
-  uint64 byte;
-
-  CHECK_BUF(buf, buf_end, *p_offset);
-  while (true) {
-    byte = buf[*p_offset];
-    *p_offset += 1;
-    CHECK_BUF(buf, buf_end, *p_offset);
-    result |= ((byte & 0x7f) << shift);
-    shift += 7;
-    if ((byte & 0x80) == 0) {
-      break;
-    }
-    bcnt += 1;
-    if (bcnt > (maxbits + 7 - 1) / 7) {
-      printf("WASM module load failed: unsigned LEB at byte %d overflow\n",
-             start_pos);
-      return false;
-    }
-  }
-  if (sign && (shift < maxbits) && (byte & 0x40)) {
-    /* Sign extend */
-    result |= - (1 << shift);
-  }
-  *p_result = result;
-  return true;
-}
-
 #define read_leb_uint64(p, p_end, res) do {         \
   uint32 off = 0;                                   \
   uint64 res64;                                     \

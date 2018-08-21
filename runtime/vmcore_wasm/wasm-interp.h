@@ -27,18 +27,19 @@
 #define _WASM_INTERP_H
 
 #include "wasm.h"
-#include "wasm-runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct WASMFunctionInstance;
 
 typedef struct WASMInterpFrame {
   /* The frame of the caller that are calling the current function. */
   struct WASMInterpFrame *prev_frame;
 
   /* The current WASM function. */
-  WASMFunctionInstance *function;
+  struct WASMFunctionInstance *function;
 
   /* Instruction pointer of the bytecode array.  */
   uint8 *ip;
@@ -49,6 +50,24 @@ typedef struct WASMInterpFrame {
 
   uint32 lp[1];
 } WASMInterpFrame;
+
+/**
+ * Calculate the size of interpreter area of frame of a function.
+ *
+ * @param all_cell_num number of all cells including local variables
+ * and the working stack slots
+ *
+ * @return the size of interpreter area of the frame
+ */
+static inline unsigned
+wasm_interp_interp_frame_size(unsigned all_cell_num)
+{
+  return align_uint(offsetof(WASMInterpFrame, lp) + all_cell_num * 5, 4);
+}
+
+void
+wasm_interp_call_wasm(struct WASMFunctionInstance *function,
+                      uint32 argc, uint32 argv[]);
 
 #ifdef __cplusplus
 }

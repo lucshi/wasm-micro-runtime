@@ -32,6 +32,28 @@
 extern "C" {
 #endif
 
+typedef enum WASMOpcode {
+  WASM_OP_NOP           = 0x00,
+
+  WASM_OP_END           = 0x0b, /* end */
+
+  WASM_OP_RETURN        = 0x0f, /* return */
+  WASM_OP_CALL          = 0x10, /* call */
+  WASM_OP_CALL_INDIRECT = 0x11, /* call_indirect */
+
+  WASM_OP_GET_LOCAL     = 0x20, /* get_local */
+  WASM_OP_SET_LOCAL     = 0x21, /* set_local */
+  WASM_OP_TEE_LOCAL     = 0x22, /* tee_local */
+  WASM_OP_GET_GLOBAL    = 0x23, /* get_global */
+  WASM_OP_SET_GLOBAL    = 0x24, /* set_global */
+
+  WASM_OP_I32_LOAD      = 0x28, /* i32.load */
+
+  WASM_OP_I32_CONST     = 0x41, /* i32.const */
+
+  WASM_OP_IMPDEP1       = 0xfe,
+  WASM_OP_IMPDEP2       = 0xff
+} WASMOpcode;
 
 #ifdef __cplusplus
 }

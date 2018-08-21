@@ -28,6 +28,7 @@
 #include "wasm-import.h"
 #include "wasm-loader.h"
 #include "wasm-native.h"
+#include "wasm-interp.h"
 #include "bh_memory.h"
 
 
@@ -64,8 +65,11 @@ wasm_runtime_create_supervisor_il_env()
 bool
 wasm_runtime_init()
 {
+
   if (vmci_thread_sys_init() != 0)
     return false;
+
+  wasm_runtime_set_tlr(NULL);
 
   if (vmci_thread_mutex_init(&instance_list_lock, false))
     goto fail1;
@@ -73,7 +77,6 @@ wasm_runtime_init()
   if (!wasm_runtime_create_supervisor_il_env())
     goto fail2;
 
-  wasm_runtime_set_tlr(NULL);
   wasm_native_init();
   return true;
 
@@ -99,10 +102,10 @@ wasm_runtime_destroy()
 }
 
 void
-wasm_runtime_call_wasm(WASMFunction *function,
+wasm_runtime_call_wasm(WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[])
 {
-  /* TODO */
+  wasm_interp_call_wasm(function, argc, argv);
 }
 
 WASMModule*
@@ -136,7 +139,7 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
  * Instantiate memories in a module.
  */
 static WASMMemoryInstance**
-memories_instantiate(const WASMModule *module)
+memories_instantiate(const WASMModule *module, uint32 global_data_size)
 {
   WASMImport *import;
   uint32 mem_index = 0, i, memory_count =
@@ -156,7 +159,8 @@ memories_instantiate(const WASMModule *module)
   for (i = 0; i < module->import_count; i++, import++) {
     if (import->kind == IMPORT_KIND_MEMORY) {
       total_size = offsetof(WASMMemoryInstance, base_addr) +
-                   NumBytesPerPage * import->u.memory.init_page_count;
+                   NumBytesPerPage * import->u.memory.init_page_count +
+                   global_data_size;
       if (!(memory = memories[mem_index++] = bh_malloc(total_size))) {
         printf("Instantiate memory failed: allocate memory failed.\n");
         memories_deinstantiate(memories, memory_count);
@@ -172,7 +176,8 @@ memories_instantiate(const WASMModule *module)
   /* instantiate memories from memory section */
   for (i = 0; i < module->memory_count; i++) {
     total_size = offsetof(WASMMemoryInstance, base_addr) +
-                 NumBytesPerPage * module->memories[i].init_page_count;
+                 NumBytesPerPage * module->memories[i].init_page_count +
+                 global_data_size;
     if (!(memory = memories[mem_index++] = bh_malloc(total_size))) {
       printf("Instantiate memory failed: allocate memory failed.\n");
       memories_deinstantiate(memories, memory_count);
@@ -295,6 +300,13 @@ functions_instantiate(const WASMModule *module)
     if (import->kind == IMPORT_KIND_FUNC) {
       function->is_import_func = true;
       function->u.func_import = &import->u.function;
+
+      function->param_cell_num =
+        wasm_type_param_cell_num(import->u.function.func_type);
+      function->ret_cell_num =
+        wasm_type_return_cell_num(import->u.function.func_type);
+      function->local_cell_num = 0;
+
       function++;
     }
   }
@@ -303,6 +315,15 @@ functions_instantiate(const WASMModule *module)
   for (i = 0; i < module->function_count; i++) {
     function->is_import_func = false;
     function->u.func = module->functions[i];
+
+    function->param_cell_num =
+      wasm_type_param_cell_num(function->u.func->func_type);
+    function->ret_cell_num =
+      wasm_type_return_cell_num(function->u.func->func_type);
+    function->local_cell_num =
+      wasm_get_cell_num(function->u.func->local_types,
+                        function->u.func->local_count);
+
     function++;
   }
 
@@ -325,10 +346,10 @@ globals_deinstantiate(WASMGlobalInstance *globals)
  */
 static WASMGlobalInstance*
 globals_instantiate(const WASMModule *module,
-                    uint32 *p_mutable_data_size)
+                    uint32 *p_global_data_size)
 {
   WASMImport *import;
-  uint32 mutable_data_offset = 0;
+  uint32 global_data_offset = 0;
   uint32 i, global_count =
     module->import_global_count + module->global_count;
   uint32 total_size = sizeof(WASMGlobalInstance) * global_count;
@@ -350,10 +371,8 @@ globals_instantiate(const WASMModule *module,
       global->type = global_import->type;
       global->is_mutable = global_import->is_mutable;
       global->initial_value = global_import->global_data_linked;
-      if (global->is_mutable) {
-        global->mutable_data_offset = mutable_data_offset;
-        mutable_data_offset += wasm_value_type_size(global->type);
-      }
+      global->data_offset = global_data_offset;
+      global_data_offset += wasm_value_type_size(global->type);
 
       global++;
     }
@@ -374,16 +393,14 @@ globals_instantiate(const WASMModule *module,
       memcpy(&global->initial_value, &init_expr->u, sizeof(int64));
     }
 
-    if (global->is_mutable) {
-      global->mutable_data_offset = mutable_data_offset;
-      mutable_data_offset += wasm_value_type_size(global->type);
-    }
+    global->data_offset = global_data_offset;
+    global_data_offset += wasm_value_type_size(global->type);
 
     global++;
   }
 
   bh_assert((uint32)(global - globals) == global_count);
-  *p_mutable_data_size = mutable_data_offset;
+  *p_global_data_size = global_data_offset;
   return globals;
 }
 
@@ -418,6 +435,7 @@ export_functions_deinstantiate(WASMExportFuncInstance *functions)
  */
 static WASMExportFuncInstance*
 export_functions_instantiate(const WASMModule *module,
+                             WASMModuleInstance *module_inst,
                              uint32 export_func_count)
 {
   WASMExportFuncInstance *export_funcs, *export_func;
@@ -437,8 +455,7 @@ export_functions_instantiate(const WASMModule *module,
                 && export->index < module->import_function_count
                                    + module->function_count);
       export_func->name = export->name;
-      export_func->function =
-        module->functions[export->index - module->import_function_count];
+      export_func->function = &module_inst->functions[export->index];
       export_func++;
     }
 
@@ -459,8 +476,8 @@ wasm_runtime_instantiate(const WASMModule *module)
   WASMTableSeg *table_seg;
   WASMDataSeg *data_seg;
   WASMGlobalInstance *globals = NULL, *global;
-  uint32 global_count, mutable_data_size = 0, total_size, i;
-  uint8 *global_data, *memory_data;
+  uint32 global_count, global_data_size = 0, i;
+  uint8 *global_data, *global_data_end, *memory_data;
   uint32 *table_data;
 
   if (!module)
@@ -469,19 +486,17 @@ wasm_runtime_instantiate(const WASMModule *module)
   /* Instantiate global firstly to get the mutable data size */
   global_count = module->import_global_count + module->global_count;
   if (global_count &&
-      !(globals = globals_instantiate(module, &mutable_data_size)))
+      !(globals = globals_instantiate(module, &global_data_size)))
     return NULL;
 
   /* Allocate the memory */
-  total_size = offsetof(WASMModuleInstance, global_data) +
-               mutable_data_size;
-  if (!(module_inst = bh_malloc(total_size))) {
+  if (!(module_inst = bh_malloc(sizeof(WASMModuleInstance)))) {
     printf("Instantiate module failed: allocate memory failed.\n");
     globals_deinstantiate(globals);
     return NULL;
   }
 
-  memset(module_inst, 0, total_size);
+  memset(module_inst, 0, sizeof(WASMModuleInstance));
   module_inst->global_count = global_count;
   module_inst->globals = globals;
 
@@ -495,23 +510,42 @@ wasm_runtime_instantiate(const WASMModule *module)
 
   /* Instantiate memories/tables/functions */
   if ((module_inst->memory_count > 0
-       && !(module_inst->memories = memories_instantiate(module)))
+       && !(module_inst->memories = memories_instantiate(module, global_data_size)))
       || (module_inst->table_count > 0
           && !(module_inst->tables = tables_instantiate(module)))
       || (module_inst->function_count > 0
           && !(module_inst->functions = functions_instantiate(module)))
       || (module_inst->export_func_count > 0
           && !(module_inst->export_functions = export_functions_instantiate(
-                    module, module_inst->export_func_count)))) {
+                    module, module_inst, module_inst->export_func_count)))) {
     wasm_runtime_deinstantiate(module_inst);
     return NULL;
   }
 
-  /* Initialize the global data of mutable globals */
-  global_data = module_inst->global_data;
-  global = globals;
-  for (i = 0; i < global_count; i++, global++)
-    if (global->is_mutable) {
+  if (module_inst->memory_count) {
+    WASMMemoryInstance *memory;
+    memory = module_inst->default_memory = module_inst->memories[0];
+
+    /* Initialize the memory data with data segment section */
+    memory_data = module_inst->default_memory->base_addr;
+    for (i = 0; i < module->data_seg_count; i++) {
+      data_seg = module->data_segments[i];
+      bh_assert(data_seg->memory_index == 0);
+      bh_assert(data_seg->base_offset.init_expr_type ==
+          INIT_EXPR_TYPE_I32_CONST);
+      bh_assert((uint32)data_seg->base_offset.u.i32 <
+          NumBytesPerPage * module_inst->default_memory->cur_page_count);
+
+      memcpy(memory_data + data_seg->base_offset.u.i32,
+          data_seg->data, data_seg->data_length);
+    }
+
+    /* Initialize the global data */
+    global_data = module_inst->global_data =
+      memory->base_addr + NumBytesPerPage * memory->cur_page_count;
+    global_data_end = global_data + global_data_size;
+    global = globals;
+    for (i = 0; i < global_count; i++, global++) {
       switch (global->type) {
         case VALUE_TYPE_I32:
         case VALUE_TYPE_F32:
@@ -527,25 +561,7 @@ wasm_runtime_instantiate(const WASMModule *module)
           bh_assert(0);
       }
     }
-  bh_assert((uint32)(global_data - module_inst->global_data) ==
-            mutable_data_size);
-
-  if (module_inst->memory_count) {
-    module_inst->default_memory = module_inst->memories[0];
-
-    /* Initialize the memory data with data segment section */
-    memory_data = module_inst->default_memory->base_addr;
-    for (i = 0; i < module->data_seg_count; i++) {
-      data_seg = module->data_segments[i];
-      bh_assert(data_seg->memory_index == 0);
-      bh_assert(data_seg->base_offset.init_expr_type ==
-          INIT_EXPR_TYPE_I32_CONST);
-      bh_assert((uint32)data_seg->base_offset.u.i32 <
-          NumBytesPerPage * module_inst->default_memory->cur_page_count);
-
-      memcpy(memory_data + data_seg->base_offset.u.i32,
-          data_seg->data, data_seg->data_length);
-    }
+    bh_assert(global_data == global_data_end);
   }
 
   if (module_inst->table_count) {

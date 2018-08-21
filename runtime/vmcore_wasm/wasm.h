@@ -92,117 +92,6 @@ extern "C" {
 #define EXPORT_KIND_MEMORY 2
 #define EXPORT_KIND_GLOBAL 3
 
-#if 0
-struct ModuleInstance;
-struct Compartment;
-struct ContextRuntimeData;
-struct CompartmentRuntimeData;
-
-typedef struct FunctionInstance {
-  ObjectImpl obj_impl;
-  struct ModuleInstance *module_instance;
-  FunctionType type;
-  void *native_function;
-  uint8 calling_convention;
-  const char *debug_name;
-} FunctionInstance;
-
-typedef struct FunctionElement {
-  uintptr_t type_encoding;
-  void *value;
-} FunctionElement;
-
-typedef struct TableInstance {
-  ObjectImpl obj_impl;
-  struct Compartment *compartment;
-  uint32 id;
-  TableType type;
-  FunctionElement *base_address;
-  uint8 *end_address;
-  vmci_thread_mutex_t elements_lock;
-  Vector elements;
-} TableInstance;
-
-typedef struct MemoryInstance {
-  ObjectImpl obj_impl;
-  struct Compartment *compartment;
-  uint32 id;
-  MemoryType type;
-  uint8 *base_address;
-  uint8 *end_address;
-  uint32 num_pages;
-} MemoryInstance;
-
-typedef struct GlobalInstance {
-  ObjectImpl obj_impl;
-  struct Compartment *compartment;
-  const GlobalType type;
-  const uint32 mutable_data_offset;
-  const UntaggedValue initial_value;
-} GlobalInstance;
-
-typedef struct ExceptionTypeInstance {
-  ObjectImpl obj_impl;
-  ExceptionType type;
-  const char *debug_name;
-} ExceptionTypeInstance;
-
-typedef struct ExceptionData {
-  ExceptionTypeInstance *type_instance;
-  uint8 is_user_exception;
-  UntaggedValue arguments[1];
-} ExceptionData;
-
-typedef struct ModuleInstance {
-  ObjectImpl obj_impl;
-  struct Compartment *compartment;
-  HashMap *export_map;
-  Vector function_defs;
-  Vector functions;
-  Vector tables;
-  Vector memories;
-  Vector globals;
-  Vector exception_type_instances;
-  FunctionInstance *start_function;
-  MemoryInstance *default_memory;
-  TableInstance *default_table;
-  const char *debug_name;
-} ModuleInstance;
-
-typedef struct Context {
-  ObjectImpl obj_impl;
-  struct Compartment *compartment;
-  uint32 id;
-  struct ContextRuntimeData *runtime_data;
-} Context;
-
-typedef struct Compartment {
-  ObjectImpl obj_imp;
-  vmci_thread_mutex_t lock;
-  struct CompartmentRuntimeData *runtime_data;
-  uint8 *unaligned_runtime_data;
-  uint32 num_global_bytes;
-  Vector globals;
-  Vector memories;
-  Vector tables;
-  Vector contexts;
-  uint8 initial_context_global_data[MaxGlobalBytes];
-  ModuleInstance *wavm_intrinsics;
-} Compartment;
-
-typedef struct ContextRuntimeData {
-  uint8 thunk_arg_and_return_data[MaxThunkArgAndReturnBytes];
-  uint8 global_data[MaxGlobalBytes];
-} ContextRuntimeData;
-
-typedef struct CompartmentRuntimeData {
-  Compartment *compartment;
-  uint8 *memories[MaxMemories];
-  FunctionElement *tables[MaxTables];
-  ContextRuntimeData contexts[1];
-} CompartmentRuntimeData;
-#endif
-
 typedef union WASMValue {
   int32 i32;
   uint32 u32;
@@ -397,6 +286,50 @@ wasm_value_type_size(uint8 value_type)
   }
   return 0;
 }
+
+inline static uint16
+wasm_value_type_cell_num(uint8 value_type)
+{
+  switch (value_type) {
+    case VALUE_TYPE_I32:
+    case VALUE_TYPE_F32:
+      return 1;
+    case VALUE_TYPE_I64:
+    case VALUE_TYPE_F64:
+      return 2;
+    default:
+      bh_assert(0);
+  }
+  return 0;
+}
+
+inline static uint16
+wasm_get_cell_num(const uint8 *types, uint32 type_count)
+{
+  uint16 cell_num = 0;
+  uint32 i;
+  for (i = 0; i < type_count; i++)
+    cell_num += wasm_value_type_cell_num(types[i]);
+  return cell_num;
+}
+
+inline static uint16
+wasm_type_param_cell_num(const WASMType *type)
+{
+  return wasm_get_cell_num(type->types, type->param_count);
+}
+
+inline static uint16
+wasm_type_return_cell_num(const WASMType *type)
+{
+  return wasm_get_cell_num(type->types + type->param_count,
+                           type->result_count);
+}
+
+bool
+read_leb(const uint8 *buf, const uint8 *buf_end,
+         uint32 *p_offset, uint32 maxbits,
+         bool sign, uint64 *p_result);
 
 #ifdef __cplusplus
 } /* end of extern "C" */

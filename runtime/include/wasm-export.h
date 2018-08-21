@@ -133,6 +133,17 @@ wasm_runtime_destroy_instance(wasm_vm_instance_t handle);
 void
 wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
 
+/**
+ * Find the unique main function from WASM module of current instance
+ * and execute that function.
+ *
+ * @param argc the number of arguments
+ * @param argv the arguments array
+ *
+ * @return true if the main function is called, false otherwise.
+ */
+bool
+wasm_application_execute_main(int argc, char *argv[]);
 
 #ifdef __cplusplus
 }
