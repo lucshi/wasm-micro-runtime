@@ -39,6 +39,7 @@ wasm_thread_tlr_init(WASMThread *tlr, WASMVmInstance *ilr)
   tlr->vm_instance = ilr;
   tlr->state = WASM_THREAD_RUNNING;
   tlr->stack_cell_num = vmci_default_stack_cell_num;
+  tlr->block_cell_num = vmci_default_block_cell_num;
   tlr->wasm_stack.s.top_boundary =
     tlr->wasm_stack.s.bottom + ilr->wasm_stack_size;
   tlr->wasm_stack.s.top = tlr->wasm_stack.s.bottom;

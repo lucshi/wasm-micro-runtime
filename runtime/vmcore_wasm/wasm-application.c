@@ -36,7 +36,8 @@ resolve_main_function(const WASMModuleInstance *module_inst)
 {
   uint32 i;
   for (i = 0; i < module_inst->export_func_count; i++)
-    if (!strcmp(module_inst->export_functions->name, "main"))
+    if (!strcmp(module_inst->export_functions->name, "_main")
+        || !strcmp(module_inst->export_functions->name, "main"))
       return module_inst->export_functions[i].function;
   return NULL;
 }

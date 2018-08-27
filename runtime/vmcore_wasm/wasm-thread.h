@@ -73,6 +73,9 @@ typedef struct WASMThread {
   /* The cell num of the stack */
   uint16 stack_cell_num;
 
+  /* The cell num of the blocks in the stack */
+  uint16 block_cell_num;
+
   /* Current frame of a WASM thread. */
   struct WASMInterpFrame *cur_frame;
 

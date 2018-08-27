@@ -27,6 +27,7 @@
 #define _WASM_LOADER_H
 
 #include "wasm.h"
+#include "bh_hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,13 @@ wasm_loader_load(const uint8 *buf, uint32 size);
 void
 wasm_loader_unload(WASMModule *module);
 
+bool
+wasm_loader_find_block_addr(HashMap *map,
+                            const uint8 *if_addr,
+                            const uint8 *code_end_addr,
+                            uint8 block_type,
+                            uint8 **p_else_addr,
+                            uint8 **p_end_addr);
 
 #ifdef __cplusplus
 }

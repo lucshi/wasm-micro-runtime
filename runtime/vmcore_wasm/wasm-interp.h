@@ -32,6 +32,14 @@
 extern "C" {
 #endif
 
+typedef struct WASMBranchBlock {
+  uint8 block_type;
+  uint8 *start_addr;
+  uint8 *else_addr;
+  uint8 *end_addr;
+  uint32 *frame_sp;
+} WASMBranchBlock;
+
 struct WASMFunctionInstance;
 
 typedef struct WASMInterpFrame {
@@ -46,7 +54,13 @@ typedef struct WASMInterpFrame {
 
   /* Operand stack top pointer of the current frame.  The bottom of
      the stack is the next cell after the last local variable.  */
+  uint32 *sp_bottom;
+  uint32 *sp_boundary;
   uint32 *sp;
+
+  WASMBranchBlock *csp_bottom;
+  WASMBranchBlock *csp_boundary;
+  WASMBranchBlock *csp;
 
   uint32 lp[1];
 } WASMInterpFrame;

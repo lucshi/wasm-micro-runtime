@@ -1047,3 +1047,14 @@ wasm_loader_unload(WASMModule *module)
 
   bh_free(module);
 }
+
+bool
+wasm_loader_find_block_addr(HashMap *map,
+                            const uint8 *if_addr,
+                            const uint8 *code_end_addr,
+                            uint8 block_type,
+                            uint8 **p_else_addr,
+                            uint8 **p_end_addr)
+{
+  return false;
+}

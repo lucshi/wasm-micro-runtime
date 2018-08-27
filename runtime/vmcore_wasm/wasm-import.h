@@ -50,6 +50,7 @@ typedef thread_start_routine_t vmci_thread_start_routine_t;
 
 #define vmci_default_stack_cell_num 256
 
+#define vmci_default_block_cell_num 256
 
 /**
  * Initialize the thread system.

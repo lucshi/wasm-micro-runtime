@@ -29,6 +29,7 @@
 #include "wasm.h"
 #include "wasm-import.h"
 #include "wasm-thread.h"
+#include "bh_hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -108,6 +109,7 @@ typedef struct WASMModuleInstance {
   WASMTableInstance *default_table;
 
   WASMFunctionInstance *start_function;
+  HashMap *branch_set;
 
   /* global data of globals, point to
      default_memory->base_addr + memory size */
