@@ -52,9 +52,25 @@ wasm_loader_load(const uint8 *buf, uint32 size);
 void
 wasm_loader_unload(WASMModule *module);
 
+/**
+ * Find address of related else opcode and end opcode of opcode block/loop/if
+ * according to the start address of opcode.
+ *
+ * @param branch_set the hashtable to store the else/end adress info of
+ * block/loop/if opcode. The function will lookup the hashtable firstly,
+ * if not found, it will then search the code from start_addr, and if success,
+ * stores the result to the hashtable.
+ * @param start_addr the next address of opcode block/loop/if
+ * @param code_end_addr the end address of function code block
+ * @param block_type the type of block, 0/1/2 denotes block/loop/if
+ * @param p_else_addr returns the else addr if found
+ * @param p_end_addr returns the end addr if found
+ *
+ * @return true if success, false otherwise
+ */
 bool
 wasm_loader_find_block_addr(HashMap *map,
-                            const uint8 *if_addr,
+                            const uint8 *start_addr,
                             const uint8 *code_end_addr,
                             uint8 block_type,
                             uint8 **p_else_addr,

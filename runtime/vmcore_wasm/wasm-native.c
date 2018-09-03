@@ -37,7 +37,7 @@
 #include <unistd.h>
 
 #define MEMORY(self) (self->vm_instance->module->default_memory)
-#define MEMORY_BASE(self) (MEMORY(self)->base_addr)
+#define MEMORY_BASE(self) (MEMORY(self)->memory_data)
 
 static void
 _getc_wrapper(WASMThread *self, uint32 *args)
@@ -250,48 +250,63 @@ extern char **environ;
 typedef struct WASMNativeGlobalDef {
   const char *module_name;
   const char *global_name;
-  uintptr_t global_data;
+  WASMValue global_data;
 } WASMNativeGlobalDef;
 
 static WASMNativeGlobalDef native_global_defs[] = {
-  { "env", "STACKTOP", (uintptr_t)64 * NumBytesPerPage },
-  { "env", "STACK_MAX", 128 * NumBytesPerPage },
-  { "env", "ABORT", 0 },
-  { "env", "memoryBase", 1024 },
-  { "env", "tableBase", 0 }
+  { "env", "STACKTOP", .global_data.u32 = 64 * NumBytesPerPage },
+  { "env", "STACK_MAX", .global_data.u32 = 128 * NumBytesPerPage },
+  { "env", "ABORT", .global_data.u32 = 0 },
+  { "env", "memoryBase", .global_data.u32 = 1024 },
+  { "env", "tableBase", .global_data.u32 = 0 }
 };
 
-void*
-wasm_native_global_lookup(const char *module_name, const char *global_name)
+bool
+wasm_native_global_lookup(const char *module_name, const char *global_name,
+                          WASMGlobalImport *global)
 {
   uint32 size = sizeof(native_global_defs)/sizeof(WASMNativeGlobalDef);
   WASMNativeGlobalDef *global_def = native_global_defs;
   WASMNativeGlobalDef *global_def_end = global_def + size;
 
-  if (!module_name || !global_name)
-    return NULL;
+  if (!module_name || !global_name || !global)
+    return false;
 
   /* Lookup constant globals which can be defined by table */
   while (global_def < global_def_end) {
     if (!strcmp(global_def->module_name, module_name)
-        && !strcmp(global_def->global_name, global_name))
-      return &global_def->global_data;
+        && !strcmp(global_def->global_name, global_name)) {
+      global->global_data_linked = global_def->global_data;
+      return true;
+    }
     global_def++;
   }
 
   /* Lookup non-constant globals which cannot be defined by table */
   if (!strcmp(module_name, "env")) {
-    if (!strcmp(global_name, "_stdin"))
-      return &stdin;
-    else if (!strcmp(global_name, "_stdout"))
-      return &stdout;
-    else if (!strcmp(global_name, "_stderr"))
-      return &stderr;
-    if (!strcmp(global_name, "_environ"))
-      return &environ;
+    if (!strcmp(global_name, "_stdin")) {
+      global->global_data_linked.addr = (uintptr_t)stdin;
+      global->is_addr = true;
+      return true;
+    }
+    else if (!strcmp(global_name, "_stdout")) {
+      global->global_data_linked.addr = (uintptr_t)stdout;
+      global->is_addr = true;
+      return true;
+    }
+    else if (!strcmp(global_name, "_stderr")) {
+      global->global_data_linked.addr = (uintptr_t)stderr;
+      global->is_addr = true;
+      return true;
+    }
+    else if (!strcmp(global_name, "_environ")) {
+      global->global_data_linked.addr = (uintptr_t)environ;
+      global->is_addr = true;
+      return true;
+    }
   }
 
-  return NULL;
+  return false;
 }
 
 bool

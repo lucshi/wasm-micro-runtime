@@ -24,8 +24,9 @@
  */
 
 #include "wasm-loader.h"
-#include "wasm-native.h"
 #include "wasm.h"
+#include "wasm-native.h"
+#include "wasm-opcode.h"
 #include "bh_memory.h"
 
 
@@ -270,7 +271,6 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   uint32 section_size, import_count, name_len, type_index, i;
   WASMImport *import;
   uint8 mutable;
-  void *global_data_ptr;
 
   read_leb_uint32(p, p_end, section_size);
   *p_buf = p;
@@ -339,29 +339,12 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           read_leb_uint8(p, p_end, mutable);
           import->u.global.is_mutable = mutable & 1 ? true : false;
           module->import_global_count++;
-          if (!(global_data_ptr = wasm_native_global_lookup
-                (import->module_name, import->field_name))) {
+          if (!(wasm_native_global_lookup(import->module_name,
+                                          import->field_name,
+                                          &import->u.global))) {
             printf("Load import section failed: resolve import global (%s, %s) "
                    "failed.\n", import->module_name, import->field_name);
             return false;
-          }
-          switch (import->u.global.type) {
-            case VALUE_TYPE_I32:
-              import->u.global.global_data_linked.i32 = *(int32*)global_data_ptr;
-              break;
-            case VALUE_TYPE_I64:
-              import->u.global.global_data_linked.i64 = *(int64*)global_data_ptr;
-              break;
-            case VALUE_TYPE_F32:
-              import->u.global.global_data_linked.f32 = *(float32*)global_data_ptr;
-              break;
-            case VALUE_TYPE_F64:
-              import->u.global.global_data_linked.f64 = *(float64*)global_data_ptr;
-              break;
-            default:
-              printf("Load import section failed: invalid global type %d\n",
-                     import->u.global.type);
-              return false;
           }
           break;
 
@@ -1048,13 +1031,291 @@ wasm_loader_unload(WASMModule *module)
   bh_free(module);
 }
 
+typedef struct block_addr {
+  uint8 block_type;
+  uint8 *else_addr;
+  uint8 *end_addr;
+} block_addr;
+
 bool
-wasm_loader_find_block_addr(HashMap *map,
-                            const uint8 *if_addr,
+wasm_loader_find_block_addr(HashMap *branch_set,
+                            const uint8 *start_addr,
                             const uint8 *code_end_addr,
                             uint8 block_type,
                             uint8 **p_else_addr,
                             uint8 **p_end_addr)
 {
+  const uint8 *p = start_addr, *p_end = code_end_addr;
+  uint8 *else_addr = NULL;
+  uint32 block_nested_depth = 1, count, i, u32, u64;
+  uint8 opcode, u8;
+  block_addr *block;
+
+  if ((block = bh_hash_map_find(branch_set, (void*)start_addr))) {
+    if (block->block_type != block_type)
+      return false;
+    if (block_type == BLOCK_TYPE_IF) /* if block */
+      *p_else_addr = block->else_addr;
+    *p_end_addr = block->end_addr;
+    return true;
+  }
+
+  while (p < code_end_addr) {
+    opcode = *p++;
+
+    switch (opcode) {
+      case WASM_OP_UNREACHABLE:
+      case WASM_OP_NOP:
+        break;
+
+      case WASM_OP_BLOCK:
+      case WASM_OP_LOOP:
+      case WASM_OP_IF:
+        read_leb_uint32(p, p_end, u32); /* blocktype */
+        block_nested_depth++;
+        break;
+
+      case WASM_OP_ELSE:
+        if (block_type == BLOCK_TYPE_IF && block_nested_depth == 1)
+          else_addr = (uint8*)(p - 1);
+        break;
+
+      case WASM_OP_END:
+        if (block_nested_depth == 1) {
+          if (block_type == BLOCK_TYPE_IF)
+            *p_else_addr = else_addr;
+          *p_end_addr = (uint8*)(p - 1);
+
+          if ((block = bh_malloc(sizeof(block_addr)))) {
+            block->block_type = block_type;
+            if (block_type == BLOCK_TYPE_IF)
+              block->else_addr = else_addr;
+            block->end_addr = (uint8*)(p - 1);
+
+            if (!bh_hash_map_insert(branch_set, (void*)start_addr, block))
+              bh_free(block);
+          }
+
+          return true;
+        }
+        else
+          block_nested_depth--;
+        break;
+
+      case WASM_OP_BR:
+      case WASM_OP_BR_IF:
+        read_leb_uint32(p, p_end, u32); /* labelidx */
+        break;
+
+      case WASM_OP_BR_TABLE:
+        read_leb_uint32(p, p_end, count); /* lable num */
+        for (i = 0; i <= count; i++) /* lableidxs */
+          read_leb_uint32(p, p_end, u32);
+        break;
+
+      case WASM_OP_RETURN:
+        break;
+
+      case WASM_OP_CALL:
+        read_leb_uint32(p, p_end, u32); /* funcidx */
+        break;
+
+      case WASM_OP_CALL_INDIRECT:
+        read_leb_uint32(p, p_end, u32); /* typeidx */
+        read_leb_uint8(p, p_end, u8); /* 0x00 */
+        break;
+
+      case WASM_OP_DROP:
+      case WASM_OP_SELECT:
+        break;
+
+      case WASM_OP_GET_LOCAL:
+      case WASM_OP_SET_LOCAL:
+      case WASM_OP_TEE_LOCAL:
+      case WASM_OP_GET_GLOBAL:
+      case WASM_OP_SET_GLOBAL:
+        read_leb_uint32(p, p_end, u32); /* localidx */
+        break;
+
+      case WASM_OP_I32_LOAD:
+      case WASM_OP_I64_LOAD:
+      case WASM_OP_F32_LOAD:
+      case WASM_OP_F64_LOAD:
+      case WASM_OP_I32_LOAD8_S:
+      case WASM_OP_I32_LOAD8_U:
+      case WASM_OP_I32_LOAD16_S:
+      case WASM_OP_I32_LOAD16_U:
+      case WASM_OP_I64_LOAD8_S:
+      case WASM_OP_I64_LOAD8_U:
+      case WASM_OP_I64_LOAD16_S:
+      case WASM_OP_I64_LOAD16_U:
+      case WASM_OP_I64_LOAD32_S:
+      case WASM_OP_I64_LOAD32_U:
+      case WASM_OP_I32_STORE:
+      case WASM_OP_I64_STORE:
+      case WASM_OP_F32_STORE:
+      case WASM_OP_F64_STORE:
+      case WASM_OP_I32_STORE8:
+      case WASM_OP_I32_STORE16:
+      case WASM_OP_I64_STORE8:
+      case WASM_OP_I64_STORE16:
+      case WASM_OP_I64_STORE32:
+        read_leb_uint32(p, p_end, u32); /* align */
+        read_leb_uint32(p, p_end, u32); /* offset */
+        break;
+
+      case WASM_OP_MEMORY_SIZE:
+      case WASM_OP_MEMORY_GROW:
+        read_leb_uint32(p, p_end, u32); /* 0x00 */
+        break;
+
+      case WASM_OP_I32_CONST:
+        read_leb_uint32(p, p_end, u32);
+        break;
+      case WASM_OP_I64_CONST:
+        read_leb_uint64(p, p_end, u64);
+        break;
+      case WASM_OP_F32_CONST:
+        p += sizeof(float32);
+        break;
+      case WASM_OP_F64_CONST:
+        p += sizeof(float64);
+        break;
+
+      case WASM_OP_I32_EQZ:
+      case WASM_OP_I32_EQ:
+      case WASM_OP_I32_NE:
+      case WASM_OP_I32_LT_S:
+      case WASM_OP_I32_LT_U:
+      case WASM_OP_I32_GT_S:
+      case WASM_OP_I32_GT_U:
+      case WASM_OP_I32_LE_S:
+      case WASM_OP_I32_LE_U:
+      case WASM_OP_I32_GE_S:
+      case WASM_OP_I32_GE_U:
+      case WASM_OP_I64_EQZ:
+      case WASM_OP_I64_EQ:
+      case WASM_OP_I64_NE:
+      case WASM_OP_I64_LT_S:
+      case WASM_OP_I64_LT_U:
+      case WASM_OP_I64_GT_S:
+      case WASM_OP_I64_GT_U:
+      case WASM_OP_I64_LE_S:
+      case WASM_OP_I64_LE_U:
+      case WASM_OP_I64_GE_S:
+      case WASM_OP_I64_GE_U:
+      case WASM_OP_F32_EQ:
+      case WASM_OP_F32_NE:
+      case WASM_OP_F32_LT:
+      case WASM_OP_F32_GT:
+      case WASM_OP_F32_LE:
+      case WASM_OP_F32_GE:
+      case WASM_OP_F64_EQ:
+      case WASM_OP_F64_NE:
+      case WASM_OP_F64_LT:
+      case WASM_OP_F64_GT:
+      case WASM_OP_F64_LE:
+      case WASM_OP_F64_GE:
+      case WASM_OP_I32_CLZ:
+      case WASM_OP_I32_CTZ:
+      case WASM_OP_I32_POPCNT:
+      case WASM_OP_I32_ADD:
+      case WASM_OP_I32_SUB:
+      case WASM_OP_I32_MUL:
+      case WASM_OP_I32_DIV_S:
+      case WASM_OP_I32_DIV_U:
+      case WASM_OP_I32_REM_S:
+      case WASM_OP_I32_REM_U:
+      case WASM_OP_I32_AND:
+      case WASM_OP_I32_OR:
+      case WASM_OP_I32_XOR:
+      case WASM_OP_I32_SHL:
+      case WASM_OP_I32_SHR_S:
+      case WASM_OP_I32_SHR_U:
+      case WASM_OP_I32_ROTL:
+      case WASM_OP_I32_ROTR:
+      case WASM_OP_I64_CLZ:
+      case WASM_OP_I64_CTZ:
+      case WASM_OP_I64_POPCNT:
+      case WASM_OP_I64_ADD:
+      case WASM_OP_I64_SUB:
+      case WASM_OP_I64_MUL:
+      case WASM_OP_I64_DIV_S:
+      case WASM_OP_I64_DIV_U:
+      case WASM_OP_I64_REM_S:
+      case WASM_OP_I64_REM_U:
+      case WASM_OP_I64_AND:
+      case WASM_OP_I64_OR:
+      case WASM_OP_I64_XOR:
+      case WASM_OP_I64_SHL:
+      case WASM_OP_I64_SHR_S:
+      case WASM_OP_I64_SHR_U:
+      case WASM_OP_I64_ROTL:
+      case WASM_OP_I64_ROTR:
+      case WASM_OP_F32_ABS:
+      case WASM_OP_F32_NEG:
+      case WASM_OP_F32_CEIL:
+      case WASM_OP_F32_FLOOR:
+      case WASM_OP_F32_TRUNC:
+      case WASM_OP_F32_NEAREST:
+      case WASM_OP_F32_SQRT:
+      case WASM_OP_F32_ADD:
+      case WASM_OP_F32_SUB:
+      case WASM_OP_F32_MUL:
+      case WASM_OP_F32_DIV:
+      case WASM_OP_F32_MIN:
+      case WASM_OP_F32_MAX:
+      case WASM_OP_F32_COPYSIGN:
+      case WASM_OP_F64_ABS:
+      case WASM_OP_F64_NEG:
+      case WASM_OP_F64_CEIL:
+      case WASM_OP_F64_FLOOR:
+      case WASM_OP_F64_TRUNC:
+      case WASM_OP_F64_NEAREST:
+      case WASM_OP_F64_SQRT:
+      case WASM_OP_F64_ADD:
+      case WASM_OP_F64_SUB:
+      case WASM_OP_F64_MUL:
+      case WASM_OP_F64_DIV:
+      case WASM_OP_F64_MIN:
+      case WASM_OP_F64_MAX:
+      case WASM_OP_F64_COPYSIGN:
+      case WASM_OP_I32_WRAP_I64:
+      case WASM_OP_I32_TRUNC_S_F32:
+      case WASM_OP_I32_TRUNC_U_F32:
+      case WASM_OP_I32_TRUNC_S_F64:
+      case WASM_OP_I32_TRUNC_U_F64:
+      case WASM_OP_I64_EXTEND_S_I32:
+      case WASM_OP_I64_EXTEND_U_I32:
+      case WASM_OP_I64_TRUNC_S_F32:
+      case WASM_OP_I64_TRUNC_U_F32:
+      case WASM_OP_I64_TRUNC_S_F64:
+      case WASM_OP_I64_TRUNC_U_F64:
+      case WASM_OP_F32_CONVERT_S_I32:
+      case WASM_OP_F32_CONVERT_U_I32:
+      case WASM_OP_F32_CONVERT_S_I64:
+      case WASM_OP_F32_CONVERT_U_I64:
+      case WASM_OP_F32_DEMOTE_F64:
+      case WASM_OP_F64_CONVERT_S_I32:
+      case WASM_OP_F64_CONVERT_U_I32:
+      case WASM_OP_F64_CONVERT_S_I64:
+      case WASM_OP_F64_CONVERT_U_I64:
+      case WASM_OP_F64_PROMOTE_F32:
+      case WASM_OP_I32_REINTERPRET_F32:
+      case WASM_OP_I64_REINTERPRET_F64:
+      case WASM_OP_F32_REINTERPRET_I32:
+      case WASM_OP_F64_REINTERPRET_I64:
+        break;
+
+      default:
+        printf("WASM loader find block addr failed: invalid opcode %02x.\n",
+               opcode);
+        break;
+    }
+  }
+
+  (void)u32;
+  (void)u64;
+  (void)u8;
   return false;
 }

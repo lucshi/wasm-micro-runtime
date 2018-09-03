@@ -57,11 +57,13 @@ wasm_native_func_lookup(const char *module_name, const char *func_name);
  *
  * @param module_name the module name of the import global
  * @param global_name the global name of the import global
+ * @param global return the global data
  *
- * @param return pointer point to the import global if success, NULL otherwise
+ * @param return true if success, false otherwise
  */
-void*
-wasm_native_global_lookup(const char *module_name, const char *global_name);
+bool
+wasm_native_global_lookup(const char *module_name, const char *global_name,
+                          WASMGlobalImport *global);
 
 #ifdef __cplusplus
 }

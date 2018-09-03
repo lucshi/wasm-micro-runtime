@@ -25,7 +25,6 @@
 
 #include "wasm.h"
 #include "bh_memory.h"
-#include "bh_vector.h"
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
   if (buf + length > buf_end) {                                 \

@@ -43,10 +43,6 @@ typedef float64 CellType_F64;
 #define REF_F64_1 5
 #define REF_F64_2 6
 
-#define BLOCK_TYPE_BLOCK 0
-#define BLOCK_TYPE_LOOP 1
-#define BLOCK_TYPE_IF 2
-
 #define BR_TABLE_TMP_BUF_LEN 32
 
 /**
@@ -119,11 +115,10 @@ get_global(const WASMModuleInstance *module, uint32 global_idx)
   return module->globals + global_idx;
 }
 
-static inline uint32
-get_global_addr(const WASMMemoryInstance *memory,
-                const WASMGlobalInstance *global)
+static inline uint8*
+get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 {
-    return global->data_offset + NumBytesPerPage * memory->cur_page_count;
+  return memory->global_data + global->data_offset;
 }
 
 #define PUSH_I32(value) do {                    \
@@ -467,7 +462,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         frame_ip = frame_csp->start_addr;
         break;
 
-      case WASM_OP_BRIF:
+      case WASM_OP_BR_IF:
         /* TODO: test */
         read_leb_uint32(frame_ip, frame_ip_end, depth);
         cond = POP_I32();
@@ -477,7 +472,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         }
         break;
 
-      case WASM_OP_BRTABLE:
+      case WASM_OP_BR_TABLE:
         /* TODO:test */
         read_leb_uint32(frame_ip, frame_ip_end, count);
         if (count <= BR_TABLE_TMP_BUF_LEN)
@@ -547,9 +542,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         {
           uint32 local_idx;
           uint8 local_type;
+
           read_leb_uint32(frame_ip, frame_ip_end, local_idx);
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
+
           local_type = cur_func->u.func->local_types[local_idx];
           switch (local_type) {
             case VALUE_TYPE_I32:
@@ -574,9 +571,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         {
           uint32 local_idx;
           uint8 local_type;
+
           read_leb_uint32(frame_ip, frame_ip_end, local_idx);
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
+
           local_type = cur_func->u.func->local_types[local_idx];
           switch (local_type) {
             case VALUE_TYPE_I32:
@@ -601,9 +600,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         {
           uint32 local_idx;
           uint8 local_type;
+
           read_leb_uint32(frame_ip, frame_ip_end, local_idx);
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
+
           local_type = cur_func->u.func->local_types[local_idx];
           switch (local_type) {
             case VALUE_TYPE_I32:
@@ -628,10 +629,12 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         {
           WASMGlobalInstance *global;
           uint32 global_idx;
+
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
           if (!(global = get_global(module, global_idx))
               || global_idx >= module->global_count)
             goto got_exception;
+
           switch (global->type) {
             case VALUE_TYPE_I32:
               PUSH_I32(*(uint32*)get_global_addr(memory, global));
@@ -654,11 +657,14 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       case WASM_OP_SET_GLOBAL:
         {
           WASMGlobalInstance *global;
-          uint32 global_idx, global_addr;
+          uint32 global_idx;
+          uint8 *global_addr;
+
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
           if (!(global = get_global(module, global_idx))
               || global_idx >= module->global_count)
             goto got_exception;
+
           global_addr = get_global_addr(memory, global);
           switch (global->type) {
             case VALUE_TYPE_I32:
@@ -687,7 +693,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           read_leb_uint32(frame_ip, frame_ip_end, offset);
           addr = POP_I32();
           /* TODO: check addr, flags */
-          PUSH_I32(*(uint32*)(memory->base_addr + addr + offset));
+          PUSH_I32(*(uint32*)(memory->memory_data + addr + offset));
           (void)flags;
           break;
         }
@@ -786,6 +792,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
     }
     return;
   }
+  (void)tidx;
   (void)table;
 }
 

@@ -40,13 +40,21 @@ typedef struct WASMMemoryInstance {
   uint32 cur_page_count;
   /* Maximum page count */
   uint32 max_page_count;
+  /* Data of import globals with address info, like _stdin/_stdout/_stderr,
+     stdin/stdout/stderr is stored here, but the actual addr info, or offset
+     to memory_data is stored in global_data section */
+  uint8 *addr_data;
+  /* Memory data */
+  uint8 *memory_data;
+  /* Global data of global instances */
+  uint8 *global_data;
   /* Base address, the layout is:
-     memory data + global data
-     memory data size is NumBytesPerPage * cur_page_count
-     global data size is calculated in module instantiating
-     Note: when memory is re-allocated, the global data must
-           be copied again.
-   */
+     addr_data + memory data + global data
+     memory data init size is: NumBytesPerPage * cur_page_count
+     addr data size and global data size is calculated in module instantiating
+     Note: when memory is re-allocated, the addr data and memory data must
+     be copied to new memory also.
+  */
   uint8 base_addr[1];
 } WASMMemoryInstance;
 
@@ -66,6 +74,7 @@ typedef struct WASMGlobalInstance {
   uint8 type;
   /* mutable or constant */
   bool is_mutable;
+  bool is_addr;
   /* data offset to base_addr of WASMMemoryInstance */
   uint32 data_offset;
   /* initial value */
@@ -110,10 +119,6 @@ typedef struct WASMModuleInstance {
 
   WASMFunctionInstance *start_function;
   HashMap *branch_set;
-
-  /* global data of globals, point to
-     default_memory->base_addr + memory size */
-  uint8 *global_data;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;

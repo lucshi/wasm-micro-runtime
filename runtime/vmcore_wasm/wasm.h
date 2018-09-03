@@ -28,7 +28,6 @@
 
 #include "bh_platform.h"
 #include "bh_hashmap.h"
-#include "bh_vector.h"
 #include "wasm-import.h"
 #include "bh_assert.h"
 
@@ -92,6 +91,10 @@ extern "C" {
 #define EXPORT_KIND_MEMORY 2
 #define EXPORT_KIND_GLOBAL 3
 
+#define BLOCK_TYPE_BLOCK 0
+#define BLOCK_TYPE_LOOP 1
+#define BLOCK_TYPE_IF 2
+
 typedef union WASMValue {
   int32 i32;
   uint32 u32;
@@ -99,6 +102,7 @@ typedef union WASMValue {
   uint64 u64;
   float32 f32;
   float64 f64;
+  uintptr_t addr;
 } WASMValue;
 
 typedef struct InitializerExpression {
@@ -146,6 +150,7 @@ typedef struct WASMFunctionImport {
 typedef struct WASMGlobalImport {
   uint8 type;
   bool is_mutable;
+  bool is_addr;
   /* global data after linked */
   WASMValue global_data_linked;
 } WASMGlobalImport;
@@ -165,7 +170,6 @@ typedef struct WASMImport {
 typedef struct WASMFunction {
   /* the type of function */
   WASMType *func_type;
-  Vector branches;
   uint32 local_count;
   uint8 *local_types;
   uint32 code_size;
@@ -175,6 +179,7 @@ typedef struct WASMFunction {
 typedef struct WASMGlobal {
   uint8 type;
   bool is_mutable;
+  bool is_addr;
   InitializerExpression init_expr;
 } WASMGlobal;
 
