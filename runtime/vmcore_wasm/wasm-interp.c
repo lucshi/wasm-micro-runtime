@@ -274,10 +274,6 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   res = (uint8)_res64;                          \
 } while (0)
 
-#define UNSUPPORTED_OPCODE() do {               \
-    bh_assert (0);                              \
-  } while (0)
-
 #define RECOVER_CONTEXT(new_frame) do {                              \
     frame = (new_frame);                                             \
     cur_func = frame->function;                                      \
@@ -394,8 +390,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
     switch (opcode) {
       /* control instructions */
       case WASM_OP_UNREACHABLE:
-        printf("wasm interp failed, opcode is unreachable.\n");
-        UNSUPPORTED_OPCODE();
+        printf("wasm interp failed: opcode is unreachable.\n");
+        goto got_exception;
 
       case WASM_OP_NOP:
         break;
@@ -685,10 +681,24 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           break;
         }
 
-      /* memory instructions */
+      /* memory load instructions */
       case WASM_OP_I32_LOAD:
+      case WASM_OP_I64_LOAD:
+      case WASM_OP_F32_LOAD:
+      case WASM_OP_F64_LOAD:
+      case WASM_OP_I32_LOAD8_S:
+      case WASM_OP_I32_LOAD8_U:
+      case WASM_OP_I32_LOAD16_S:
+      case WASM_OP_I32_LOAD16_U:
+      case WASM_OP_I64_LOAD8_S:
+      case WASM_OP_I64_LOAD8_U:
+      case WASM_OP_I64_LOAD16_S:
+      case WASM_OP_I64_LOAD16_U:
+      case WASM_OP_I64_LOAD32_S:
+      case WASM_OP_I64_LOAD32_U:
         {
           uint32 offset, flags, addr;
+
           read_leb_uint32(frame_ip, frame_ip_end, flags);
           read_leb_uint32(frame_ip, frame_ip_end, offset);
           addr = POP_I32();
@@ -698,11 +708,25 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           break;
         }
 
-      case WASM_OP_I64_LOAD:
+      /* memory store instructions */
+      case WASM_OP_I32_STORE:
+      case WASM_OP_I64_STORE:
+      case WASM_OP_F32_STORE:
+      case WASM_OP_F64_STORE:
+      case WASM_OP_I32_STORE8:
+      case WASM_OP_I32_STORE16:
+      case WASM_OP_I64_STORE8:
+      case WASM_OP_I64_STORE16:
+      case WASM_OP_I64_STORE32:
         /* TODO */
-        UNSUPPORTED_OPCODE();
         break;
 
+      case WASM_OP_MEMORY_SIZE:
+      case WASM_OP_MEMORY_GROW:
+        /* TODO */
+        break;
+
+      /* constant instructions */
       case WASM_OP_I32_CONST:
         {
           uint32 value;
@@ -710,6 +734,193 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           PUSH_I32(value);
           break;
         }
+
+      case WASM_OP_I64_CONST:
+        /* TODO */
+        break;
+
+      case WASM_OP_F32_CONST:
+        /* TODO */
+        break;
+
+      case WASM_OP_F64_CONST:
+        /* TODO */
+        break;
+
+      /* comparison instructions of i32 */
+      case WASM_OP_I32_EQZ:
+      case WASM_OP_I32_EQ:
+      case WASM_OP_I32_NE:
+      case WASM_OP_I32_LT_S:
+      case WASM_OP_I32_LT_U:
+      case WASM_OP_I32_GT_S:
+      case WASM_OP_I32_GT_U:
+      case WASM_OP_I32_LE_S:
+      case WASM_OP_I32_LE_U:
+      case WASM_OP_I32_GE_S:
+      case WASM_OP_I32_GE_U:
+        /* TODO */
+        break;
+
+      /* comparison instructions of i64 */
+      case WASM_OP_I64_EQZ:
+      case WASM_OP_I64_EQ:
+      case WASM_OP_I64_NE:
+      case WASM_OP_I64_LT_S:
+      case WASM_OP_I64_LT_U:
+      case WASM_OP_I64_GT_S:
+      case WASM_OP_I64_GT_U:
+      case WASM_OP_I64_LE_S:
+      case WASM_OP_I64_LE_U:
+      case WASM_OP_I64_GE_S:
+      case WASM_OP_I64_GE_U:
+        /* TODO */
+        break;
+
+      /* comparison instructions of f32 */
+      case WASM_OP_F32_EQ:
+      case WASM_OP_F32_NE:
+      case WASM_OP_F32_LT:
+      case WASM_OP_F32_GT:
+      case WASM_OP_F32_LE:
+      case WASM_OP_F32_GE:
+        /* TODO */
+        break;
+
+      /* comparison instructions of f64 */
+      case WASM_OP_F64_EQ:
+      case WASM_OP_F64_NE:
+      case WASM_OP_F64_LT:
+      case WASM_OP_F64_GT:
+      case WASM_OP_F64_LE:
+      case WASM_OP_F64_GE:
+        /* TODO */
+        break;
+
+      /* numberic instructions of i32 */
+      case WASM_OP_I32_CLZ:
+      case WASM_OP_I32_CTZ:
+      case WASM_OP_I32_POPCNT:
+      case WASM_OP_I32_ADD:
+      case WASM_OP_I32_SUB:
+      case WASM_OP_I32_MUL:
+      case WASM_OP_I32_DIV_S:
+      case WASM_OP_I32_DIV_U:
+      case WASM_OP_I32_REM_S:
+      case WASM_OP_I32_REM_U:
+      case WASM_OP_I32_AND:
+      case WASM_OP_I32_OR:
+      case WASM_OP_I32_XOR:
+      case WASM_OP_I32_SHL:
+      case WASM_OP_I32_SHR_S:
+      case WASM_OP_I32_SHR_U:
+      case WASM_OP_I32_ROTL:
+      case WASM_OP_I32_ROTR:
+        /* TODO */
+        break;
+
+      /* numberic instructions of i64 */
+      case WASM_OP_I64_CLZ:
+      case WASM_OP_I64_CTZ:
+      case WASM_OP_I64_POPCNT:
+      case WASM_OP_I64_ADD:
+      case WASM_OP_I64_SUB:
+      case WASM_OP_I64_MUL:
+      case WASM_OP_I64_DIV_S:
+      case WASM_OP_I64_DIV_U:
+      case WASM_OP_I64_REM_S:
+      case WASM_OP_I64_REM_U:
+      case WASM_OP_I64_AND:
+      case WASM_OP_I64_OR:
+      case WASM_OP_I64_XOR:
+      case WASM_OP_I64_SHL:
+      case WASM_OP_I64_SHR_S:
+      case WASM_OP_I64_SHR_U:
+      case WASM_OP_I64_ROTL:
+      case WASM_OP_I64_ROTR:
+        /* TODO */
+        break;
+
+      /* numberic instructions of f32 */
+      case WASM_OP_F32_ABS:
+      case WASM_OP_F32_NEG:
+      case WASM_OP_F32_CEIL:
+      case WASM_OP_F32_FLOOR:
+      case WASM_OP_F32_TRUNC:
+      case WASM_OP_F32_NEAREST:
+      case WASM_OP_F32_SQRT:
+      case WASM_OP_F32_ADD:
+      case WASM_OP_F32_SUB:
+      case WASM_OP_F32_MUL:
+      case WASM_OP_F32_DIV:
+      case WASM_OP_F32_MIN:
+      case WASM_OP_F32_MAX:
+      case WASM_OP_F32_COPYSIGN:
+        /* TODO */
+        break;
+
+      /* numberic instructions of f64 */
+      case WASM_OP_F64_ABS:
+      case WASM_OP_F64_NEG:
+      case WASM_OP_F64_CEIL:
+      case WASM_OP_F64_FLOOR:
+      case WASM_OP_F64_TRUNC:
+      case WASM_OP_F64_NEAREST:
+      case WASM_OP_F64_SQRT:
+      case WASM_OP_F64_ADD:
+      case WASM_OP_F64_SUB:
+      case WASM_OP_F64_MUL:
+      case WASM_OP_F64_DIV:
+      case WASM_OP_F64_MIN:
+      case WASM_OP_F64_MAX:
+      case WASM_OP_F64_COPYSIGN:
+        /* TODO */
+        break;
+
+      /* conversions of i32 */
+      case WASM_OP_I32_WRAP_I64:
+      case WASM_OP_I32_TRUNC_S_F32:
+      case WASM_OP_I32_TRUNC_U_F32:
+      case WASM_OP_I32_TRUNC_S_F64:
+      case WASM_OP_I32_TRUNC_U_F64:
+        /* TODO */
+        break;
+
+      /* conversions of i64 */
+      case WASM_OP_I64_EXTEND_S_I32:
+      case WASM_OP_I64_EXTEND_U_I32:
+      case WASM_OP_I64_TRUNC_S_F32:
+      case WASM_OP_I64_TRUNC_U_F32:
+      case WASM_OP_I64_TRUNC_S_F64:
+      case WASM_OP_I64_TRUNC_U_F64:
+        /* TODO */
+        break;
+
+      /* conversions of f32 */
+      case WASM_OP_F32_CONVERT_S_I32:
+      case WASM_OP_F32_CONVERT_U_I32:
+      case WASM_OP_F32_CONVERT_S_I64:
+      case WASM_OP_F32_CONVERT_U_I64:
+      case WASM_OP_F32_DEMOTE_F64:
+        /* TODO */
+        break;
+
+      /* conversions of f64 */
+      case WASM_OP_F64_CONVERT_S_I32:
+      case WASM_OP_F64_CONVERT_U_I32:
+      case WASM_OP_F64_CONVERT_S_I64:
+      case WASM_OP_F64_CONVERT_U_I64:
+      case WASM_OP_F64_PROMOTE_F32:
+        /* TODO */
+        break;
+
+      /* reinterpretations */
+      case WASM_OP_I32_REINTERPRET_F32:
+      case WASM_OP_I64_REINTERPRET_F64:
+      case WASM_OP_F32_REINTERPRET_I32:
+      case WASM_OP_F64_REINTERPRET_I64:
+        /* TODO */
+        break;
 
       case WASM_OP_IMPDEP2:
         frame = prev_frame;
@@ -719,7 +930,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         goto call_func_from_entry;
 
       default:
-        UNSUPPORTED_OPCODE();
+        printf("wasm interp failed: unsupported opcode 0x%02x.\n",
+               opcode);
+        goto got_exception;
     }
 
     continue;
