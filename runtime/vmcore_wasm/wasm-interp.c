@@ -290,6 +290,26 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     self->block_cell_num);                                           \
   } while (0)
 
+#define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,  \
+                     min_cond, max_cond) do {                       \
+    src_type value = POP_##src_op_type();                           \
+    if (isnan(value)) {                                             \
+      printf("WASM intepreter failed: invalid conversion of NaN.\n");\
+      goto got_exception;                                           \
+    }                                                               \
+    else if (value min_cond || value max_cond) {                    \
+      printf("WASM intepreter failed: integer overflow.\n");        \
+      goto got_exception;                                           \
+    }                                                               \
+    PUSH_##dst_op_type(((dst_type)value));                          \
+  } while (0)
+
+#define DEF_OP_CONVERT(dst_type, dst_op_type,                       \
+                       src_type, src_op_type) do {                  \
+    dst_type value = (dst_type)(src_type)POP_##src_op_type();       \
+    PUSH_##dst_op_type(value);                                      \
+  } while (0)
+
 static inline void
 word_copy(uint32 *dest, uint32 *src, unsigned num)
 {
@@ -879,47 +899,112 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* conversions of i32 */
       case WASM_OP_I32_WRAP_I64:
+        {
+          int32 value = (int32)(POP_I64() & 0xFFFFFFFFLL);
+          PUSH_I32(value);
+          break;
+        }
+
       case WASM_OP_I32_TRUNC_S_F32:
+        DEF_OP_TRUNC(int32, I32, float32, F32, < INT32_MIN, > INT32_MAX);
+        break;
+
       case WASM_OP_I32_TRUNC_U_F32:
+        DEF_OP_TRUNC(uint32, I32, float32, F32, <= -1, > UINT32_MAX);
+        break;
+
       case WASM_OP_I32_TRUNC_S_F64:
+        DEF_OP_TRUNC(int32, I32, float64, F64, < INT32_MIN, > INT32_MAX);
+        break;
+
       case WASM_OP_I32_TRUNC_U_F64:
-        /* TODO */
+        DEF_OP_TRUNC(uint32, I32, float64, F64, <= -1 , > UINT32_MAX);
         break;
 
       /* conversions of i64 */
       case WASM_OP_I64_EXTEND_S_I32:
+        DEF_OP_CONVERT(int64, I64, int32, I32);
+        break;
+
       case WASM_OP_I64_EXTEND_U_I32:
+        DEF_OP_CONVERT(int64, I64, uint32, I32);
+        break;
+
       case WASM_OP_I64_TRUNC_S_F32:
+        DEF_OP_TRUNC(int64, I64, float32, F32, < INT64_MIN, > INT64_MAX);
+        break;
+
       case WASM_OP_I64_TRUNC_U_F32:
+        DEF_OP_TRUNC(uint64, I64, float32, F32, <= -1, > UINT64_MAX);
+        break;
+
       case WASM_OP_I64_TRUNC_S_F64:
+        DEF_OP_TRUNC(int64, I64, float64, F64, < INT64_MIN, > INT64_MAX);
+        break;
+
       case WASM_OP_I64_TRUNC_U_F64:
-        /* TODO */
+        DEF_OP_TRUNC(uint64, I64, float64, F64, <= -1, > UINT64_MAX);
         break;
 
       /* conversions of f32 */
       case WASM_OP_F32_CONVERT_S_I32:
+        DEF_OP_CONVERT(float32, F32, int32, I32);
+        break;
+
       case WASM_OP_F32_CONVERT_U_I32:
+        DEF_OP_CONVERT(float32, F32, uint32, I32);
+        break;
+
       case WASM_OP_F32_CONVERT_S_I64:
+        DEF_OP_CONVERT(float32, F32, int64, I64);
+        break;
+
       case WASM_OP_F32_CONVERT_U_I64:
+        DEF_OP_CONVERT(float32, F32, uint64, I64);
+        break;
+
       case WASM_OP_F32_DEMOTE_F64:
-        /* TODO */
+        DEF_OP_CONVERT(float32, F32, float64, F64);
         break;
 
       /* conversions of f64 */
       case WASM_OP_F64_CONVERT_S_I32:
+        DEF_OP_CONVERT(float64, F64, int32, I32);
+        break;
+
       case WASM_OP_F64_CONVERT_U_I32:
+        DEF_OP_CONVERT(float64, F64, uint32, I32);
+        break;
+
       case WASM_OP_F64_CONVERT_S_I64:
+        DEF_OP_CONVERT(float64, F64, int64, I64);
+        break;
+
       case WASM_OP_F64_CONVERT_U_I64:
+        DEF_OP_CONVERT(float64, F64, uint64, I64);
+        break;
+
       case WASM_OP_F64_PROMOTE_F32:
-        /* TODO */
+        DEF_OP_CONVERT(float64, F64, float32, F32);
         break;
 
       /* reinterpretations */
       case WASM_OP_I32_REINTERPRET_F32:
+        *FRAME_REF(frame_sp-1) = REF_I32;
+        break;
+
       case WASM_OP_I64_REINTERPRET_F64:
+        *FRAME_REF(frame_sp-2) = REF_I64_1;
+        *FRAME_REF(frame_sp-1) = REF_I64_2;
+        break;
+
       case WASM_OP_F32_REINTERPRET_I32:
+        *FRAME_REF(frame_sp-1) = REF_F32;
+        break;
+
       case WASM_OP_F64_REINTERPRET_I64:
-        /* TODO */
+        *FRAME_REF(frame_sp-2) = REF_F64_1;
+        *FRAME_REF(frame_sp-1) = REF_F64_2;
         break;
 
       case WASM_OP_IMPDEP2:

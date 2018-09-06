@@ -76,6 +76,7 @@ wasm_application_execute_main(int argc, char *argv[])
     return false;
 
   if (func->u.func->func_type->param_count) {
+    argc1 = 2;
     argv1[0] = argc;
     argv1[1] = (uint32)argv;
   }

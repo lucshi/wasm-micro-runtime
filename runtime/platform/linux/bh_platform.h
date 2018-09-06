@@ -25,6 +25,7 @@ typedef double float64;
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 /**
  * Return the offset of the given field in the given type.
