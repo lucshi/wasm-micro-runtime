@@ -105,6 +105,69 @@ GET_F64_FROM_ADDR (uint32 *addr)
 }
 #endif  /* WASM_CPU_SUPPORTS_UNALIGNED_64BIT_ACCESS != 0 */
 
+#define CHECK_MEMORY_OVERFLOW() do {                                         \
+    if (flags != 2)                                                          \
+      printf("unaligned load in wasm interp.\n");                            \
+    if (offset + addr < addr)                                                \
+      goto got_exception;                                                    \
+    maddr = memory->memory_data + offset + addr;                             \
+    if (maddr < memory->addr_data)                                           \
+      goto got_exception;                                                    \
+    if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data)  \
+      goto got_exception;                                                    \
+  } while (0)
+
+static inline uint32
+rotl32(uint32 n, unsigned int c)
+{
+  const unsigned int mask = (31);
+  c = c % 32;
+  c &= mask;
+  return (n<<c) | (n>>( (-c)&mask ));
+}
+
+static inline uint32
+rotr32(uint32 n, unsigned int c)
+{
+  const unsigned int mask = (31);
+  c = c % 32;
+  c &= mask;
+  return (n>>c) | (n<<( (-c)&mask ));
+}
+
+static inline uint64
+rotl64(uint64 n, unsigned int c)
+{
+  const unsigned int mask = (63);
+  c = c % 64;
+  c &= mask;
+  return (n<<c) | (n>>( (-c)&mask ));
+}
+
+static inline uint64
+rotr64(uint64 n, unsigned int c)
+{
+  const unsigned int mask = (63);
+  c = c % 64;
+  c &= mask;
+  return (n>>c) | (n<<( (-c)&mask ));
+}
+
+static inline double
+wa_fmax(double a, double b)
+{
+    double c = fmax(a, b);
+    if (c==0 && a==b) { return signbit(a) ? b : a; }
+    return c;
+}
+
+static inline double
+wa_fmin(double a, double b)
+{
+    double c = fmin(a, b);
+    if (c==0 && a==b) { return signbit(a) ? a : b; }
+    return c;
+}
 
 static inline WASMGlobalInstance*
 get_global(const WASMModuleInstance *module, uint32 global_idx)
@@ -290,25 +353,87 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     self->block_cell_num);                                           \
   } while (0)
 
-#define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,  \
-                     min_cond, max_cond) do {                       \
-    src_type value = POP_##src_op_type();                           \
-    if (isnan(value)) {                                             \
-      printf("WASM intepreter failed: invalid conversion of NaN.\n");\
-      goto got_exception;                                           \
-    }                                                               \
-    else if (value min_cond || value max_cond) {                    \
-      printf("WASM intepreter failed: integer overflow.\n");        \
-      goto got_exception;                                           \
-    }                                                               \
-    PUSH_##dst_op_type(((dst_type)value));                          \
+#define DEF_OP_LOAD(operation) do {                                  \
+    uint32 offset, flags, addr;                                      \
+    read_leb_uint32(frame_ip, frame_ip_end, flags);                  \
+    read_leb_uint32(frame_ip, frame_ip_end, offset);                 \
+    addr = POP_I32();                                                \
+    CHECK_MEMORY_OVERFLOW();                                         \
+    operation;                                                       \
+    (void)flags;                                                     \
   } while (0)
 
-#define DEF_OP_CONVERT(dst_type, dst_op_type,                       \
-                       src_type, src_op_type) do {                  \
-    dst_type value = (dst_type)(src_type)POP_##src_op_type();       \
-    PUSH_##dst_op_type(value);                                      \
+#define DEF_OP_STORE(sval_type, sval_op_type, operation) do {        \
+    uint32 offset, flags, addr;                                      \
+    sval_type sval;                                                  \
+    read_leb_uint32(frame_ip, frame_ip_end, flags);                  \
+    read_leb_uint32(frame_ip, frame_ip_end, offset);                 \
+    sval = POP_##sval_op_type();                                     \
+    addr = POP_I32();                                                \
+    CHECK_MEMORY_OVERFLOW();                                         \
+    operation;                                                       \
+    (void)flags;                                                     \
   } while (0)
+
+#define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,   \
+                     min_cond, max_cond) do {                        \
+    src_type value = POP_##src_op_type();                            \
+    if (isnan(value)) {                                              \
+      printf("WASM intepreter failed: invalid conversion of NaN.\n");\
+      goto got_exception;                                            \
+    }                                                                \
+    else if (value min_cond || value max_cond) {                     \
+      printf("WASM intepreter failed: integer overflow.\n");         \
+      goto got_exception;                                            \
+    }                                                                \
+    PUSH_##dst_op_type(((dst_type)value));                           \
+  } while (0)
+
+#define DEF_OP_CONVERT(dst_type, dst_op_type,                        \
+                       src_type, src_op_type) do {                   \
+    dst_type value = (dst_type)(src_type)POP_##src_op_type();        \
+    PUSH_##dst_op_type(value);                                       \
+  } while (0)
+
+static inline int32
+sign_ext_8_32(int8 val)
+{
+    if (val & 0x80)
+      return val | 0xffffff00;
+    return val;
+}
+
+static inline int32
+sign_ext_16_32(int16 val)
+{
+    if (val & 0x8000)
+      return val | 0xffff0000;
+    return val;
+}
+
+static inline int64
+sign_ext_8_64(int8 val)
+{
+    if (val & 0x80)
+      return val | 0xffffffffffffff00;
+    return val;
+}
+
+static inline int64
+sign_ext_16_64(int16 val)
+{
+    if (val & 0x8000)
+      return val | 0xffffffffffff0000;
+    return val;
+}
+
+static inline int64
+sign_ext_32_64(int32 val)
+{
+    if (val & 0x80000000)
+      return val | 0xffffffff00000000;
+    return val;
+}
 
 static inline void
 word_copy(uint32 *dest, uint32 *src, unsigned num)
@@ -404,6 +529,17 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   uint32 i, depth, cond, count, fidx, tidx, frame_size = 0, all_cell_num = 0;
   int32 didx, val;
   uint8 *else_addr, *end_addr;
+  uint8 *maddr;
+  uint32 ma, mb, mc; /* I32 math */
+  uint64 md, me, mf; /* I64 math */
+  float32 mg, mh, mi; /* F32 math */
+  float64 mj, mk, ml; /* F64 math */
+
+  /* Size of memory load.
+     This starts with the first memory load operator at opcode 0x28 */
+  uint32 LOAD_SIZE[] = {
+    4, 8, 4, 8, 1, 1, 2, 2, 1, 1, 2, 2, 4, 4, // loads
+    4, 8, 4, 8, 1, 2, 1, 2, 4 };               // stores
 
   while (frame_ip < frame_ip_end) {
     opcode = *frame_ip++;
@@ -703,44 +839,99 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* memory load instructions */
       case WASM_OP_I32_LOAD:
-      case WASM_OP_I64_LOAD:
-      case WASM_OP_F32_LOAD:
-      case WASM_OP_F64_LOAD:
-      case WASM_OP_I32_LOAD8_S:
-      case WASM_OP_I32_LOAD8_U:
-      case WASM_OP_I32_LOAD16_S:
-      case WASM_OP_I32_LOAD16_U:
-      case WASM_OP_I64_LOAD8_S:
-      case WASM_OP_I64_LOAD8_U:
-      case WASM_OP_I64_LOAD16_S:
-      case WASM_OP_I64_LOAD16_U:
-      case WASM_OP_I64_LOAD32_S:
-      case WASM_OP_I64_LOAD32_U:
-        {
-          uint32 offset, flags, addr;
+        DEF_OP_LOAD(PUSH_I32(*(int32*)maddr));
+        break;
 
-          read_leb_uint32(frame_ip, frame_ip_end, flags);
-          read_leb_uint32(frame_ip, frame_ip_end, offset);
-          addr = POP_I32();
-          /* TODO: check addr, flags */
-          PUSH_I32(*(uint32*)(memory->memory_data + addr + offset));
-          (void)flags;
-          break;
-        }
+      case WASM_OP_I64_LOAD:
+        DEF_OP_LOAD(PUSH_I64(GET_I64_FROM_ADDR((uint32*)maddr)));
+        break;
+
+      case WASM_OP_F32_LOAD:
+        DEF_OP_LOAD(PUSH_F32(*(float32*)maddr));
+        break;
+
+      case WASM_OP_F64_LOAD:
+        DEF_OP_LOAD(PUSH_F64(GET_F64_FROM_ADDR((uint32*)maddr)));
+        break;
+
+      case WASM_OP_I32_LOAD8_S:
+        DEF_OP_LOAD(PUSH_I32(sign_ext_8_32(*(int8*)maddr)));
+        break;
+
+      case WASM_OP_I32_LOAD8_U:
+        DEF_OP_LOAD(PUSH_I32((uint32)(*(uint8*)maddr)));
+        break;
+
+      case WASM_OP_I32_LOAD16_S:
+        DEF_OP_LOAD(PUSH_I32(sign_ext_16_32(*(int16*)maddr)));
+        break;
+
+      case WASM_OP_I32_LOAD16_U:
+        DEF_OP_LOAD(PUSH_I32((uint32)(*(uint16*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD8_S:
+        DEF_OP_LOAD(PUSH_I64(sign_ext_8_64(*(int8*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD8_U:
+        DEF_OP_LOAD(PUSH_I64((uint64)(*(uint8*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD16_S:
+        DEF_OP_LOAD(PUSH_I64(sign_ext_16_64(*(int16*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD16_U:
+        DEF_OP_LOAD(PUSH_I64((uint64)(*(uint16*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD32_S:
+        DEF_OP_LOAD(PUSH_I64(sign_ext_32_64(*(int32*)maddr)));
+        break;
+
+      case WASM_OP_I64_LOAD32_U:
+        DEF_OP_LOAD(PUSH_I64((uint64)(*(uint32*)maddr)));
+        break;
 
       /* memory store instructions */
       case WASM_OP_I32_STORE:
-      case WASM_OP_I64_STORE:
-      case WASM_OP_F32_STORE:
-      case WASM_OP_F64_STORE:
-      case WASM_OP_I32_STORE8:
-      case WASM_OP_I32_STORE16:
-      case WASM_OP_I64_STORE8:
-      case WASM_OP_I64_STORE16:
-      case WASM_OP_I64_STORE32:
-        /* TODO */
+        DEF_OP_STORE(uint32, I32, *(int32*)maddr = sval);
         break;
 
+      case WASM_OP_I64_STORE:
+        DEF_OP_STORE(uint64, I64, PUT_I64_TO_ADDR(maddr, sval));
+        break;
+
+      case WASM_OP_F32_STORE:
+        DEF_OP_STORE(float32, F32, *(float32*)maddr = sval);
+        break;
+
+      case WASM_OP_F64_STORE:
+        DEF_OP_STORE(float64, F64, PUT_F64_TO_ADDR(maddr, sval));
+        break;
+
+      case WASM_OP_I32_STORE8:
+        DEF_OP_STORE(uint32, I32, *(uint8*)maddr = (uint8)sval);
+        break;
+
+      case WASM_OP_I32_STORE16:
+        DEF_OP_STORE(uint32, I32, *(uint16*)maddr = (uint16)sval);
+        break;
+
+      case WASM_OP_I64_STORE8:
+        DEF_OP_STORE(uint64, I64, *(uint8*)maddr = (uint8)sval);
+        break;
+
+      case WASM_OP_I64_STORE16:
+        DEF_OP_STORE(uint64, I64, *(uint16*)maddr = (uint16)sval);
+        break;
+
+      case WASM_OP_I64_STORE32:
+        DEF_OP_STORE(uint64, I64, *(uint32*)maddr = (uint32)sval);
+        break;
+
+      /* memory size and memory grow instructions */
       case WASM_OP_MEMORY_SIZE:
       case WASM_OP_MEMORY_GROW:
         /* TODO */
@@ -748,21 +939,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* constant instructions */
       case WASM_OP_I32_CONST:
-        {
-          uint32 value;
-          read_leb_uint32(frame_ip, frame_ip_end, value);
-          PUSH_I32(value);
-          break;
-        }
-
       case WASM_OP_I64_CONST:
-        /* TODO */
-        break;
-
       case WASM_OP_F32_CONST:
-        /* TODO */
-        break;
-
       case WASM_OP_F64_CONST:
         /* TODO */
         break;

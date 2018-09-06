@@ -175,6 +175,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
       memory->memory_data = memory->base_addr + addr_data_size;
       memory->global_data =
         memory->memory_data + NumBytesPerPage * memory->cur_page_count;
+      memory->global_data_size = global_data_size;
     }
   }
 
@@ -196,6 +197,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
     memory->memory_data = memory->base_addr + addr_data_size;
     memory->global_data =
       memory->memory_data + NumBytesPerPage * memory->cur_page_count;
+    memory->global_data_size = global_data_size;
   }
 
   bh_assert(mem_index == memory_count);

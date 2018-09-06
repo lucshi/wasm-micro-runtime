@@ -48,6 +48,7 @@ typedef struct WASMMemoryInstance {
   uint8 *memory_data;
   /* Global data of global instances */
   uint8 *global_data;
+  uint32 global_data_size;
   /* Base address, the layout is:
      addr_data + memory data + global data
      memory data init size is: NumBytesPerPage * cur_page_count

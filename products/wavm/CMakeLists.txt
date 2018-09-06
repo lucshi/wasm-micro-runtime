@@ -5,5 +5,5 @@ include_directories (. ../../runtime/include
 
 add_executable (wavm main.c)
 
-target_link_libraries (wavm platformlib vmcorelib vmutilslib platformlib)
+target_link_libraries (wavm platformlib vmcorelib vmutilslib platformlib -lm)
 
