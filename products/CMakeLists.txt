@@ -1,1 +1,1 @@
-add_subdirectory (wavm)
+add_subdirectory (iwasm)

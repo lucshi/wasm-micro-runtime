@@ -3,7 +3,7 @@ include_directories (. ../../runtime/include
                      ../../runtime/platform/${PLATFORM}
                      ${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable (wavm main.c)
+add_executable (iwasm main.c)
 
-target_link_libraries (wavm platformlib vmcorelib vmutilslib platformlib -lm)
+target_link_libraries (iwasm platformlib vmcorelib vmutilslib platformlib -lm)
 

@@ -48,7 +48,7 @@ vmci_set_tl_root(void *tlr)
 static int
 print_help()
 {
-  printf("Usage: wavm [-options] wasm_file [args...]\n");
+  printf("Usage: iwasm [-options] wasm_file [args...]\n");
   printf("options:\n");
   printf("  -f|--function name     Specify function name to run "
          "in module rather than main\n");
