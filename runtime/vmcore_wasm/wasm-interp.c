@@ -375,6 +375,34 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     (void)flags;                                                     \
   } while (0)
 
+#define DEF_OP_I_CONST(ctype, src_op_type) do {                      \
+    ctype cval;                                                      \
+    read_leb_##ctype(frame_ip, frame_ip_end, cval);                  \
+    PUSH_##src_op_type(cval);                                        \
+  } while (0)
+
+#define DEF_OP_F_CONST(ctype, src_op_type) do {                      \
+    ctype cval;                                                      \
+    memcpy(&cval, &frame_ip, sizeof(ctype));                         \
+    frame_ip += sizeof(ctype);                                       \
+    PUSH_##src_op_type(cval);                                        \
+  } while (0)
+
+#define DEF_OP_EQZ(src_op_type) do {                                 \
+    bool val;                                                        \
+    val = POP_##src_op_type() == 0;                                  \
+    PUSH_I32(val);                                                   \
+  } while (0)
+
+#define DEF_OP_CMP(src_type, src_op_type, cond) do {                 \
+    uint32 res;                                                      \
+    src_type val1, val2;                                             \
+    val2 = POP_##src_op_type();                                      \
+    val1 = POP_##src_op_type();                                      \
+    res = val1 cond val2;                                            \
+    PUSH_I32(res);                                                   \
+  } while (0)
+
 #define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,   \
                      min_cond, max_cond) do {                        \
     src_type value = POP_##src_op_type();                            \
@@ -515,7 +543,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   WASMInterpFrame *frame = NULL;
   /* Points to this special opcode so as to jump to the
      call_method_from_entry.  */
-  register uint8  *frame_ip = &opcode_IMPDEP2; /* cache of frame->ip */
+  uint8  *frame_ip = &opcode_IMPDEP2; /* cache of frame->ip */
   register uint32 *frame_lp = NULL;  /* cache of frame->lp */
   register uint32 *frame_sp = NULL;  /* cache of frame->sp */
   register uint8  *frame_ref = NULL; /* cache of frame->ref */
@@ -933,66 +961,211 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* memory size and memory grow instructions */
       case WASM_OP_MEMORY_SIZE:
-      case WASM_OP_MEMORY_GROW:
-        /* TODO */
+      {
+        uint32 reserved;
+        read_leb_uint32(frame_ip, frame_ip_end, reserved);
+        PUSH_I32(memory->cur_page_count);
+        (void)reserved;
         break;
+      }
+
+      case WASM_OP_MEMORY_GROW:
+      {
+        uint32 reserved, prev_page_count, delta, total_size;
+        WASMMemoryInstance *new_memory;
+
+        read_leb_uint32(frame_ip, frame_ip_end, reserved);
+        prev_page_count = memory->cur_page_count;
+        delta = POP_I32();
+        PUSH_I32(prev_page_count);
+        if (delta == 0)
+          continue;
+        else if (delta + prev_page_count > memory->max_page_count ||
+                 delta + prev_page_count < prev_page_count)
+          goto got_exception;
+        memory->cur_page_count += delta;
+        total_size = (memory->memory_data - memory->base_addr) +
+                      NumBytesPerPage * memory->cur_page_count +
+                      memory->global_data_size;
+        if (!(new_memory = bh_malloc(total_size))) {
+          printf("wasm interp failed, alloc memory for grow memory failed.\n");
+          goto got_exception;
+        }
+        new_memory->cur_page_count = memory->cur_page_count;
+        new_memory->max_page_count = memory->max_page_count;
+        new_memory->addr_data = new_memory->base_addr;
+        new_memory->memory_data = new_memory->addr_data + (memory->memory_data -
+                                  memory->base_addr);
+        new_memory->global_data = new_memory->memory_data + NumBytesPerPage *
+                                  new_memory->cur_page_count;
+        new_memory->global_data_size = memory->global_data_size;
+        memcpy(new_memory->addr_data, memory->addr_data, memory->memory_data -
+               memory->base_addr + NumBytesPerPage * prev_page_count);
+        memcpy(new_memory->global_data, memory->global_data,
+               memory->global_data_size);
+        memset(new_memory->memory_data + NumBytesPerPage * prev_page_count,
+               0, NumBytesPerPage * delta);
+        bh_free(memory);
+        module->memories[0] = module->default_memory = memory = new_memory;
+        (void)reserved;
+        break;
+      }
 
       /* constant instructions */
       case WASM_OP_I32_CONST:
+        DEF_OP_I_CONST(uint32, I32);
+        break;
+
       case WASM_OP_I64_CONST:
+        DEF_OP_I_CONST(uint64, I64);
+        break;
+
       case WASM_OP_F32_CONST:
+        DEF_OP_F_CONST(float32, F32);
+        break;
+
       case WASM_OP_F64_CONST:
-        /* TODO */
+        DEF_OP_F_CONST(float64, F64);
         break;
 
       /* comparison instructions of i32 */
       case WASM_OP_I32_EQZ:
+        DEF_OP_EQZ(I32);
+        break;
+
       case WASM_OP_I32_EQ:
+        DEF_OP_CMP(uint32, I32, ==);
+        break;
+
       case WASM_OP_I32_NE:
+        DEF_OP_CMP(uint32, I32, !=);
+        break;
+
       case WASM_OP_I32_LT_S:
+        DEF_OP_CMP(int32, I32, <);
+        break;
+
       case WASM_OP_I32_LT_U:
+        DEF_OP_CMP(uint32, I32, <);
+        break;
+
       case WASM_OP_I32_GT_S:
+        DEF_OP_CMP(int32, I32, >);
+        break;
+
       case WASM_OP_I32_GT_U:
+        DEF_OP_CMP(uint32, I32, >);
+        break;
+
       case WASM_OP_I32_LE_S:
+        DEF_OP_CMP(int32, I32, <=);
+        break;
+
       case WASM_OP_I32_LE_U:
+        DEF_OP_CMP(uint32, I32, <=);
+        break;
+
       case WASM_OP_I32_GE_S:
+        DEF_OP_CMP(int32, I32, >=);
+        break;
+
       case WASM_OP_I32_GE_U:
-        /* TODO */
+        DEF_OP_CMP(uint32, I32, >=);
         break;
 
       /* comparison instructions of i64 */
       case WASM_OP_I64_EQZ:
+        DEF_OP_EQZ(I64);
+        break;
+
       case WASM_OP_I64_EQ:
+        DEF_OP_CMP(uint64, I64, ==);
+        break;
+
       case WASM_OP_I64_NE:
+        DEF_OP_CMP(uint64, I64, !=);
+        break;
+
       case WASM_OP_I64_LT_S:
+        DEF_OP_CMP(int64, I64, <);
+        break;
+
       case WASM_OP_I64_LT_U:
+        DEF_OP_CMP(uint64, I64, <);
+        break;
+
       case WASM_OP_I64_GT_S:
+        DEF_OP_CMP(int64, I64, >);
+        break;
+
       case WASM_OP_I64_GT_U:
+        DEF_OP_CMP(uint64, I64, >);
+        break;
+
       case WASM_OP_I64_LE_S:
+        DEF_OP_CMP(int64, I64, <=);
+        break;
+
       case WASM_OP_I64_LE_U:
+        DEF_OP_CMP(uint64, I64, <=);
+        break;
+
       case WASM_OP_I64_GE_S:
+        DEF_OP_CMP(int64, I64, >=);
+        break;
+
       case WASM_OP_I64_GE_U:
-        /* TODO */
+        DEF_OP_CMP(uint64, I64, >=);
         break;
 
       /* comparison instructions of f32 */
       case WASM_OP_F32_EQ:
+        DEF_OP_CMP(float32, F32, ==);
+        break;
+
       case WASM_OP_F32_NE:
+        DEF_OP_CMP(float32, F32, !=);
+        break;
+
       case WASM_OP_F32_LT:
+        DEF_OP_CMP(float32, F32, <);
+        break;
+
       case WASM_OP_F32_GT:
+        DEF_OP_CMP(float32, F32, >);
+        break;
+
       case WASM_OP_F32_LE:
+        DEF_OP_CMP(float32, F32, <=);
+        break;
+
       case WASM_OP_F32_GE:
-        /* TODO */
+        DEF_OP_CMP(float32, F32, >=);
         break;
 
       /* comparison instructions of f64 */
       case WASM_OP_F64_EQ:
+        DEF_OP_CMP(float64, F64, ==);
+        break;
+
       case WASM_OP_F64_NE:
+        DEF_OP_CMP(float64, F64, !=);
+        break;
+
       case WASM_OP_F64_LT:
+        DEF_OP_CMP(float64, F64, <);
+        break;
+
       case WASM_OP_F64_GT:
+        DEF_OP_CMP(float64, F64, >);
+        break;
+
       case WASM_OP_F64_LE:
+        DEF_OP_CMP(float64, F64, <=);
+        break;
+
       case WASM_OP_F64_GE:
-        /* TODO */
+        DEF_OP_CMP(float64, F64, >=);
         break;
 
       /* numberic instructions of i32 */
