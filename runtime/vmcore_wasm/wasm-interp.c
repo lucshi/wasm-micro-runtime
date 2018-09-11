@@ -493,6 +493,12 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     PUSH_##src_op_type(val3);                                             \
   } while (0)
 
+#define DEF_OP_MATH(src_type, src_op_type, method) do {              \
+    src_type val;                                                    \
+    val = POP_##src_op_type();                                       \
+    PUSH_##src_op_type(method(val));                                 \
+  } while (0)
+
 #define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,   \
                      min_cond, max_cond) do {                        \
     src_type value = POP_##src_op_type();                            \
@@ -648,10 +654,6 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   int32 didx, val;
   uint8 *else_addr, *end_addr;
   uint8 *maddr;
-  uint32 ma, mb, mc; /* I32 math */
-  uint64 md, me, mf; /* I64 math */
-  float32 mg, mh, mi; /* F32 math */
-  float64 mj, mk, ml; /* F64 math */
 
   /* Size of memory load.
      This starts with the first memory load operator at opcode 0x28 */
@@ -1421,7 +1423,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I64();
         a = POP_I64();
-        if (a == 0x8000000000000000LL && b == -1) {
+        if (a == (int64)0x8000000000000000LL && b == -1) {
           printf("wasm interp failed, integer overflow in divide operation.\n");
           goto got_exception;
         }
@@ -1453,7 +1455,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I64();
         a = POP_I64();
-        if (a == 0x8000000000000000LL && b == -1) {
+        if (a == (int64)0x8000000000000000LL && b == -1) {
           PUSH_I64(0);
         }
         if (b == 0) {
@@ -1524,39 +1526,165 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* numberic instructions of f32 */
       case WASM_OP_F32_ABS:
-      case WASM_OP_F32_NEG:
-      case WASM_OP_F32_CEIL:
-      case WASM_OP_F32_FLOOR:
-      case WASM_OP_F32_TRUNC:
-      case WASM_OP_F32_NEAREST:
-      case WASM_OP_F32_SQRT:
-      case WASM_OP_F32_ADD:
-      case WASM_OP_F32_SUB:
-      case WASM_OP_F32_MUL:
-      case WASM_OP_F32_DIV:
-      case WASM_OP_F32_MIN:
-      case WASM_OP_F32_MAX:
-      case WASM_OP_F32_COPYSIGN:
-        /* TODO */
+        DEF_OP_MATH(float32, F32, fabs);
         break;
+
+      case WASM_OP_F32_NEG:
+        DEF_OP_MATH(float32, F32, -);
+        break;
+
+      case WASM_OP_F32_CEIL:
+        DEF_OP_MATH(float32, F32, ceil);
+        break;
+
+      case WASM_OP_F32_FLOOR:
+        DEF_OP_MATH(float32, F32, floor);
+        break;
+
+      case WASM_OP_F32_TRUNC:
+        DEF_OP_MATH(float32, F32, trunc);
+        break;
+
+      case WASM_OP_F32_NEAREST:
+        DEF_OP_MATH(float32, F32, rint);
+        break;
+
+      case WASM_OP_F32_SQRT:
+        DEF_OP_MATH(float32, F32, sqrt);
+        break;
+
+      case WASM_OP_F32_ADD:
+        DEF_OP_NUMERIC(uint32, uint32, F32, +);
+        break;
+
+      case WASM_OP_F32_SUB:
+        DEF_OP_NUMERIC(uint32, uint32, F32, -);
+        break;
+
+      case WASM_OP_F32_MUL:
+        DEF_OP_NUMERIC(uint32, uint32, F32, *);
+        break;
+
+      case WASM_OP_F32_DIV:
+      {
+        float32 a, b;
+
+        b = POP_F32();
+        a = POP_F32();
+        PUSH_F32(a / b);
+        break;
+      }
+
+      case WASM_OP_F32_MIN:
+      {
+        float32 a, b;
+
+        b = POP_F32();
+        a = POP_F32();
+        PUSH_F32(wa_fmin(a, b));
+        break;
+      }
+
+      case WASM_OP_F32_MAX:
+      {
+        float32 a, b;
+
+        b = POP_F32();
+        a = POP_F32();
+        PUSH_F32(wa_fmax(a, b));
+        break;
+      }
+
+      case WASM_OP_F32_COPYSIGN:
+      {
+        float32 a, b;
+
+        b = POP_F32();
+        a = POP_F32();
+        PUSH_F32(signbit(b) ? -fabs(a) : fabs(a));
+        break;
+      }
 
       /* numberic instructions of f64 */
       case WASM_OP_F64_ABS:
-      case WASM_OP_F64_NEG:
-      case WASM_OP_F64_CEIL:
-      case WASM_OP_F64_FLOOR:
-      case WASM_OP_F64_TRUNC:
-      case WASM_OP_F64_NEAREST:
-      case WASM_OP_F64_SQRT:
-      case WASM_OP_F64_ADD:
-      case WASM_OP_F64_SUB:
-      case WASM_OP_F64_MUL:
-      case WASM_OP_F64_DIV:
-      case WASM_OP_F64_MIN:
-      case WASM_OP_F64_MAX:
-      case WASM_OP_F64_COPYSIGN:
-        /* TODO */
+        DEF_OP_MATH(float64, F64, fabs);
         break;
+
+      case WASM_OP_F64_NEG:
+        DEF_OP_MATH(float64, F64, -);
+        break;
+
+      case WASM_OP_F64_CEIL:
+        DEF_OP_MATH(float64, F64, ceil);
+        break;
+
+      case WASM_OP_F64_FLOOR:
+        DEF_OP_MATH(float64, F64, floor);
+        break;
+
+      case WASM_OP_F64_TRUNC:
+        DEF_OP_MATH(float64, F64, trunc);
+        break;
+
+      case WASM_OP_F64_NEAREST:
+        DEF_OP_MATH(float64, F64, rint);
+        break;
+
+      case WASM_OP_F64_SQRT:
+        DEF_OP_MATH(float64, F64, sqrt);
+        break;
+
+      case WASM_OP_F64_ADD:
+        DEF_OP_NUMERIC(uint64, uint64, F64, +);
+        break;
+
+      case WASM_OP_F64_SUB:
+        DEF_OP_NUMERIC(uint64, uint64, F64, -);
+        break;
+
+      case WASM_OP_F64_MUL:
+        DEF_OP_NUMERIC(uint64, uint64, F64, *);
+        break;
+
+      case WASM_OP_F64_DIV:
+      {
+        float64 a, b;
+
+        b = POP_F64();
+        a = POP_F64();
+        PUSH_F64(a / b);
+        break;
+      }
+
+      case WASM_OP_F64_MIN:
+      {
+        float64 a, b;
+
+        b = POP_F64();
+        a = POP_F64();
+        PUSH_F64(wa_fmin(a, b));
+        break;
+      }
+
+      case WASM_OP_F64_MAX:
+      {
+        float64 a, b;
+
+        b = POP_F64();
+        a = POP_F64();
+        PUSH_F64(wa_fmax(a, b));
+        break;
+      }
+
+      case WASM_OP_F64_COPYSIGN:
+      {
+        float64 a, b;
+
+        b = POP_F64();
+        a = POP_F64();
+        PUSH_F64(signbit(b) ? -fabs(a) : fabs(a));
+        break;
+      }
 
       /* conversions of i32 */
       case WASM_OP_I32_WRAP_I64:
