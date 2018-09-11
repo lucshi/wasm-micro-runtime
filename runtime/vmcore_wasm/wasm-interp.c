@@ -169,6 +169,80 @@ wa_fmin(double a, double b)
     return c;
 }
 
+static inline uint32
+clz32(uint32 type)
+{
+  uint32 num = 0;
+  if (type == 0)
+    return 32;
+  while (!(type & 0x80000000)) {
+    num++;
+    type <<= 1;
+  }
+  return num;
+}
+
+static inline uint32
+clz64(uint64 type)
+{
+  uint32 num = 0;
+  if (type == 0)
+    return 64;
+  while (!(type & 0x8000000000000000LL)) {
+    num++;
+    type <<= 1;
+  }
+  return num;
+}
+
+static inline uint32
+ctz32(uint32 type)
+{
+  uint32 num = 0;
+  if (type == 0)
+    return 32;
+  while (!(type & 1)) {
+    num++;
+    type >>= 1;
+  }
+  return num;
+}
+
+static inline uint32
+ctz64(uint64 type)
+{
+  uint32 num = 0;
+  if (type == 0)
+    return 64;
+  while (!(type & 1)) {
+    num++;
+    type >>= 1;
+  }
+  return num;
+}
+
+static inline uint32
+popcount32(uint32 u)
+{
+  uint32 ret = 0;
+  while (u) {
+    u = (u & (u - 1));
+    ret++;
+  }
+  return ret;
+}
+
+static inline uint32
+popcount64(uint64 u)
+{
+  uint32 ret = 0;
+  while (u) {
+    u = (u & (u - 1));
+    ret++;
+  }
+  return ret;
+}
+
 static inline WASMGlobalInstance*
 get_global(const WASMModuleInstance *module, uint32 global_idx)
 {
@@ -401,6 +475,22 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     val1 = POP_##src_op_type();                                      \
     res = val1 cond val2;                                            \
     PUSH_I32(res);                                                   \
+  } while (0)
+
+#define DEF_OP_BIT_COUNT(src_type, src_op_type, operation) do {      \
+    src_type val1, val2;                                             \
+    val1 = POP_##src_op_type();                                      \
+    val2 = operation(val1);                                          \
+    PUSH_##src_op_type(val2);                                        \
+  } while (0)
+
+#define DEF_OP_NUMERIC(src_type1, src_type2, src_op_type, operation) do { \
+    src_type1 val1, val3;                                                 \
+    src_type2 val2;                                                       \
+    val2 = POP_##src_op_type();                                           \
+    val1 = POP_##src_op_type();                                           \
+    val3 = val1 operation val2;                                           \
+    PUSH_##src_op_type(val3);                                             \
   } while (0)
 
 #define DEF_OP_TRUNC(dst_type, dst_op_type, src_type, src_op_type,   \
@@ -1170,47 +1260,267 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* numberic instructions of i32 */
       case WASM_OP_I32_CLZ:
-      case WASM_OP_I32_CTZ:
-      case WASM_OP_I32_POPCNT:
-      case WASM_OP_I32_ADD:
-      case WASM_OP_I32_SUB:
-      case WASM_OP_I32_MUL:
-      case WASM_OP_I32_DIV_S:
-      case WASM_OP_I32_DIV_U:
-      case WASM_OP_I32_REM_S:
-      case WASM_OP_I32_REM_U:
-      case WASM_OP_I32_AND:
-      case WASM_OP_I32_OR:
-      case WASM_OP_I32_XOR:
-      case WASM_OP_I32_SHL:
-      case WASM_OP_I32_SHR_S:
-      case WASM_OP_I32_SHR_U:
-      case WASM_OP_I32_ROTL:
-      case WASM_OP_I32_ROTR:
-        /* TODO */
+        DEF_OP_BIT_COUNT(uint32, I32, clz32);
         break;
+
+      case WASM_OP_I32_CTZ:
+        DEF_OP_BIT_COUNT(uint32, I32, ctz32);
+        break;
+
+      case WASM_OP_I32_POPCNT:
+        DEF_OP_BIT_COUNT(uint32, I32, popcount32);
+        break;
+
+      case WASM_OP_I32_ADD:
+        DEF_OP_NUMERIC(uint32, uint32, I32, +);
+        break;
+
+      case WASM_OP_I32_SUB:
+        DEF_OP_NUMERIC(uint32, uint32, I32, -);
+        break;
+
+      case WASM_OP_I32_MUL:
+        DEF_OP_NUMERIC(uint32, uint32, I32, *);
+        break;
+
+      case WASM_OP_I32_DIV_S:
+      {
+        int32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        if (a == 0x8000000 && b == -1) {
+          printf("wasm interp failed, integer overflow in divide operation.\n");
+          goto got_exception;
+        }
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I32(a / b);
+        break;
+      }
+
+      case WASM_OP_I32_DIV_U:
+      {
+        uint32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I32(a / b);
+        break;
+      }
+
+      case WASM_OP_I32_REM_S:
+      {
+        int32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        if (a == 0x8000000 && b == -1) {
+          PUSH_I32(0);
+        }
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I32(a % b);
+        break;
+      }
+
+      case WASM_OP_I32_REM_U:
+      {
+        uint32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I32(a % b);
+        break;
+      }
+
+      case WASM_OP_I32_AND:
+        DEF_OP_NUMERIC(uint32, uint32, I32, &);
+        break;
+
+      case WASM_OP_I32_OR:
+        DEF_OP_NUMERIC(uint32, uint32, I32, |);
+        break;
+
+      case WASM_OP_I32_XOR:
+        DEF_OP_NUMERIC(uint32, uint32, I32, ^);
+        break;
+
+      case WASM_OP_I32_SHL:
+        DEF_OP_NUMERIC(uint32, uint32, I32, <<);
+        break;
+
+      case WASM_OP_I32_SHR_S:
+        DEF_OP_NUMERIC(int32, uint32, I32, >>);
+        break;
+
+      case WASM_OP_I32_SHR_U:
+        DEF_OP_NUMERIC(uint32, uint32, I32, >>);
+        break;
+
+      case WASM_OP_I32_ROTL:
+      {
+        uint32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        PUSH_I32(rotl32(a, b));
+        break;
+      }
+
+      case WASM_OP_I32_ROTR:
+      {
+        uint32 a, b;
+
+        b = POP_I32();
+        a = POP_I32();
+        PUSH_I32(rotr32(a, b));
+        break;
+      }
 
       /* numberic instructions of i64 */
       case WASM_OP_I64_CLZ:
-      case WASM_OP_I64_CTZ:
-      case WASM_OP_I64_POPCNT:
-      case WASM_OP_I64_ADD:
-      case WASM_OP_I64_SUB:
-      case WASM_OP_I64_MUL:
-      case WASM_OP_I64_DIV_S:
-      case WASM_OP_I64_DIV_U:
-      case WASM_OP_I64_REM_S:
-      case WASM_OP_I64_REM_U:
-      case WASM_OP_I64_AND:
-      case WASM_OP_I64_OR:
-      case WASM_OP_I64_XOR:
-      case WASM_OP_I64_SHL:
-      case WASM_OP_I64_SHR_S:
-      case WASM_OP_I64_SHR_U:
-      case WASM_OP_I64_ROTL:
-      case WASM_OP_I64_ROTR:
-        /* TODO */
+        DEF_OP_BIT_COUNT(uint64, I64, clz64);
         break;
+
+      case WASM_OP_I64_CTZ:
+        DEF_OP_BIT_COUNT(uint64, I64, ctz64);
+        break;
+
+      case WASM_OP_I64_POPCNT:
+        DEF_OP_BIT_COUNT(uint64, I64, popcount64);
+        break;
+
+      case WASM_OP_I64_ADD:
+        DEF_OP_NUMERIC(uint64, uint64, I64, +);
+        break;
+
+      case WASM_OP_I64_SUB:
+        DEF_OP_NUMERIC(uint64, uint64, I64, -);
+        break;
+
+      case WASM_OP_I64_MUL:
+        DEF_OP_NUMERIC(uint64, uint64, I64, *);
+        break;
+
+      case WASM_OP_I64_DIV_S:
+      {
+        int64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        if (a == 0x8000000000000000LL && b == -1) {
+          printf("wasm interp failed, integer overflow in divide operation.\n");
+          goto got_exception;
+        }
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I64(a / b);
+        break;
+      }
+
+      case WASM_OP_I64_DIV_U:
+      {
+        uint64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I64(a / b);
+        break;
+      }
+
+      case WASM_OP_I64_REM_S:
+      {
+        int64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        if (a == 0x8000000000000000LL && b == -1) {
+          PUSH_I64(0);
+        }
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I64(a % b);
+        break;
+      }
+
+      case WASM_OP_I64_REM_U:
+      {
+        uint64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        if (b == 0) {
+          printf("wasm interp failed, integer divided by zero.\n");
+          goto got_exception;
+        }
+        PUSH_I64(a % b);
+        break;
+      }
+
+      case WASM_OP_I64_AND:
+        DEF_OP_NUMERIC(uint64, uint64, I64, &);
+        break;
+
+      case WASM_OP_I64_OR:
+        DEF_OP_NUMERIC(uint64, uint64, I64, |);
+        break;
+
+      case WASM_OP_I64_XOR:
+        DEF_OP_NUMERIC(uint64, uint64, I64, ^);
+        break;
+
+      case WASM_OP_I64_SHL:
+        DEF_OP_NUMERIC(uint64, uint64, I64, <<);
+        break;
+
+      case WASM_OP_I64_SHR_S:
+        DEF_OP_NUMERIC(int64, uint64, I64, >>);
+        break;
+
+      case WASM_OP_I64_SHR_U:
+        DEF_OP_NUMERIC(uint64, uint64, I64, >>);
+        break;
+
+      case WASM_OP_I64_ROTL:
+      {
+        uint64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        PUSH_I64(rotl64(a, b));
+        break;
+      }
+
+      case WASM_OP_I64_ROTR:
+      {
+        uint64 a, b;
+
+        b = POP_I64();
+        a = POP_I64();
+        PUSH_I64(rotr64(a, b));
+        break;
+      }
 
       /* numberic instructions of f32 */
       case WASM_OP_F32_ABS:
