@@ -283,7 +283,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   } while (0)
 
 #define PUSH_CSP(type, start, else, end) do {   \
-    if (frame_csp >= frame_csp_boundary)        \
+    if (frame_csp >= frame->csp_boundary)       \
       goto got_exception;                       \
     frame_csp->block_type = type;               \
     frame_csp->start_addr = start;              \
@@ -420,8 +420,6 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     frame_lp = frame->lp;                                            \
     frame_sp = frame->sp;                                            \
     frame_csp = frame->csp;                                          \
-    frame_csp_boundary = frame->csp_boundary;                        \
-    frame_csp_bottom = frame->csp_bottom;                            \
     frame_ref = (uint8*)(frame_lp + cur_func->param_cell_num +       \
     cur_func->local_cell_num + self->stack_cell_num +                \
     self->block_cell_num);                                           \
@@ -643,9 +641,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   register uint32 *frame_lp = NULL;  /* cache of frame->lp */
   register uint32 *frame_sp = NULL;  /* cache of frame->sp */
   register uint8  *frame_ref = NULL; /* cache of frame->ref */
-  WASMBranchBlock *frame_csp_bottom = NULL;
   WASMBranchBlock *frame_csp = NULL;
-  WASMBranchBlock *frame_csp_boundary = NULL;
   uint8 *frame_ip_end = frame_ip + 1;
   uint8 opcode, block_type;
   uint32 *depths = NULL;
@@ -658,8 +654,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   /* Size of memory load.
      This starts with the first memory load operator at opcode 0x28 */
   uint32 LOAD_SIZE[] = {
-    4, 8, 4, 8, 1, 1, 2, 2, 1, 1, 2, 2, 4, 4, // loads
-    4, 8, 4, 8, 1, 2, 1, 2, 4 };               // stores
+    4, 8, 4, 8, 1, 1, 2, 2, 1, 1, 2, 2, 4, 4,   /* loads */
+    4, 8, 4, 8, 1, 2, 1, 2, 4 };                /* stores */
 
   while (frame_ip < frame_ip_end) {
     opcode = *frame_ip++;
@@ -724,7 +720,13 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_END:
-        POP_CSP();
+        if (frame_csp > frame->csp_bottom)
+          POP_CSP();
+        else { /* end of function, treat as WASM_OP_RETURN */
+          for (i = 0; i < cur_func->ret_cell_num; i++)
+            *prev_frame->sp++ = *--frame_sp;
+          goto return_func;
+        }
         break;
 
       case WASM_OP_BR:
@@ -819,7 +821,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
 
-          local_type = cur_func->u.func->local_types[local_idx];
+          if (local_idx < cur_func->param_cell_num)
+            local_type = cur_func->u.func->func_type->types[local_idx];
+          else
+            local_type = cur_func->u.func->local_types[local_idx];
+
           switch (local_type) {
             case VALUE_TYPE_I32:
               PUSH_I32(LOCAL_I32(local_idx));
@@ -848,7 +854,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
 
-          local_type = cur_func->u.func->local_types[local_idx];
+          if (local_idx < cur_func->param_cell_num)
+            local_type = cur_func->u.func->func_type->types[local_idx];
+          else
+            local_type = cur_func->u.func->local_types[local_idx];
+
           switch (local_type) {
             case VALUE_TYPE_I32:
               SET_LOCAL_I32(local_idx, POP_I32());
@@ -877,7 +887,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
             goto got_exception;
 
-          local_type = cur_func->u.func->local_types[local_idx];
+          if (local_idx < cur_func->param_cell_num)
+            local_type = cur_func->u.func->func_type->types[local_idx];
+          else
+            local_type = cur_func->u.func->local_types[local_idx];
+
           switch (local_type) {
             case VALUE_TYPE_I32:
               SET_LOCAL_I32(local_idx, *frame_sp);
@@ -1846,12 +1860,13 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         frame_ip = wasm_runtime_get_func_code(cur_func);
         frame_ip_end = wasm_runtime_get_func_code_end(cur_func);
         frame_lp = frame->lp;
-        frame_sp = frame_lp + cur_func->param_cell_num +
-                   cur_func->local_cell_num;
-        frame_csp_bottom = (WASMBranchBlock*)(frame_sp + self->stack_cell_num);
-        frame_csp = frame_csp_bottom;
+        frame_sp = frame->sp_bottom = frame_lp + cur_func->param_cell_num +
+                                      cur_func->local_cell_num;
+        frame_csp = frame->csp_bottom =
+                        (WASMBranchBlock*)(frame_sp + self->stack_cell_num);
+        frame->sp_boundary = (uint32*)frame_csp;
         frame_ref = (uint8*)((uint32*)frame_csp + self->block_cell_num);
-        frame_csp_boundary = (WASMBranchBlock*)frame_ref;
+        frame->csp_boundary = (WASMBranchBlock*)frame_ref;
 
         wasm_thread_set_cur_frame(self, (WASMRuntimeFrame*)frame);
       }
@@ -1891,7 +1906,7 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
   WASMRuntimeFrame *prev_frame = wasm_thread_get_cur_frame(self);
   WASMInterpFrame *frame, *outs_area;
   /* Allocate sufficient cells for all kinds of return values.  */
-  unsigned all_cell_num = 2;
+  unsigned all_cell_num = 2, i;
   /* This frame won't be used by JITed code, so only allocate interp
      frame here.  */
   unsigned frame_size = wasm_interp_interp_frame_size(all_cell_num);
@@ -1920,6 +1935,10 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
     wasm_interp_call_func_bytecode(self, function, frame);
 
   /* TODO: check exception */
+
+  /* Output the return value to the caller */
+  for (i = 0; i < function->ret_cell_num; i++)
+    argv[i] = frame->sp[i - function->ret_cell_num];
 
   wasm_thread_set_cur_frame(self, prev_frame);
   FREE_FRAME(self, frame);

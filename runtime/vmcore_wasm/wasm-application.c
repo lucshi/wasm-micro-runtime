@@ -36,9 +36,11 @@ resolve_main_function(const WASMModuleInstance *module_inst)
 {
   uint32 i;
   for (i = 0; i < module_inst->export_func_count; i++)
-    if (!strcmp(module_inst->export_functions->name, "_main")
-        || !strcmp(module_inst->export_functions->name, "main"))
+    if (!strcmp(module_inst->export_functions[i].name, "_main")
+        || !strcmp(module_inst->export_functions[i].name, "main"))
       return module_inst->export_functions[i].function;
+
+  printf("WASM execute application failed: main function not found.\n");
   return NULL;
 }
 
@@ -46,17 +48,23 @@ static bool
 check_main_func_type(const WASMType *type)
 {
   if (!(type->param_count == 0 || type->param_count == 2)
-      ||type->result_count > 1)
+      ||type->result_count > 1) {
+    printf("WASM execute application failed: invalid main function type.\n");
     return false;
+  }
 
   if (type->param_count == 2
       && !(type->types[0] == VALUE_TYPE_I32
-           && type->types[1] == VALUE_TYPE_I32))
+           && type->types[1] == VALUE_TYPE_I32)) {
+    printf("WASM execute application failed: invalid main function type.\n");
     return false;
+  }
 
   if (type->result_count &&
-      type->types[type->param_count] != VALUE_TYPE_I32)
+      type->types[type->param_count] != VALUE_TYPE_I32) {
+    printf("WASM execute application failed: invalid main function type.\n");
     return false;
+  }
 
   return true;
 }
@@ -67,7 +75,7 @@ wasm_application_execute_main(int argc, char *argv[])
   WASMThread *self = wasm_runtime_get_self();
   WASMModuleInstance *module_inst = self->vm_instance->module;
   WASMFunctionInstance *func = resolve_main_function(module_inst);
-  uint32 argc1 = 0, argv1[2];
+  uint32 argc1 = 0, argv1[2] = { 0 };
 
   if (!func || func->is_import_func)
     return false;
@@ -82,6 +90,12 @@ wasm_application_execute_main(int argc, char *argv[])
   }
 
   wasm_runtime_call_wasm(func, argc1, argv1);
+
   /* TODO: check exception */
+
+  /* TODO: only print result for debug, remove me. */
+  if (func->ret_cell_num)
+    printf("WASM execute main function return %d.\n", argv1[0]);
+
   return true;
 }

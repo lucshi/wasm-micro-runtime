@@ -225,7 +225,7 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
   }
 
   *p_buf = p;
-  printf("Load type section success.\n");
+  /* printf("Load type section success.\n"); */
   return true;
 }
 
@@ -361,7 +361,7 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  printf("Load import section success.\n");
+  /* printf("Load import section success.\n"); */
   return true;
 }
 
@@ -495,7 +495,7 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
   }
 
   *p_buf = p;
-  printf("Load function section success.\n");
+  /* printf("Load function section success.\n"); */
   return true;
 }
 
@@ -533,7 +533,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   }
 
   *p_buf = p;
-  printf("Load table section success.\n");
+  /* printf("Load table section success.\n"); */
   return false;
 }
 
@@ -571,7 +571,7 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  printf("Load memory section success.\n");
+  /* printf("Load memory section success.\n"); */
   return true;
 }
 
@@ -616,7 +616,7 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  printf("Load global section success.\n");
+  /* printf("Load global section success.\n"); */
   return true;
 }
 
@@ -697,7 +697,7 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  printf("Load export section success.\n");
+  /* printf("Load export section success.\n"); */
   return true;
 }
 
@@ -750,7 +750,7 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
   }
 
   *p_buf = p;
-  printf("Load table segment section success.\n");
+  /* printf("Load table segment section success.\n"); */
   return true;
 }
 
@@ -805,7 +805,7 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
   }
 
   *p_buf = p;
-  printf("Load data segment section success.\n");
+  /* printf("Load data segment section success.\n"); */
   return true;
 }
 
@@ -822,7 +822,7 @@ load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
   /* TODO: should check if there really have section_size code bytes */
   p += section_size;
   *p_buf = p;
-  printf("Load code segment section success.\n");
+  /* printf("Load code segment section success.\n"); */
 
   return true;
 }
@@ -852,7 +852,7 @@ load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   }
 
   *p_buf = p;
-  printf("Load start section success.\n");
+  /* printf("Load start section success.\n"); */
   return true;
 }
 
@@ -878,7 +878,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
   while (p < p_end) {
     CHECK_BUF(p, p_end, 1);
     uint8 section_type = read_uint8(p);
-    printf("section_type: %d\n", section_type);
+    /* printf("section_type: %d\n", section_type); */
 
     switch (section_type) {
       case SECTION_TYPE_USER:
@@ -938,6 +938,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
         return false;
     }
   }
+  /* printf("Load module success.\n"); */
   return true;
 }
 
