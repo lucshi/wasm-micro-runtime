@@ -39,6 +39,38 @@
 #define MEMORY(self) (self->vm_instance->module->default_memory)
 #define MEMORY_BASE(self) (MEMORY(self)->memory_data)
 
+#define DEBUG_PRINT 1
+
+#if DEBUG_PRINT != 0
+static void
+_print_i32_wrapper(WASMThread *self, uint32 *args)
+{
+  printf("%d\n", *args);
+}
+
+static void
+_print_i64_wrapper(WASMThread *self, uint32 *args)
+{
+  uint64 value;
+  memcpy(&value, args, sizeof(uint64));
+  printf("%lld\n", value);
+}
+
+static void
+_print_f32_wrapper(WASMThread *self, uint32 *args)
+{
+  printf("%f\n", *(float*)args);
+}
+
+static void
+_print_f64_wrapper(WASMThread *self, uint32 *args)
+{
+  float64 value;
+  memcpy(&value, args, sizeof(float64));
+  printf("%f\n", value);
+}
+#endif
+
 static void
 _getc_wrapper(WASMThread *self, uint32 *args)
 {
@@ -207,6 +239,12 @@ typedef struct WASMNativeFuncDef {
 } WASMNativeFuncDef;
 
 static WASMNativeFuncDef native_func_defs[] = {
+#if DEBUG_PRINT != 0
+  REG_NATIVE_FUNC(env, _print_i32),
+  REG_NATIVE_FUNC(env, _print_i64),
+  REG_NATIVE_FUNC(env, _print_f32),
+  REG_NATIVE_FUNC(env, _print_f64),
+#endif
   REG_NATIVE_FUNC(env, _getc),
   REG_NATIVE_FUNC(env, _ungetc),
   REG_NATIVE_FUNC(env, _fread),
