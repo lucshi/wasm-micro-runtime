@@ -34,6 +34,7 @@ extern "C" {
 
 typedef struct WASMBranchBlock {
   uint8 block_type;
+  uint8 return_type;
   uint8 *start_addr;
   uint8 *else_addr;
   uint8 *end_addr;

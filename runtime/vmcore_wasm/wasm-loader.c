@@ -534,7 +534,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
 
   *p_buf = p;
   /* printf("Load table section success.\n"); */
-  return false;
+  return true;
 }
 
 static bool

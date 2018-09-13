@@ -156,17 +156,19 @@ rotr64(uint64 n, unsigned int c)
 static inline double
 wa_fmax(double a, double b)
 {
-    double c = fmax(a, b);
-    if (c==0 && a==b) { return signbit(a) ? b : a; }
-    return c;
+  double c = fmax(a, b);
+  if (c==0 && a==b)
+    return signbit(a) ? b : a;
+  return c;
 }
 
 static inline double
 wa_fmin(double a, double b)
 {
-    double c = fmin(a, b);
-    if (c==0 && a==b) { return signbit(a) ? a : b; }
-    return c;
+  double c = fmin(a, b);
+  if (c==0 && a==b)
+    return signbit(a) ? a : b;
+  return c;
 }
 
 static inline uint32
@@ -282,15 +284,18 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     frame_sp += 2;                              \
   } while (0)
 
-#define PUSH_CSP(type, start, else, end) do {   \
-    if (frame_csp >= frame->csp_boundary)       \
-      goto got_exception;                       \
-    frame_csp->block_type = type;               \
-    frame_csp->start_addr = start;              \
-    frame_csp->else_addr = else;                \
-    frame_csp->end_addr = end;                  \
-    frame_csp->frame_sp = frame_sp;             \
-    frame_csp++;                                \
+#define PUSH_CSP(type, ret_type, start, else_, end) do {\
+    if (frame_csp >= frame->csp_boundary) {             \
+      printf("WASM intepreter failed: block stack overflow.\n");\
+      goto got_exception;                               \
+    }                                                   \
+    frame_csp->block_type = type;                       \
+    frame_csp->return_type = ret_type;                  \
+    frame_csp->start_addr = start;                      \
+    frame_csp->else_addr = else_;                       \
+    frame_csp->end_addr = end;                          \
+    frame_csp->frame_sp = frame_sp;                     \
+    frame_csp++;                                        \
   } while (0)
 
 #define POP_I32() (--frame_sp, *FRAME_REF(frame_sp) = 0, *(int32*)frame_sp)
@@ -303,21 +308,44 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define POP_F64() (frame_sp -= 2, *FRAME_REF(frame_sp) = *FRAME_REF(frame_sp+1) = 0,\
                    GET_F64_FROM_ADDR(frame_sp))
 
-#define POP_CSP_CHECK_OVERFLOW() do {                          \
-    if (frame_csp <= frame->csp_bottom)                        \
-      goto got_exception;                                      \
+#define POP_CSP_CHECK_OVERFLOW(n) do {                          \
+    if (frame_csp - n < frame->csp_bottom) {                    \
+      printf("WASM intepreter failed: block stack pop failed.\n");\
+      goto got_exception;                                       \
+    }                                                           \
   } while (0)
 
-#define POP_CSP() do {                                         \
-    --frame_csp;                                               \
-    frame_sp = frame_csp->frame_sp;                            \
-    POP_CSP_CHECK_OVERFLOW();                                  \
+#define POP_CSP() do {                                          \
+    POP_CSP_CHECK_OVERFLOW(1);                                  \
+    --frame_csp;                                                \
   } while (0)
 
-#define POP_CSP_N(n) do {                                      \
-    frame_csp -= n;                                            \
-    frame_sp = frame_csp->frame_sp;                            \
-    POP_CSP_CHECK_OVERFLOW();                                  \
+#define POP_CSP_N(n) do {                                       \
+    uint32 *frame_sp_old = frame_sp;                            \
+    POP_CSP_CHECK_OVERFLOW(n + 1);                              \
+    frame_csp -= n;                                             \
+    if (frame_csp[-1].block_type == BLOCK_TYPE_BLOCK            \
+        || frame_csp[-1].block_type == BLOCK_TYPE_IF)           \
+      /* block block or if block, jump to end of block */       \
+      frame_ip = frame_csp[-1].end_addr;                        \
+    else /* loop block, jump to start of block */               \
+      frame_ip = frame_csp[-1].start_addr;                      \
+    /* copy return value of block */                            \
+    frame_sp = frame_csp[-1].frame_sp;                          \
+    switch (frame_csp[-1].return_type) {                        \
+      case VALUE_TYPE_I32:                                      \
+        PUSH_I32(frame_sp_old[-1]);                             \
+        break;                                                  \
+      case VALUE_TYPE_I64:                                      \
+        PUSH_I64(GET_I64_FROM_ADDR(frame_sp_old - 2));          \
+        break;                                                  \
+      case VALUE_TYPE_F32:                                      \
+        PUSH_F32(*(float32*)(frame_sp_old - 1));                \
+        break;                                                  \
+      case VALUE_TYPE_F64:                                      \
+        PUSH_F64(GET_F64_FROM_ADDR(frame_sp_old - 2));          \
+        break;                                                  \
+    }                                                           \
   } while (0)
 
 #define LOCAL_I32(n) (*(int32*)(frame_lp + n))
@@ -520,41 +548,41 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 static inline int32
 sign_ext_8_32(int8 val)
 {
-    if (val & 0x80)
-      return val | 0xffffff00;
-    return val;
+  if (val & 0x80)
+    return val | 0xffffff00;
+  return val;
 }
 
 static inline int32
 sign_ext_16_32(int16 val)
 {
-    if (val & 0x8000)
-      return val | 0xffff0000;
-    return val;
+  if (val & 0x8000)
+    return val | 0xffff0000;
+  return val;
 }
 
 static inline int64
 sign_ext_8_64(int8 val)
 {
-    if (val & 0x80)
-      return val | 0xffffffffffffff00;
-    return val;
+  if (val & 0x80)
+    return val | 0xffffffffffffff00;
+  return val;
 }
 
 static inline int64
 sign_ext_16_64(int16 val)
 {
-    if (val & 0x8000)
-      return val | 0xffffffffffff0000;
-    return val;
+  if (val & 0x8000)
+    return val | 0xffffffffffff0000;
+  return val;
 }
 
 static inline int64
 sign_ext_32_64(int32 val)
 {
-    if (val & 0x80000000)
-      return val | 0xffffffff00000000;
-    return val;
+  if (val & 0x80000000)
+    return val | 0xffffffff00000000;
+  return val;
 }
 
 static inline void
@@ -643,7 +671,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   register uint8  *frame_ref = NULL; /* cache of frame->ref */
   WASMBranchBlock *frame_csp = NULL;
   uint8 *frame_ip_end = frame_ip + 1;
-  uint8 opcode, block_type;
+  uint8 opcode, block_ret_type;
   uint32 *depths = NULL;
   uint32 depth_buf[BR_TABLE_TMP_BUF_LEN];
   uint32 i, depth, cond, count, fidx, tidx, frame_size = 0, all_cell_num = 0;
@@ -669,36 +697,40 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_BLOCK:
-        /* TODO: test */
-        read_leb_uint32(frame_ip, frame_ip_end, block_type);
+        read_leb_uint32(frame_ip, frame_ip_end, block_ret_type);
 
         if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
-                                         frame_ip_end, block_type, &else_addr,
-                                         &end_addr)) {
+                                         frame_ip_end, BLOCK_TYPE_BLOCK,
+                                         &else_addr, &end_addr)) {
           goto got_exception;
         }
 
-        PUSH_CSP(BLOCK_TYPE_BLOCK, frame_ip, NULL, end_addr);
-        frame_ip = end_addr + 1;
+        PUSH_CSP(BLOCK_TYPE_BLOCK, block_ret_type, frame_ip, NULL, end_addr);
         break;
 
       case WASM_OP_LOOP:
-        /* TODO: test */
-        read_leb_uint32(frame_ip, frame_ip_end, block_type);
-        PUSH_CSP(BLOCK_TYPE_LOOP, frame_ip, NULL, NULL);
-        break;
-
-      case WASM_OP_IF:
-        /* TODO: test */
-        read_leb_uint32(frame_ip, frame_ip_end, block_type);
+        read_leb_uint32(frame_ip, frame_ip_end, block_ret_type);
 
         if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
-                                         frame_ip_end, block_type, &else_addr,
-                                         &end_addr)) {
+                                         frame_ip_end, BLOCK_TYPE_LOOP,
+                                         &else_addr, &end_addr)) {
           goto got_exception;
         }
 
-        PUSH_CSP(BLOCK_TYPE_IF, frame_ip, else_addr, end_addr);
+        PUSH_CSP(BLOCK_TYPE_LOOP, block_ret_type, frame_ip, NULL, end_addr);
+        break;
+
+      case WASM_OP_IF:
+        read_leb_uint32(frame_ip, frame_ip_end, block_ret_type);
+
+        if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
+                                         frame_ip_end, BLOCK_TYPE_IF,
+                                         &else_addr, &end_addr)) {
+          goto got_exception;
+        }
+
+        PUSH_CSP(BLOCK_TYPE_IF, block_ret_type, frame_ip, else_addr, end_addr);
+
         cond = POP_I32();
         /* condition of the if branch is false, else condition is met */
         if (cond == 0) {
@@ -714,40 +746,35 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_ELSE:
-        /* TODO: test */
         /* comes from the if branch in WASM_OP_IF */
-        frame_ip = frame_csp->end_addr;
+        frame_ip = frame_csp[-1].end_addr;
         break;
 
       case WASM_OP_END:
-        if (frame_csp > frame->csp_bottom)
+        if (frame_csp > frame->csp_bottom) {
           POP_CSP();
+        }
         else { /* end of function, treat as WASM_OP_RETURN */
+          frame_sp -= cur_func->ret_cell_num;
           for (i = 0; i < cur_func->ret_cell_num; i++)
-            *prev_frame->sp++ = *--frame_sp;
+            *prev_frame->sp++ = frame_sp[i];
           goto return_func;
         }
         break;
 
       case WASM_OP_BR:
-        /* TODO: test */
         read_leb_uint32(frame_ip, frame_ip_end, depth);
         POP_CSP_N(depth);
-        frame_ip = frame_csp->start_addr;
         break;
 
       case WASM_OP_BR_IF:
-        /* TODO: test */
         read_leb_uint32(frame_ip, frame_ip_end, depth);
         cond = POP_I32();
-        if (cond) {
+        if (cond)
           POP_CSP_N(depth);
-          frame_ip = frame_csp->start_addr;
-        }
         break;
 
       case WASM_OP_BR_TABLE:
-        /* TODO:test */
         read_leb_uint32(frame_ip, frame_ip_end, count);
         if (count <= BR_TABLE_TMP_BUF_LEN)
           depths = depth_buf;
@@ -770,12 +797,12 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           depths = NULL;
         }
         POP_CSP_N(depth);
-        frame_ip = frame_csp->start_addr;
         break;
 
       case WASM_OP_RETURN:
+        frame_sp -= cur_func->ret_cell_num;
         for (i = 0; i < cur_func->ret_cell_num; i++)
-          *prev_frame->sp++ = *--frame_sp;
+          *prev_frame->sp++ = frame_sp[i];
         goto return_func;
 
       case WASM_OP_CALL:
@@ -1090,9 +1117,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                  delta + prev_page_count < prev_page_count)
           goto got_exception;
         memory->cur_page_count += delta;
-        total_size = (memory->memory_data - memory->base_addr) +
-                      NumBytesPerPage * memory->cur_page_count +
-                      memory->global_data_size;
+        total_size = offsetof(WASMMemoryInstance, base_addr) +
+                     (memory->memory_data - memory->base_addr) +
+                     NumBytesPerPage * memory->cur_page_count +
+                     memory->global_data_size;
         if (!(new_memory = bh_malloc(total_size))) {
           printf("wasm interp failed, alloc memory for grow memory failed.\n");
           goto got_exception;

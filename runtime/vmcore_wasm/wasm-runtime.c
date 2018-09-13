@@ -679,6 +679,8 @@ wasm_runtime_instantiate(const WASMModule *module)
     return NULL;
   }
 
+  (void)addr_data_end;
+  (void)global_data_end;
   return module_inst;
 }
 
