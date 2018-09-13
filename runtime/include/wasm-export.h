@@ -145,6 +145,20 @@ wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
 bool
 wasm_application_execute_main(int argc, char *argv[]);
 
+#ifdef WASM_ENABLE_REPL
+/**
+ * Find the specified function in argv[0] from WASM module of current instance
+ * and execute that function.
+ *
+ * @param argc the number of arguments
+ * @param argv the arguments array
+ *
+ * @return true if the specified function is called, false otherwise.
+ */
+bool
+wasm_application_execute_func(int argc, char *argv[]);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

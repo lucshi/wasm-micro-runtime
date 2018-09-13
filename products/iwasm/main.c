@@ -23,7 +23,11 @@
  * Intel in writing.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "bh_assert.h"
 #include "bh_platform.h"
 #include "bh_thread.h"
 #include "wasm-export.h"
@@ -52,6 +56,10 @@ print_help()
   printf("options:\n");
   printf("  -f|--function name     Specify function name to run "
          "in module rather than main\n");
+#ifdef WASM_ENABLE_REPL
+  printf("  --repl                 Start a very simple REPL (read-eval-print-loop) mode \n"
+         "                         that runs commands in the form of `FUNC ARG...`\n");
+#endif
 
   return 1;
 }
@@ -72,6 +80,66 @@ app_instance_main(void *arg)
   return NULL;
 }
 
+#ifdef WASM_ENABLE_REPL
+/**
+ * Split a space separated strings into an array of strings
+ * Returns NULL on failure
+ * Memory must be freed by caller
+ * Based on: http://stackoverflow.com/a/11198630/471795
+ */
+static char **
+split_string(char *str, int *count)
+{
+  char **res = NULL;
+  char *p;
+  int idx = 0;
+
+  /* split string and append tokens to 'res' */
+  do {
+    p = strtok(str, " ");
+    str = NULL;
+    res = realloc(res, sizeof(char*) * (idx + 1));
+    if (res == NULL) {
+      return NULL;
+    }
+    res[idx++] = p;
+  } while (p);
+
+  if (count) { *count = idx - 1; }
+  return res;
+}
+
+static void*
+app_instance_func(void *arg)
+{
+  char *cmd = NULL;
+  size_t len = 0;
+  ssize_t n;
+
+  while ((printf("webassembly> "), n = getline(&cmd, &len, stdin)) != -1) {
+    bh_assert(n > 0);
+    if (cmd[n - 1] == '\n') {
+      if (n == 1)
+        continue;
+      else
+        cmd[n - 1] = '\0';
+    }
+    app_argv = split_string(cmd, &app_argc);
+    if (app_argv == NULL) {
+      printf("Wasm prepare param failed: split string failed.\n");
+      break;
+    }
+    if (app_argc != 0) {
+      wasm_application_execute_func(app_argc, app_argv);
+      /* TODO: check exception */
+    }
+    free(app_argv);
+  }
+  free(cmd);
+  return NULL;
+}
+#endif /* WASM_ENABLE_REPL */
+
 int
 main(int argc, char *argv[])
 {
@@ -82,6 +150,9 @@ main(int argc, char *argv[])
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
   wasm_vm_instance_t vm = NULL;
+#ifdef WASM_ENABLE_REPL
+  bool is_repl_mode = false;
+#endif
 
   /* Process options.  */
   for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -94,6 +165,10 @@ main(int argc, char *argv[])
        }
        func_name = argv[0];
     }
+#ifdef WASM_ENABLE_REPL
+    else if (!strcmp(argv[0], "--repl"))
+      is_repl_mode = true;
+#endif
     else
       return print_help();
   }
@@ -122,13 +197,26 @@ main(int argc, char *argv[])
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))
     goto fail3;
 
-  /* create vm instance */
-  if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                          32 * 1024, /* TODO, define macro */
-                                          32 * 1024, /* TODO, define macro */
-                                          app_instance_main, NULL,
-                                          app_instance_cleanup)))
-    goto fail4;
+#ifdef WASM_ENABLE_REPL
+  if (is_repl_mode) {
+    /* create vm instance */
+    if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
+                                            32 * 1024, /* TODO, define macro */
+                                            32 * 1024, /* TODO, define macro */
+                                            app_instance_func, NULL,
+                                            app_instance_cleanup)))
+      goto fail4;
+  } else
+#endif
+  {
+    /* create vm instance */
+    if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
+                                            32 * 1024, /* TODO, define macro */
+                                            32 * 1024, /* TODO, define macro */
+                                            app_instance_main, NULL,
+                                            app_instance_cleanup)))
+      goto fail4;
+  }
 
   /* wait for the instance to terminate */
   wasm_runtime_wait_for_instance(vm, -1);

@@ -50,7 +50,7 @@ field-release: $(builddir_field_release)
 field-debug: $(builddir_field_debug)
 		cd $(builddir_field_debug);\
 		if [ ! -f Makefile ]; then\
-		  export CFLAGS="$(CFLAGS) -fstack-protector-all $(footprint_extra) -DBH_DEBUG";\
+		  export CFLAGS="$(CFLAGS) -fstack-protector-all $(footprint_extra) -DBH_DEBUG -DWASM_ENABLE_REPL";\
 		  export CXXFLAGS="$(CXXFLAGS) $(footprint_extra)";\
 		  cmake ../../ -DCMAKE_BUILD_TYPE=Debug $(oom_extra);\
 		fi;\
