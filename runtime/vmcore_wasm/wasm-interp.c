@@ -1333,7 +1333,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I32();
         a = POP_I32();
-        if (a == 0x8000000 && b == -1) {
+        if (a == 0x80000000 && b == -1) {
           printf("wasm interp failed, integer overflow in divide operation.\n");
           goto got_exception;
         }
@@ -1365,8 +1365,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I32();
         a = POP_I32();
-        if (a == 0x8000000 && b == -1) {
+        if (a == 0x80000000 && b == -1) {
           PUSH_I32(0);
+          break;
         }
         if (b == 0) {
           printf("wasm interp failed, integer divided by zero.\n");
