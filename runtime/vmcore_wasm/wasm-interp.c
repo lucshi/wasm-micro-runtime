@@ -324,9 +324,8 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     uint32 *frame_sp_old = frame_sp;                            \
     POP_CSP_CHECK_OVERFLOW(n + 1);                              \
     frame_csp -= n;                                             \
-    if (frame_csp[-1].block_type == BLOCK_TYPE_BLOCK            \
-        || frame_csp[-1].block_type == BLOCK_TYPE_IF)           \
-      /* block block or if block, jump to end of block */       \
+    if (frame_csp[-1].block_type != BLOCK_TYPE_LOOP)            \
+      /* block block/if/function, jump to end of block */       \
       frame_ip = frame_csp[-1].end_addr;                        \
     else /* loop block, jump to start of block */               \
       frame_ip = frame_csp[-1].start_addr;                      \
@@ -348,38 +347,40 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     }                                                           \
   } while (0)
 
-#define LOCAL_I32(n) (*(int32*)(frame_lp + n))
+#define local_off(n) (frame_lp + cur_func->local_offsets[n])
+
+#define LOCAL_I32(n) (*(int32*)(local_off(n)))
 
 #define SET_LOCAL_I32(N, val) do {              \
     int n = (N);                                \
     frame_ref[n] = REF_I32;                     \
-    *(int32*)(frame_lp + n) = (int32)(val);     \
+    *(int32*)(local_off(n)) = (int32)(val);     \
   } while (0)
 
-#define LOCAL_F32(n) (*(float32*)(frame_lp + n))
+#define LOCAL_F32(n) (*(float32*)(local_off(n)))
 
 #define SET_LOCAL_F32(N, val) do {              \
     int n = (N);                                \
     frame_ref[n] = REF_F32;                     \
-    *(float32*)(frame_lp + n) = (float32)(val); \
+    *(float32*)(local_off(n)) = (float32)(val); \
   } while (0)
 
-#define LOCAL_I64(n) (GET_I64_FROM_ADDR(frame_lp + n))
+#define LOCAL_I64(n) (GET_I64_FROM_ADDR(local_off(n)))
 
 #define SET_LOCAL_I64(N, val) do {              \
     int n = (N);                                \
     frame_ref[n] = REF_I64_1;                   \
     frame_ref[n + 1] = REF_I64_2;               \
-    PUT_I64_TO_ADDR(frame_lp + n, val);         \
+    PUT_I64_TO_ADDR(local_off(n), val);         \
   } while (0)
 
-#define LOCAL_F64(n) (GET_F64_FROM_ADDR (frame_lp + n))
+#define LOCAL_F64(n) (GET_F64_FROM_ADDR(local_off(n)))
 
 #define SET_LOCAL_F64(N, val) do {              \
     int n = (N);                                \
     frame_ref[n] = REF_F64_1;                   \
     frame_ref[n + 1] = REF_F64_2;               \
-    PUT_F64_TO_ADDR (frame_lp + n, val);        \
+    PUT_F64_TO_ADDR(local_off(n), val);         \
   } while (0)
 
 /* Pop the given number of elements from the given frame's stack.  */
@@ -407,6 +408,16 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     goto got_exception;                         \
   p += _off;                                    \
   res = (uint64)_res64;                         \
+} while (0)
+
+#define read_leb_int64(p, p_end, res) do {      \
+  uint32 _off = 0;                              \
+  uint64 _res64;                                \
+  if (!read_leb(p, p_end, &_off, 64, true,      \
+                &_res64))                       \
+    goto got_exception;                         \
+  p += _off;                                    \
+  res = (int64)_res64;                          \
 } while (0)
 
 #define read_leb_uint32(p, p_end, res) do {     \
@@ -483,8 +494,9 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 
 #define DEF_OP_F_CONST(ctype, src_op_type) do {                      \
     ctype cval;                                                      \
-    memcpy(&cval, &frame_ip, sizeof(ctype));                         \
-    frame_ip += sizeof(ctype);                                       \
+    uint8 *p_cval = (uint8*)&cval;                                   \
+    for (i = 0; i < sizeof(ctype); i++)                              \
+      *p_cval++ = *frame_ip++;                                       \
     PUSH_##src_op_type(cval);                                        \
   } while (0)
 
@@ -751,7 +763,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_END:
-        if (frame_csp > frame->csp_bottom) {
+        if (frame_csp > frame->csp_bottom + 1) {
           POP_CSP();
         }
         else { /* end of function, treat as WASM_OP_RETURN */
@@ -1147,11 +1159,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* constant instructions */
       case WASM_OP_I32_CONST:
-        DEF_OP_I_CONST(uint32, I32);
+        DEF_OP_I_CONST(int32, I32);
         break;
 
       case WASM_OP_I64_CONST:
-        DEF_OP_I_CONST(uint64, I64);
+        DEF_OP_I_CONST(int64, I64);
         break;
 
       case WASM_OP_F32_CONST:
@@ -1895,6 +1907,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         frame->sp_boundary = (uint32*)frame_csp;
         frame_ref = (uint8*)((uint32*)frame_csp + self->block_cell_num);
         frame->csp_boundary = (WASMBranchBlock*)frame_ref;
+
+        /* Push function block as first block */
+        PUSH_CSP(BLOCK_TYPE_FUNCTION, 0x40, frame_ip, NULL, frame_ip_end - 1);
 
         wasm_thread_set_cur_frame(self, (WASMRuntimeFrame*)frame);
       }

@@ -94,6 +94,7 @@ extern "C" {
 #define BLOCK_TYPE_BLOCK 0
 #define BLOCK_TYPE_LOOP 1
 #define BLOCK_TYPE_IF 2
+#define BLOCK_TYPE_FUNCTION 3
 
 typedef union WASMValue {
   int32 i32;

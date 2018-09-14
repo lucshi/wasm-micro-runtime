@@ -91,6 +91,7 @@ typedef struct WASMFunctionInstance {
   uint16 ret_cell_num;
   /* cell num of local variables, 0 for import function */
   uint16 local_cell_num;
+  uint16 *local_offsets;
   union {
     WASMFunctionImport *func_import;
     WASMFunction *func;

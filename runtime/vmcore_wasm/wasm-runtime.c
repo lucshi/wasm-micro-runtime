@@ -279,10 +279,44 @@ tables_instantiate(const WASMModule *module)
  * Destroy function instances.
  */
 static void
-functions_deinstantiate(WASMFunctionInstance *functions)
+functions_deinstantiate(WASMFunctionInstance *functions, uint32 count)
 {
-  if (functions)
+  if (functions) {
+    uint32 i;
+
+    for (i = 0; i < count; i++)
+      if (functions[i].local_offsets)
+        bh_free(functions[i].local_offsets);
     bh_free(functions);
+  }
+}
+
+static bool
+function_init_local_offsets(WASMFunctionInstance *func)
+{
+  uint16 local_offset = 0;
+  WASMType *param_type = func->u.func->func_type;
+  uint32 param_count = param_type->param_count;
+  uint8 *param_types = param_type->types;
+  uint32 local_count = func->u.func->local_count;
+  uint8 *local_types = func->u.func->local_types;
+  uint32 i, total_size = (param_count + local_count) * sizeof(uint16);
+
+  if (!(func->local_offsets = bh_malloc(total_size)))
+    return false;
+
+  for (i = 0; i < param_count; i++) {
+    func->local_offsets[i] = local_offset;
+    local_offset += wasm_value_type_cell_num(param_types[i]);
+  }
+
+  for (i = 0; i < local_count; i++) {
+    func->local_offsets[param_count + i] = local_offset;
+    local_offset += wasm_value_type_cell_num(local_types[i]);
+  }
+
+  bh_assert(local_offset == func->param_cell_num + func->local_cell_num);
+  return true;
 }
 
 /**
@@ -334,6 +368,11 @@ functions_instantiate(const WASMModule *module)
     function->local_cell_num =
       wasm_get_cell_num(function->u.func->local_types,
                         function->u.func->local_count);
+
+    if (!function_init_local_offsets(function)) {
+      bh_free(functions);
+      return NULL;
+    }
 
     function++;
   }
@@ -591,16 +630,19 @@ wasm_runtime_instantiate(const WASMModule *module)
 
     /* Initialize the memory data with data segment section */
     memory_data = module_inst->default_memory->memory_data;
-    for (i = 0; i < module->data_seg_count; i++) {
-      data_seg = module->data_segments[i];
-      bh_assert(data_seg->memory_index == 0);
-      bh_assert(data_seg->base_offset.init_expr_type ==
-                INIT_EXPR_TYPE_I32_CONST);
-      bh_assert((uint32)data_seg->base_offset.u.i32 <
-                NumBytesPerPage * module_inst->default_memory->cur_page_count);
+    if (module_inst->default_memory->cur_page_count > 0) {
+      for (i = 0; i < module->data_seg_count; i++) {
+        data_seg = module->data_segments[i];
+        bh_assert(data_seg->memory_index == 0);
+        bh_assert(data_seg->base_offset.init_expr_type ==
+                  INIT_EXPR_TYPE_I32_CONST);
 
-      memcpy(memory_data + data_seg->base_offset.u.i32,
-             data_seg->data, data_seg->data_length);
+        bh_assert((uint32)data_seg->base_offset.u.i32 <
+                  NumBytesPerPage * module_inst->default_memory->cur_page_count);
+
+        memcpy(memory_data + data_seg->base_offset.u.i32,
+               data_seg->data, data_seg->data_length);
+      }
     }
 
     /* Initialize the global data */
@@ -692,7 +734,7 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
 
   memories_deinstantiate(module_inst->memories, module_inst->memory_count);
   tables_deinstantiate(module_inst->tables, module_inst->table_count);
-  functions_deinstantiate(module_inst->functions);
+  functions_deinstantiate(module_inst->functions, module_inst->function_count);
   globals_deinstantiate(module_inst->globals);
   export_functions_deinstantiate(module_inst->export_functions);
   branch_set_destroy(module_inst);
