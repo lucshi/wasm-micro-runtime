@@ -370,7 +370,7 @@ functions_instantiate(const WASMModule *module)
                         function->u.func->local_count);
 
     if (!function_init_local_offsets(function)) {
-      bh_free(functions);
+      functions_deinstantiate(functions, function_count);
       return NULL;
     }
 

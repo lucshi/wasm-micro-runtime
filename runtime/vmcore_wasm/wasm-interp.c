@@ -261,13 +261,13 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 }
 
 #define PUSH_I32(value) do {                    \
-    *(int32*)frame_sp++ = (int32)(value);       \
     *FRAME_REF(frame_sp) = REF_I32;             \
+    *(int32*)frame_sp++ = (int32)(value);       \
   } while (0)
 
 #define PUSH_F32(value) do {                    \
-    *(float32*)frame_sp++ = (float32)(value);   \
     *FRAME_REF(frame_sp) = REF_F32;             \
+    *(float32*)frame_sp++ = (float32)(value);   \
   } while (0)
 
 #define PUSH_I64(value) do {                    \
@@ -501,7 +501,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   } while (0)
 
 #define DEF_OP_EQZ(src_op_type) do {                                 \
-    bool val;                                                        \
+    uint32 val;                                                      \
     val = POP_##src_op_type() == 0;                                  \
     PUSH_I32(val);                                                   \
   } while (0)
@@ -544,8 +544,8 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
       printf("WASM intepreter failed: invalid conversion of NaN.\n");\
       goto got_exception;                                            \
     }                                                                \
-    else if (value min_cond || value max_cond) {                     \
-      printf("WASM intepreter failed: integer overflow.\n");         \
+    else if ((float64)value min_cond || (float64)value max_cond) {   \
+      printf("WASM intepreter failed: integer overflow\n");         \
       goto got_exception;                                            \
     }                                                                \
     PUSH_##dst_op_type(((dst_type)value));                           \
@@ -555,6 +555,20 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
                        src_type, src_op_type) do {                   \
     dst_type value = (dst_type)(src_type)POP_##src_op_type();        \
     PUSH_##dst_op_type(value);                                       \
+  } while (0)
+
+#define GET_LOCAL_INDEX_AND_TYPE() do {                             \
+    param_count = cur_func->u.func->func_type->param_count;         \
+    local_count = cur_func->u.func->local_count;                    \
+    read_leb_uint32(frame_ip, frame_ip_end, local_idx);             \
+    if (local_idx >= param_count + local_count)                     \
+      goto got_exception;                                           \
+                                                                    \
+    if (local_idx < param_count)                                    \
+      local_type = cur_func->u.func->func_type->types[local_idx];   \
+    else                                                            \
+      local_type =                                                  \
+        cur_func->u.func->local_types[local_idx - param_count];     \
   } while (0)
 
 static inline int32
@@ -677,7 +691,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   WASMInterpFrame *frame = NULL;
   /* Points to this special opcode so as to jump to the
      call_method_from_entry.  */
-  uint8  *frame_ip = &opcode_IMPDEP2; /* cache of frame->ip */
+  register uint8  *frame_ip = &opcode_IMPDEP2; /* cache of frame->ip */
   register uint32 *frame_lp = NULL;  /* cache of frame->lp */
   register uint32 *frame_sp = NULL;  /* cache of frame->sp */
   register uint8  *frame_ref = NULL; /* cache of frame->ref */
@@ -840,30 +854,44 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       /* parametric instructions */
       case WASM_OP_DROP:
-        frame_sp--;
-        break;
+        {
+          uint8 ref_type = *FRAME_REF(frame_sp - 1);
+          if (ref_type == REF_I32 || ref_type == REF_F32)
+            frame_sp--;
+          else
+            frame_sp -= 2;
+          break;
+        }
 
       case WASM_OP_SELECT:
-        cond = POP_I32();
-        frame_sp--;
-        if (!cond)
-          *frame_sp = *(uint32*)(frame_sp + 1);
-        break;
+        {
+          uint8 ref_type;
+          cond = POP_I32();
+          ref_type = *FRAME_REF(frame_sp - 1);
+
+          if (ref_type == REF_I32 || ref_type == REF_F32)
+            frame_sp--;
+          else
+            frame_sp -= 2;
+
+          if (!cond) {
+            if (ref_type == REF_I32 || ref_type == REF_F32)
+              *(frame_sp - 1) = *frame_sp;
+            else {
+              *(frame_sp - 2) = *frame_sp;
+              *(frame_sp - 1) = *(frame_sp + 1);
+            }
+          }
+          break;
+        }
 
       /* variable instructions */
       case WASM_OP_GET_LOCAL:
         {
-          uint32 local_idx;
+          uint32 local_idx, param_count, local_count;
           uint8 local_type;
 
-          read_leb_uint32(frame_ip, frame_ip_end, local_idx);
-          if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
-            goto got_exception;
-
-          if (local_idx < cur_func->param_cell_num)
-            local_type = cur_func->u.func->func_type->types[local_idx];
-          else
-            local_type = cur_func->u.func->local_types[local_idx];
+          GET_LOCAL_INDEX_AND_TYPE();
 
           switch (local_type) {
             case VALUE_TYPE_I32:
@@ -886,17 +914,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       case WASM_OP_SET_LOCAL:
         {
-          uint32 local_idx;
+          uint32 local_idx, param_count, local_count;
           uint8 local_type;
 
-          read_leb_uint32(frame_ip, frame_ip_end, local_idx);
-          if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
-            goto got_exception;
-
-          if (local_idx < cur_func->param_cell_num)
-            local_type = cur_func->u.func->func_type->types[local_idx];
-          else
-            local_type = cur_func->u.func->local_types[local_idx];
+          GET_LOCAL_INDEX_AND_TYPE();
 
           switch (local_type) {
             case VALUE_TYPE_I32:
@@ -919,30 +940,23 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       case WASM_OP_TEE_LOCAL:
         {
-          uint32 local_idx;
+          uint32 local_idx, param_count, local_count;
           uint8 local_type;
 
-          read_leb_uint32(frame_ip, frame_ip_end, local_idx);
-          if (local_idx >= cur_func->param_cell_num + cur_func->local_cell_num)
-            goto got_exception;
-
-          if (local_idx < cur_func->param_cell_num)
-            local_type = cur_func->u.func->func_type->types[local_idx];
-          else
-            local_type = cur_func->u.func->local_types[local_idx];
+          GET_LOCAL_INDEX_AND_TYPE();
 
           switch (local_type) {
             case VALUE_TYPE_I32:
-              SET_LOCAL_I32(local_idx, *frame_sp);
+              SET_LOCAL_I32(local_idx, *(frame_sp - 1));
               break;
             case VALUE_TYPE_F32:
-              SET_LOCAL_F32(local_idx, *(float32*)frame_sp);
+              SET_LOCAL_F32(local_idx, *(float32*)(frame_sp - 1));
               break;
             case VALUE_TYPE_I64:
-              SET_LOCAL_I64(local_idx, GET_I64_FROM_ADDR(frame_sp));
+              SET_LOCAL_I64(local_idx, GET_I64_FROM_ADDR(frame_sp - 2));
               break;
             case VALUE_TYPE_F64:
-              SET_LOCAL_F64(local_idx, GET_F64_FROM_ADDR(frame_sp));
+              SET_LOCAL_F64(local_idx, GET_F64_FROM_ADDR(frame_sp - 2));
               break;
             default:
               goto got_exception;
@@ -1345,7 +1359,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I32();
         a = POP_I32();
-        if (a == 0x80000000 && b == -1) {
+        if (a == (int32)0x80000000 && b == -1) {
           printf("wasm interp failed, integer overflow in divide operation.\n");
           goto got_exception;
         }
@@ -1377,7 +1391,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         b = POP_I32();
         a = POP_I32();
-        if (a == 0x80000000 && b == -1) {
+        if (a == (int32)0x80000000 && b == -1) {
           PUSH_I32(0);
           break;
         }
@@ -1610,26 +1624,20 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_F32_ADD:
-        DEF_OP_NUMERIC(uint32, uint32, F32, +);
+        DEF_OP_NUMERIC(float32, float32, F32, +);
         break;
 
       case WASM_OP_F32_SUB:
-        DEF_OP_NUMERIC(uint32, uint32, F32, -);
+        DEF_OP_NUMERIC(float32, float32, F32, -);
         break;
 
       case WASM_OP_F32_MUL:
-        DEF_OP_NUMERIC(uint32, uint32, F32, *);
+        DEF_OP_NUMERIC(float32, float32, F32, *);
         break;
 
       case WASM_OP_F32_DIV:
-      {
-        float32 a, b;
-
-        b = POP_F32();
-        a = POP_F32();
-        PUSH_F32(a / b);
+        DEF_OP_NUMERIC(float32, float32, F32, /);
         break;
-      }
 
       case WASM_OP_F32_MIN:
       {
@@ -1691,26 +1699,20 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_F64_ADD:
-        DEF_OP_NUMERIC(uint64, uint64, F64, +);
+        DEF_OP_NUMERIC(float64, float64, F64, +);
         break;
 
       case WASM_OP_F64_SUB:
-        DEF_OP_NUMERIC(uint64, uint64, F64, -);
+        DEF_OP_NUMERIC(float64, float64, F64, -);
         break;
 
       case WASM_OP_F64_MUL:
-        DEF_OP_NUMERIC(uint64, uint64, F64, *);
+        DEF_OP_NUMERIC(float64, float64, F64, *);
         break;
 
       case WASM_OP_F64_DIV:
-      {
-        float64 a, b;
-
-        b = POP_F64();
-        a = POP_F64();
-        PUSH_F64(a / b);
+        DEF_OP_NUMERIC(float64, float64, F64, /);
         break;
-      }
 
       case WASM_OP_F64_MIN:
       {
@@ -1888,6 +1890,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         /* TODO: check exception */
       }
       else {
+        WASMType *func_type;
+
         all_cell_num = cur_func->param_cell_num + cur_func->local_cell_num
                        + self->stack_cell_num + self->block_cell_num;
         frame_size = wasm_interp_interp_frame_size(all_cell_num);
@@ -1910,8 +1914,14 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         frame_ref = (uint8*)((uint32*)frame_csp + self->block_cell_num);
         frame->csp_boundary = (WASMBranchBlock*)frame_ref;
 
+        /* Initialize the local varialbes */
+        memset(frame_lp + cur_func->param_cell_num, 0,
+               cur_func->local_cell_num * 4);
+
         /* Push function block as first block */
-        PUSH_CSP(BLOCK_TYPE_FUNCTION, 0x40, frame_ip, NULL, frame_ip_end - 1);
+        func_type = cur_func->u.func->func_type;
+        PUSH_CSP(BLOCK_TYPE_FUNCTION, func_type->types[func_type->param_count],
+                 frame_ip, NULL, frame_ip_end - 1);
 
         wasm_thread_set_cur_frame(self, (WASMRuntimeFrame*)frame);
       }

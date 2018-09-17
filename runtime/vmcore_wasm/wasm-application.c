@@ -163,12 +163,19 @@ wasm_application_execute_func(int argc, char *argv[])
           break;
         }
       case VALUE_TYPE_F32:
-        *(float32*)&argv1[p++] = strtof(argv[i], &endptr);
-        break;
+        {
+          float32 f32 = strtof(argv[i], &endptr);
+          if (strcmp(argv[i], "-nan") == 0)
+            f32 = -f32;
+          *(float32*)&argv1[p++] = f32;
+          break;
+        }
       case VALUE_TYPE_F64:
         {
           union { float64 val; uint32 parts[2]; } u;
           u.val = strtod(argv[i], &endptr);
+          if (strcmp(argv[i], "-nan") == 0)
+            u.val = -u.val;
           argv1[p++] = u.parts[0];
           argv1[p++] = u.parts[1];
           break;
