@@ -1512,6 +1512,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         a = POP_I64();
         if (a == (int64)0x8000000000000000LL && b == -1) {
           PUSH_I64(0);
+          break;
         }
         if (b == 0) {
           printf("wasm interp failed, integer divided by zero.\n");
