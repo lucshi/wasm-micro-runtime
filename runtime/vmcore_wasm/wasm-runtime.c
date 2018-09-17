@@ -135,6 +135,34 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
   }
 }
 
+static WASMMemoryInstance*
+memory_instantiate(uint32 init_page_count, uint32 max_page_count,
+                   uint32 addr_data_size, uint32 global_data_size)
+{
+  WASMMemoryInstance *memory;
+  uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
+                      NumBytesPerPage * init_page_count +
+                      addr_data_size + global_data_size;
+
+  if (!(memory = bh_malloc(total_size))) {
+    printf("Instantiate memory failed: allocate memory failed.\n");
+    return NULL;
+  }
+
+  memset(memory, 0, total_size);
+  memory->cur_page_count = init_page_count;
+  memory->max_page_count = max_page_count;
+  memory->addr_data = memory->base_addr;
+  memory->memory_data = init_page_count > 0
+                        ? memory->base_addr + addr_data_size
+                        : NULL;
+  memory->global_data = memory->base_addr + addr_data_size +
+                        NumBytesPerPage * memory->cur_page_count;
+  memory->global_data_size = global_data_size;
+
+  return memory;
+}
+
 /**
  * Instantiate memories in a module.
  */
@@ -145,8 +173,14 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
   WASMImport *import;
   uint32 mem_index = 0, i, memory_count =
     module->import_memory_count + module->memory_count;
-  uint32 total_size = sizeof(WASMMemoryInstance*) * memory_count;
-  WASMMemoryInstance **memories = bh_malloc(total_size), *memory;
+  uint32 total_size;
+  WASMMemoryInstance **memories, *memory;
+
+  if (memory_count == 0 && global_data_size > 0)
+    memory_count = 1;
+
+  total_size = sizeof(WASMMemoryInstance*) * memory_count;
+  memories = bh_malloc(total_size);
 
   if (!memories) {
     printf("Instantiate memory failed: allocate memory failed.\n");
@@ -159,45 +193,37 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
   import = module->imports;
   for (i = 0; i < module->import_count; i++, import++) {
     if (import->kind == IMPORT_KIND_MEMORY) {
-      total_size = offsetof(WASMMemoryInstance, base_addr) +
-                   NumBytesPerPage * import->u.memory.init_page_count +
-                   addr_data_size + global_data_size;
-      if (!(memory = memories[mem_index++] = bh_malloc(total_size))) {
+      if (!(memory = memories[mem_index++] =
+            memory_instantiate(import->u.memory.init_page_count,
+                               import->u.memory. max_page_count,
+                               addr_data_size, global_data_size))) {
         printf("Instantiate memory failed: allocate memory failed.\n");
         memories_deinstantiate(memories, memory_count);
         return NULL;
       }
-
-      memset(memory, 0, total_size);
-      memory->cur_page_count = import->u.memory.init_page_count;
-      memory->max_page_count = import->u.memory.max_page_count;
-      memory->addr_data = memory->base_addr;
-      memory->memory_data = memory->base_addr + addr_data_size;
-      memory->global_data =
-        memory->memory_data + NumBytesPerPage * memory->cur_page_count;
-      memory->global_data_size = global_data_size;
     }
   }
 
   /* instantiate memories from memory section */
   for (i = 0; i < module->memory_count; i++) {
-    total_size = offsetof(WASMMemoryInstance, base_addr) +
-                 NumBytesPerPage * module->memories[i].init_page_count +
-                 global_data_size;
-    if (!(memory = memories[mem_index++] = bh_malloc(total_size))) {
+    if (!(memory = memories[mem_index++] =
+          memory_instantiate(module->memories[i].init_page_count,
+                             module->memories[i].max_page_count,
+                             addr_data_size, global_data_size))) {
       printf("Instantiate memory failed: allocate memory failed.\n");
       memories_deinstantiate(memories, memory_count);
       return NULL;
     }
+  }
 
-    memset(memory, 0, total_size);
-    memory->cur_page_count = module->memories[i].init_page_count;
-    memory->max_page_count = module->memories[i].max_page_count;
-    memory->addr_data = memory->base_addr;
-    memory->memory_data = memory->base_addr + addr_data_size;
-    memory->global_data =
-      memory->memory_data + NumBytesPerPage * memory->cur_page_count;
-    memory->global_data_size = global_data_size;
+  if (mem_index == 0) {
+    /* no import memory and define memory, but has global variables */
+    if (!(memory = memories[mem_index++] =
+          memory_instantiate(0, 0, addr_data_size, global_data_size))) {
+      printf("Instantiate memory failed: allocate memory failed.\n");
+      memories_deinstantiate(memories, memory_count);
+      return NULL;
+    }
   }
 
   bh_assert(mem_index == memory_count);
@@ -610,7 +636,7 @@ wasm_runtime_instantiate(const WASMModule *module)
   module_inst->export_func_count = get_export_function_count(module);
 
   /* Instantiate memories/tables/functions */
-  if ((module_inst->memory_count > 0
+  if (((module_inst->memory_count > 0 || global_count > 0)
        && !(module_inst->memories =
             memories_instantiate(module, addr_data_size, global_data_size)))
       || (module_inst->table_count > 0
@@ -624,8 +650,9 @@ wasm_runtime_instantiate(const WASMModule *module)
     return NULL;
   }
 
-  if (module_inst->memory_count) {
+  if (module_inst->memory_count || global_count > 0) {
     WASMMemoryInstance *memory;
+
     memory = module_inst->default_memory = module_inst->memories[0];
 
     /* Initialize the memory data with data segment section */
@@ -732,7 +759,13 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   if (!module_inst)
     return;
 
-  memories_deinstantiate(module_inst->memories, module_inst->memory_count);
+  if (module_inst->memory_count > 0)
+    memories_deinstantiate(module_inst->memories, module_inst->memory_count);
+  else if (module_inst->memories != NULL && module_inst->global_count > 0)
+    /* No imported memory and defined memory, the memory is created when
+       global count > 0. */
+    memories_deinstantiate(module_inst->memories, 1);
+
   tables_deinstantiate(module_inst->tables, module_inst->table_count);
   functions_deinstantiate(module_inst->functions, module_inst->function_count);
   globals_deinstantiate(module_inst->globals);

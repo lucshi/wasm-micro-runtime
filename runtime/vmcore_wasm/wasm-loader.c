@@ -38,8 +38,6 @@
 
 #define read_uint8(p)  TEMPLATE_READ_VALUE(uint8, p)
 #define read_uint32(p) TEMPLATE_READ_VALUE(uint32, p)
-#define read_float32(p) TEMPLATE_READ_VALUE(float32, p)
-#define read_float64(p) TEMPLATE_READ_VALUE(float64, p)
 #define read_bool(p)   TEMPLATE_READ_VALUE(bool, p)
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
@@ -56,6 +54,15 @@
     return false;                                   \
   p += off;                                         \
   res = (uint64)res64;                              \
+} while (0)
+
+#define read_leb_int64(p, p_end, res) do {          \
+  uint32 off = 0;                                   \
+  uint64 res64;                                     \
+  if (!read_leb(p, p_end, &off, 64, true, &res64))  \
+    return false;                                   \
+  p += off;                                         \
+  res = (int64)res64;                               \
 } while (0)
 
 #define read_leb_uint32(p, p_end, res) do {         \
@@ -116,7 +123,8 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module)
 bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpression *init_expr)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
-  uint8 flag, end_byte;
+  uint8 flag, end_byte, *p_float;
+  uint32 i;
 
   CHECK_BUF(p, p_end, 1);
   init_expr->init_expr_type = read_uint8(p);
@@ -125,21 +133,25 @@ bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpres
   switch (flag) {
     /* i32.const */
     case INIT_EXPR_TYPE_I32_CONST:
-      read_leb_uint32(p, p_end, init_expr->u.i32);
+      read_leb_int32(p, p_end, init_expr->u.i32);
       break;
     /* i64.const */
     case INIT_EXPR_TYPE_I64_CONST:
-      read_leb_uint64(p, p_end, init_expr->u.i64);
+      read_leb_int64(p, p_end, init_expr->u.i64);
       break;
     /* f32.const */
     case INIT_EXPR_TYPE_F32_CONST:
       CHECK_BUF(p, p_end, 4);
-      init_expr->u.f32 = read_float32(p);
+      p_float = (uint8*)&init_expr->u.f32;
+      for (i = 0; i < sizeof(float32); i++)
+        *p_float++ = *p++;
       break;
     /* f64.const */
     case INIT_EXPR_TYPE_F64_CONST:
       CHECK_BUF(p, p_end, 8);
-      init_expr->u.f64 = read_float64(p);
+      p_float = (uint8*)&init_expr->u.f64;
+      for (i = 0; i < sizeof(float64); i++)
+        *p_float++ = *p++;
       break;
     /* get_global */
     case INIT_EXPR_TYPE_GET_GLOBAL:
