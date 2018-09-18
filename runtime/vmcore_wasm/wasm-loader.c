@@ -29,7 +29,6 @@
 #include "wasm-opcode.h"
 #include "bh_memory.h"
 
-
 /* Read a value of given type from the address pointed to by the given
    pointer and increase the pointer to the position just after the
    value being read.  */
@@ -42,7 +41,9 @@
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
   if (buf + length > buf_end) {                                 \
-    printf("WASM module load failed: invalid file length.\n");  \
+    set_error_buf(error_buf, error_buf_size,                    \
+                  "WASM module load failed: "                   \
+                  "invalid file length.");                      \
     return false;                                               \
   }                                                             \
 } while (0)
@@ -92,14 +93,24 @@
   res = (uint32)res64;                              \
 } while (0)
 
+static void
+set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
+{
+  if (error_buf != NULL)
+    snprintf(error_buf, error_buf_size, "%s", string);
+}
+
 static char*
-const_str_set_insert(const uint8 *str, int32 len, WASMModule *module)
+const_str_set_insert(const uint8 *str, int32 len, WASMModule *module,
+                     char* error_buf, uint32 error_buf_size)
 {
   HashMap *set = module->const_str_set;
   char *c_str = bh_malloc(len + 1), *value;
 
   if (!c_str) {
-    printf("WASM module load failed: alloc memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "WASM module load failed: "
+                  "alloc memory failed.");
     return NULL;
   }
 
@@ -112,7 +123,9 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module)
   }
 
   if (!bh_hash_map_insert(set, c_str, c_str)) {
-    printf("WASM module load failed: insert string to hash map failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "WASM module load failed: "
+                  "insert string to hash map failed.");
     bh_free(c_str);
     return NULL;
   }
@@ -120,7 +133,9 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module)
   return c_str;
 }
 
-bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpression *init_expr)
+static bool
+load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpression *init_expr,
+               char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint8 flag, end_byte, *p_float;
@@ -158,13 +173,13 @@ bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpres
       read_leb_uint32(p, p_end, init_expr->u.global_index);
       break;
     default:
-      printf("Load initializer expression failed: invalid init type.\n");
+      set_error_buf(error_buf, error_buf_size, "type mismatch");
       return false;
   }
   CHECK_BUF(p, p_end, 1);
   end_byte = read_uint8(p);
   if (end_byte != 0x0b) {
-      printf("Load initializer expression failed: invalid end byte.\n");
+      set_error_buf(error_buf, error_buf_size, "unexpected end");
       return false;
   }
   *p_buf = p;
@@ -173,7 +188,8 @@ bool load_init_expr(const uint8 **p_buf, const uint8 *buf_end, InitializerExpres
 }
 
 static bool
-load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
+                  char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end, *p_org;
   uint32 section_size, type_count, param_count, result_count, i, j;
@@ -187,7 +203,9 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
   if (type_count) {
     module->type_count = type_count;
     if (!(module->types = bh_malloc(sizeof(WASMType*) * type_count))) {
-      printf("Load type section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load type section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -197,7 +215,9 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
       CHECK_BUF(p, p_end, 1);
       flag = read_uint8(p);
       if (flag != 0x60) {
-        printf("Load type section failed: invalid type flag.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load type section failed: "
+                      "invalid type flag.");
         return false;
       }
 
@@ -232,7 +252,9 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load type section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load type section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -277,7 +299,7 @@ load_memory(const uint8 **p_buf, const uint8 *buf_end, WASMMemory *memory)
 }
 
 static bool
-load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, import_count, name_len, type_index, i;
@@ -291,7 +313,9 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   if (import_count) {
     module->import_count = import_count;
     if (!(module->imports = bh_malloc(sizeof(WASMImport) * import_count))) {
-      printf("Load import section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load import section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -302,7 +326,8 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
       /* load module name */
       read_leb_uint32(p, p_end, name_len);
       CHECK_BUF(p, p_end, name_len);
-      if (!(import->module_name = const_str_set_insert(p, name_len, module))) {
+      if (!(import->module_name = const_str_set_insert(p, name_len, module,
+                                                       error_buf, error_buf_size))) {
         return false;
       }
       p += name_len;
@@ -310,7 +335,8 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
       /* load field name */
       read_leb_uint32(p, p_end, name_len);
       CHECK_BUF(p, p_end, name_len);
-      if (!(import->field_name = const_str_set_insert(p, name_len, module))) {
+      if (!(import->field_name = const_str_set_insert(p, name_len, module,
+                                                      error_buf, error_buf_size))) {
         return false;
       }
       p += name_len;
@@ -320,7 +346,9 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
         case IMPORT_KIND_FUNC: /* import function */
           read_leb_uint32(p, p_end, type_index);
           if (type_index >= module->type_count) {
-            printf("Load import section failed: invalid function type index.\n");
+            set_error_buf(error_buf, error_buf_size,
+                          "Load import section failed: "
+                          "invalid function type index.");
             return false;
           }
           import->u.function.func_type = module->types[type_index];
@@ -328,8 +356,9 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 
           if (!(import->u.function.func_ptr_linked = wasm_native_func_lookup
                 (import->module_name, import->field_name))) {
-            printf("Load import section failed: resolve import function (%s, %s) "
-                   "failed.\n", import->module_name, import->field_name);
+            set_error_buf(error_buf, error_buf_size,
+                          "Load import section failed: "
+                          "resolve import function failed.");
             return false;
           }
           break;
@@ -338,12 +367,20 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           if (!load_table(&p, p_end, &import->u.table))
             return false;
           module->import_table_count++;
+          if (module->import_table_count > 1) {
+            set_error_buf(error_buf, error_buf_size, "multiple memories");
+            return false;
+          }
           break;
 
         case IMPORT_KIND_MEMORY: /* import memory */
           if (!load_memory(&p, p_end, &import->u.memory))
             return false;
           module->import_memory_count++;
+          if (module->import_table_count > 1) {
+            set_error_buf(error_buf, error_buf_size, "multiple memories");
+            return false;
+          }
           break;
 
         case IMPORT_KIND_GLOBAL: /* import global */
@@ -354,21 +391,26 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           if (!(wasm_native_global_lookup(import->module_name,
                                           import->field_name,
                                           &import->u.global))) {
-            printf("Load import section failed: resolve import global (%s, %s) "
-                   "failed.\n", import->module_name, import->field_name);
+            set_error_buf(error_buf, error_buf_size,
+                          "Load import section failed: "
+                          "resolve import global failed.");
             return false;
           }
           break;
 
         default:
-          printf("Load import section failed: invalid import type.\n");
+          set_error_buf(error_buf, error_buf_size,
+                        "Load import section failed: "
+                        "invalid import type.");
           return false;
       }
     }
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load import section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load import section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -378,7 +420,8 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 }
 
 static bool
-find_code_section(const uint8 *buf, const uint8 *buf_end, const uint8 **p_buf_code)
+find_code_section(const uint8 *buf, const uint8 *buf_end, const uint8 **p_buf_code,
+                  char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = buf, *p_end = buf_end;
   uint8 section_type;
@@ -400,19 +443,21 @@ find_code_section(const uint8 *buf, const uint8 *buf_end, const uint8 **p_buf_co
       }
     }
     else {
-      printf("WASM module load failed: invalid section type %d.\n",
-             section_type);
+      set_error_buf(error_buf, error_buf_size, "invalid section type");
       return false;
     }
   }
 
-  printf("WASM module load failed: find code section failed.\n");
+  set_error_buf(error_buf, error_buf_size,
+                "WASM module load failed: "
+                "find code section failed.");
   return false;
 }
 
 static bool
 load_function_section(const uint8 **p_buf, const uint8 *buf_end,
-                      const uint8 *buf_code, WASMModule *module)
+                      const uint8 *buf_code, WASMModule *module,
+                      char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   const uint8 *p_code = buf_code, *p_code_end, *p_code_save;
@@ -428,14 +473,18 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
 
   read_leb_uint32(p_code, p_end, code_count);
   if (func_count != code_count) {
-    printf("Load function section failed: invalid function count.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load function section failed: "
+                  "invalid function count.");
     return false;
   }
 
   if (func_count) {
     module->function_count = func_count;
     if (!(module->functions = bh_malloc(sizeof(WASMFunction*) * func_count))) {
-      printf("Load function section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load function section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -445,13 +494,17 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
       /* Resolve function type */
       read_leb_uint32(p, p_end, type_index);
       if (type_index >= module->type_count) {
-        printf("Load function section failed: invalid function type index.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load function section failed: "
+                      "invalid function type index.");
         return false;
       }
 
       read_leb_uint32(p_code, p_end, code_size);
       if (code_size == 0) {
-        printf("Load function section failed: invalid function code size.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load function section failed: "
+                      "invalid function code size.");
         return false;
       }
 
@@ -473,7 +526,9 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
       total_size = offsetof(WASMFunction, code) + code_size + local_count;
 
       if (!(func = module->functions[i] = bh_malloc(total_size))) {
-        printf("Load function section failed: alloc memory failed.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load function section failed: "
+                      "alloc memory failed.");
         return false;
       }
 
@@ -502,7 +557,9 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load function section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load function section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -512,7 +569,7 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
 }
 
 static bool
-load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, table_count, i;
@@ -524,9 +581,15 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   bh_assert(table_count == 1);
 
   if (table_count) {
+    if (table_count > 1) {
+      set_error_buf(error_buf, error_buf_size, "multiple memories");
+      return false;
+    }
     module->table_count = table_count;
     if (!(module->tables = bh_malloc(sizeof(WASMTable) * table_count))) {
-      printf("Load table section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load table section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -540,7 +603,9 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load table section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load table section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -550,7 +615,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
 }
 
 static bool
-load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, memory_count, i;
@@ -562,9 +627,15 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   bh_assert(memory_count == 1);
 
   if (memory_count) {
+    if (memory_count > 1) {
+      set_error_buf(error_buf, error_buf_size, "multiple memories");
+      return false;
+    }
     module->memory_count = memory_count;
     if (!(module->memories = bh_malloc(sizeof(WASMMemory) * memory_count))) {
-      printf("Load memory section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load memory section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -578,7 +649,9 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load memory section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load memory section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -588,7 +661,7 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 }
 
 static bool
-load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, global_count, i;
@@ -602,7 +675,9 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   if (global_count) {
     module->global_count = global_count;
     if (!(module->globals = bh_malloc(sizeof(WASMGlobal) * global_count))) {
-      printf("Load global section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load global section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -617,13 +692,15 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
       global->is_mutable = read_bool(p);
 
       /* initialize expression */
-      if (!load_init_expr(&p, p_end, &(global->init_expr)))
+      if (!load_init_expr(&p, p_end, &(global->init_expr), error_buf, error_buf_size))
         return false;
     }
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load global section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load global section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -633,7 +710,8 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 }
 
 static bool
-load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
+                    char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, export_count, i, index;
@@ -648,7 +726,9 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   if (export_count) {
     module->export_count = export_count;
     if (!(module->exports = bh_malloc(sizeof(WASMExport) * export_count))) {
-      printf("Load export section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load export section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -658,7 +738,8 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
     for (i = 0; i < export_count; i++, export++) {
       read_leb_uint32(p, p_end, str_len);
       CHECK_BUF(p, p_end, str_len);
-      if (!(export->name = const_str_set_insert(p, str_len, module))) {
+      if (!(export->name = const_str_set_insert(p, str_len, module,
+                                                error_buf, error_buf_size))) {
         return false;
       }
       p += str_len;
@@ -671,40 +752,52 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
         /*function index*/
         case EXPORT_KIND_FUNC:
           if (index >= module->function_count + module->import_function_count) {
-            printf("Load export section failed: function index is out of range.\n");
+            set_error_buf(error_buf, error_buf_size,
+                          "Load export section failed: "
+                          "function index is out of range.");
             return false;
           }
           break;
         /*table index*/
         case EXPORT_KIND_TABLE:
           if (index >= module->table_count + module->import_table_count) {
-            printf("Load export section failed: table index is out of range.\n");
+            set_error_buf(error_buf, error_buf_size,
+                          "Load export section failed: "
+                          "table index is out of range.");
             return false;
             }
           break;
         /*memory index*/
         case EXPORT_KIND_MEMORY:
           if (index >= module->memory_count + module->import_memory_count) {
-            printf("Load export section failed: memory index is out of range.\n");
+            set_error_buf(error_buf, error_buf_size,
+                          "Load export section failed: "
+                          "memory index is out of range.");
             return false;
             }
           break;
         /*global index*/
         case EXPORT_KIND_GLOBAL:
           if (index >= module->global_count + module->import_global_count) {
-            printf("Load export section failed: global index is out of range.\n");
+            set_error_buf(error_buf, error_buf_size,
+                          "Load export section failed: "
+                          "global index is out of range.");
             return false;
             }
           break;
         default:
-          printf("Load export section failed: kind flag is unexpected.\n");
+          set_error_buf(error_buf, error_buf_size,
+                        "Load export section failed: "
+                        "kind flag is unexpected.");
           return false;
       }
     }
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load export section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load export section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -714,7 +807,7 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 }
 
 static bool
-load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, table_segment_count, i, j, table_index, function_count, function_index;
@@ -728,7 +821,9 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
   if (table_segment_count) {
     module->table_seg_count = table_segment_count;
     if (!(module->table_segments = bh_malloc(sizeof(WASMTableSeg) * table_segment_count))) {
-      printf("Load table segment section failed: alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load table segment section failed: "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -740,13 +835,15 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
       table_segment->table_index = table_index;
 
       /* initialize expression */
-      if (!load_init_expr(&p, p_end, &(table_segment->base_offset)))
+      if (!load_init_expr(&p, p_end, &(table_segment->base_offset), error_buf, error_buf_size))
         return false;
 
       read_leb_uint32(p, p_end, function_count);
       table_segment->function_count = function_count;
       if (!(table_segment->func_indexes = (uint32 *)bh_malloc(sizeof(uint32) * function_count))) {
-        printf("Load table segment section failed: alloc memory failed.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load table segment section failed: "
+                      "alloc memory failed.");
         return false;
       }
       for (j = 0; j < function_count; j++) {
@@ -757,7 +854,9 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load table segment section failed, invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load table segment section failed, "
+                  "invalid section size.");
     return false;
   }
 
@@ -767,7 +866,7 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
 }
 
 static bool
-load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, data_seg_count, i, mem_index, data_seg_len;
@@ -782,7 +881,9 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
   if (data_seg_count) {
     module->data_seg_count = data_seg_count;
     if (!(module->data_segments = bh_malloc(sizeof(WASMDataSeg*) * data_seg_count))) {
-      printf("Load data segment section failed, alloc memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load data segment section failed, "
+                    "alloc memory failed.");
       return false;
     }
 
@@ -791,13 +892,15 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
     for (i = 0; i < data_seg_count; i++) {
       read_leb_uint32(p, p_end, mem_index);
 
-      if (!load_init_expr(&p, p_end, &init_expr))
+      if (!load_init_expr(&p, p_end, &init_expr, error_buf, error_buf_size))
         return false;
 
       read_leb_uint32(p, p_end, data_seg_len);
 
       if (!(dataseg = module->data_segments[i] = bh_malloc(offsetof(WASMDataSeg, data) + data_seg_len))) {
-        printf("Load data segment section failed: alloc memory failed.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Load data segment section failed: "
+                      "alloc memory failed.");
         return false;
       }
 
@@ -812,7 +915,9 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load data segment section failed, invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load data segment section failed, "
+                  "invalid section size.");
     return false;
   }
 
@@ -822,7 +927,8 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
 }
 
 static bool
-load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
+                  char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size;
@@ -840,7 +946,8 @@ load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
 }
 
 static bool
-load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module)
+load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
+                   char *error_buf, uint32 error_buf_size)
 {
   const uint8 *p = *p_buf, *p_end = buf_end;
   uint32 section_size, start_function;
@@ -852,14 +959,18 @@ load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
 
   if (start_function) {
     if (start_function >= module->function_count + module->import_function_count) {
-      printf("Load start section failed: function index is out of range.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Load start section failed: "
+                    "function index is out of range.");
       return false;
     }
     module->start_function = start_function;
   }
 
   if (section_size != (uint32)(p - *p_buf)) {
-    printf("Load start section failed: invalid section size.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Load start section failed: "
+                  "invalid section size.");
     return false;
   }
 
@@ -869,7 +980,7 @@ load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
 }
 
 static bool
-load(const uint8 *buf, uint32 size, WASMModule *module)
+load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   const uint8 *buf_end = buf + size, *buf_code;
   const uint8 *p = buf, *p_end = buf_end;
@@ -877,13 +988,13 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
 
   CHECK_BUF(p, p_end, sizeof(uint32));
   if ((magic_number = read_uint32(p)) != WASM_MAGIC_NUMBER) {
-    printf("WASM module load failed: invalid magic number.\n");
+    set_error_buf(error_buf, error_buf_size, "magic header not detected");
     return false;
   }
 
   CHECK_BUF(p, p_end, sizeof(uint32));
   if ((version = read_uint32(p)) != WASM_CURRENT_VERSION) {
-    printf("WASM module load failed: invalid version.\n");
+    set_error_buf(error_buf, error_buf_size, "unknown binary version");
     return false;
   }
 
@@ -899,54 +1010,55 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
         p += section_size;
         break;
       case SECTION_TYPE_TYPE:
-        if (!load_type_section(&p, buf_end, module))
+        if (!load_type_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_IMPORT:
-        if (!load_import_section(&p, buf_end, module))
+        if (!load_import_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_FUNC:
-        if (!find_code_section(buf, buf_end, &buf_code))
+        if (!find_code_section(buf, buf_end, &buf_code, error_buf, error_buf_size))
           return false;
-        if (!load_function_section(&p, buf_end, buf_code, module))
+        if (!load_function_section(&p, buf_end, buf_code, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_TABLE:
-        if (!load_table_section(&p, buf_end, module))
+        if (!load_table_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_MEMORY:
-        if (!load_memory_section(&p, buf_end, module))
+        if (!load_memory_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_GLOBAL:
-        if (!load_global_section(&p, buf_end, module))
+        if (!load_global_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_EXPORT:
-        if (!load_export_section(&p, buf_end, module))
+        if (!load_export_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_START:
-        if (!load_start_section(&p, buf_end, module))
+        if (!load_start_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_ELEM:
-        if (!load_table_segment_section(&p, buf_end, module))
+        if (!load_table_segment_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_CODE:
-        if (!load_code_section(&p, buf_end, module))
+        if (!load_code_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       case SECTION_TYPE_DATA:
-        if (!load_data_segment_section(&p, buf_end, module))
+        if (!load_data_segment_section(&p, buf_end, module, error_buf, error_buf_size))
           return false;
         break;
       default:
-        printf("WASM module load failed: unknow section type %d.\n",
-               section_type);
+        set_error_buf(error_buf, error_buf_size,
+                      "WASM module load failed: "
+                      "unknow section type.");
         return false;
     }
   }
@@ -955,12 +1067,14 @@ load(const uint8 *buf, uint32 size, WASMModule *module)
 }
 
 WASMModule*
-wasm_loader_load(const uint8 *buf, uint32 size)
+wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size)
 {
   WASMModule *module = bh_malloc(sizeof(WASMModule));
 
   if (!module) {
-    printf("WASM module load failed: alloc memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "WASM module load failed: "
+                  "alloc memory failed.");
     return NULL;
   }
 
@@ -973,7 +1087,7 @@ wasm_loader_load(const uint8 *buf, uint32 size)
           bh_free)))
     goto fail;
 
-  if (!load(buf, size, module))
+  if (!load(buf, size, module, error_buf, error_buf_size))
     goto fail;
 
   return module;

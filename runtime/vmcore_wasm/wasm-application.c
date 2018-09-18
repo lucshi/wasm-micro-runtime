@@ -96,13 +96,7 @@ wasm_application_execute_main(int argc, char *argv[])
 
   wasm_runtime_call_wasm(func, argc1, argv1);
 
-  /* TODO: check exception */
-
-  /* TODO: only print result for debug, remove me. */
-  if (func->ret_cell_num)
-    printf("WASM execute main function return %d.\n", argv1[0]);
-
-  return true;
+  return !wasm_runtime_get_exception() ? true : false;
 }
 
 #ifdef WASM_ENABLE_REPL
@@ -125,6 +119,7 @@ wasm_application_execute_func(int argc, char *argv[])
   WASMType *type;
   uint32 argc1, *argv1;
   int32 i, p;
+  const char *exception;
 
   bh_assert(argc >= 1);
   func = resolve_function(module_inst, argv[0]);
@@ -192,9 +187,13 @@ wasm_application_execute_func(int argc, char *argv[])
   }
   bh_assert(p == (int32)argc1);
 
+  wasm_runtime_set_exception(NULL);
   wasm_runtime_call_wasm(func, argc1, argv1);
-  /* TODO: check exception */
-
+  exception = wasm_runtime_get_exception();
+  if (exception) {
+    printf("%s\n", exception);
+    goto fail;
+  }
   /* print return value */
   switch (type->types[type->param_count]) {
     case VALUE_TYPE_I32:

@@ -108,13 +108,19 @@ GET_F64_FROM_ADDR (uint32 *addr)
 #define CHECK_MEMORY_OVERFLOW() do {                                         \
     if (flags != 2)                                                          \
       printf("unaligned load in wasm interp.\n");                            \
-    if (offset + addr < addr)                                                \
+    if (offset + addr < addr) {                                              \
+      wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
+    }                                                                        \
     maddr = memory->memory_data + offset + addr;                             \
-    if (maddr < memory->addr_data)                                           \
+    if (maddr < memory->addr_data) {                                         \
+      wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
-    if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data)  \
+    }                                                                        \
+    if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data) {\
+      wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
+    }                                                                        \
   } while (0)
 
 static inline uint32
@@ -286,7 +292,8 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 
 #define PUSH_CSP(type, ret_type, start, else_, end) do {\
     if (frame_csp >= frame->csp_boundary) {             \
-      printf("WASM intepreter failed: block stack overflow.\n");\
+      wasm_runtime_set_exception("WASM intepreter failed: "\
+                                 "block stack overflow.");\
       goto got_exception;                               \
     }                                                   \
     frame_csp->block_type = type;                       \
@@ -310,7 +317,8 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 
 #define POP_CSP_CHECK_OVERFLOW(n) do {                          \
     if (frame_csp - n < frame->csp_bottom) {                    \
-      printf("WASM intepreter failed: block stack pop failed.\n");\
+      wasm_runtime_set_exception("WASM intepreter failed: "     \
+                                 "block stack pop failed.");    \
       goto got_exception;                                       \
     }                                                           \
   } while (0)
@@ -541,11 +549,11 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
                      min_cond, max_cond) do {                        \
     src_type value = POP_##src_op_type();                            \
     if (isnan(value)) {                                              \
-      printf("WASM intepreter failed: invalid conversion of NaN.\n");\
+      wasm_runtime_set_exception("invalid conversion to integer");   \
       goto got_exception;                                            \
     }                                                                \
     else if ((float64)value min_cond || (float64)value max_cond) {   \
-      printf("WASM intepreter failed: integer overflow\n");         \
+      wasm_runtime_set_exception("integer overflow");                \
       goto got_exception;                                            \
     }                                                                \
     PUSH_##dst_op_type(((dst_type)value));                           \
@@ -716,7 +724,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
     switch (opcode) {
       /* control instructions */
       case WASM_OP_UNREACHABLE:
-        printf("wasm interp failed: opcode is unreachable.\n");
+        wasm_runtime_set_exception("unreachable");
         goto got_exception;
 
       case WASM_OP_NOP:
@@ -806,7 +814,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           depths = depth_buf;
         else {
           if (!(depths = bh_malloc(sizeof(uint32) * count))) {
-            printf("wasm interp failed, alloc block memory for br_table failed.\n");
+            wasm_runtime_set_exception("WASM interp failed, "
+                                       "alloc block memory for br_table failed.");
             goto got_exception;
           }
         }
@@ -839,18 +848,38 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         goto call_func_from_interp;
 
       case WASM_OP_CALL_INDIRECT:
-        /* TODO: test */
-        read_leb_uint32(frame_ip, frame_ip_end, tidx);
-        /* to skip 0x00 here */
-        frame_ip++;
-        val = POP_I32();
-        if (val < 0 || val >= (int32)table->cur_size)
-          goto got_exception;
-        fidx = ((uint32*)table->base_addr)[val];
-        if (fidx >= module->function_count)
-          goto got_exception;
-        cur_func = module->functions + fidx;
-        goto call_func_from_interp;
+        {
+          uint32 i;
+          /* TODO: test */
+          read_leb_uint32(frame_ip, frame_ip_end, tidx);
+          /* to skip 0x00 here */
+          frame_ip++;
+          val = POP_I32();
+
+          if (val < 0 || val >= (int32)table->cur_size) {
+            wasm_runtime_set_exception("undefined element");
+            goto got_exception;
+          }
+
+          fidx = ((uint32*)table->base_addr)[val];
+          if (fidx >= module->function_count) {
+            wasm_runtime_set_exception("function index is overflow");
+            goto got_exception;
+          }
+          cur_func = module->functions + fidx;
+
+          if (frame_sp - frame->sp_bottom < cur_func->param_cell_num +
+              cur_func->local_cell_num) {
+            wasm_runtime_set_exception("indirect call type mismatch");
+            goto got_exception;
+          }
+
+          for (i = 0; i < cur_func->u.func->func_type->param_count; i++) {
+            /* TODO: type mismatch check, must implement it after frame_ref optimization */
+          }
+
+          goto call_func_from_interp;
+        }
 
       /* parametric instructions */
       case WASM_OP_DROP:
@@ -1148,7 +1177,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                      NumBytesPerPage * memory->cur_page_count +
                      memory->global_data_size;
         if (!(new_memory = bh_malloc(total_size))) {
-          printf("wasm interp failed, alloc memory for grow memory failed.\n");
+          wasm_runtime_set_exception("WASM interp failed, "
+                                     "alloc memory for grow memory failed.");
           goto got_exception;
         }
         new_memory->cur_page_count = memory->cur_page_count;
@@ -1360,11 +1390,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (a == (int32)0x80000000 && b == -1) {
-          printf("wasm interp failed, integer overflow in divide operation.\n");
+          wasm_runtime_set_exception("integer overflow");
           goto got_exception;
         }
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a / b);
@@ -1378,7 +1408,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a / b);
@@ -1396,7 +1426,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           break;
         }
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a % b);
@@ -1410,7 +1440,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a % b);
@@ -1493,11 +1523,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (a == (int64)0x8000000000000000LL && b == -1) {
-          printf("wasm interp failed, integer overflow in divide operation.\n");
+          wasm_runtime_set_exception("integer overflow");
           goto got_exception;
         }
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a / b);
@@ -1511,7 +1541,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a / b);
@@ -1529,7 +1559,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           break;
         }
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a % b);
@@ -1543,7 +1573,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (b == 0) {
-          printf("wasm interp failed, integer divided by zero.\n");
+          wasm_runtime_set_exception("integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a % b);
@@ -1862,8 +1892,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         goto call_func_from_entry;
 
       default:
-        printf("wasm interp failed: unsupported opcode 0x%02x.\n",
-               opcode);
+        wasm_runtime_set_exception("wasm interp failed: unsupported opcode");
         goto got_exception;
     }
 
@@ -1960,6 +1989,7 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
   WASMThread *self = wasm_runtime_get_self();
   WASMRuntimeFrame *prev_frame = wasm_thread_get_cur_frame(self);
   WASMInterpFrame *frame, *outs_area;
+
   /* Allocate sufficient cells for all kinds of return values.  */
   unsigned all_cell_num = 2, i;
   /* This frame won't be used by JITed code, so only allocate interp
@@ -1989,11 +2019,11 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
   else
     wasm_interp_call_func_bytecode(self, function, frame);
 
-  /* TODO: check exception */
-
   /* Output the return value to the caller */
-  for (i = 0; i < function->ret_cell_num; i++)
-    argv[i] = frame->sp[i - function->ret_cell_num];
+  if (!wasm_runtime_get_exception()) {
+    for (i = 0; i < function->ret_cell_num; i++)
+      argv[i] = frame->sp[i - function->ret_cell_num];
+  }
 
   wasm_thread_set_cur_frame(self, prev_frame);
   FREE_FRAME(self, frame);

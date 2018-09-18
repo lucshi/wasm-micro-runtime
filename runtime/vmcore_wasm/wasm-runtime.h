@@ -189,6 +189,21 @@ void
 wasm_runtime_call_wasm(WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[]);
 
+/**
+ * Set current exception string to global exception string.
+ *
+ * @param exception current exception string
+ */
+void
+wasm_runtime_set_exception(const char *exception);
+
+/**
+ * Get current exception string.
+ *
+ * @return return exception string if exception is thrown, NULL otherwise
+ */
+const char*
+wasm_runtime_get_exception();
 
 #ifdef __cplusplus
 }

@@ -38,11 +38,13 @@ extern "C" {
  *
  * @param buf the byte buffer which contains the WASM binary data
  * @param size the size of the buffer
+ * @param error_buf output of the exception info
+ * @param error_buf_size the size of the exception string
  *
  * @return return module loaded, NULL if failed
  */
 WASMModule*
-wasm_loader_load(const uint8 *buf, uint32 size);
+wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size);
 
 /**
  * Unload a WASM module.

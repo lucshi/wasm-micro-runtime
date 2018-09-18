@@ -75,8 +75,10 @@ app_instance_cleanup(void)
 static void*
 app_instance_main(void *arg)
 {
+  const char *exception;
   wasm_application_execute_main(app_argc, app_argv);
-  /* TODO: check exception */
+  if ((exception = wasm_runtime_get_exception()))
+    printf("%s", exception);
   return NULL;
 }
 
@@ -150,6 +152,7 @@ main(int argc, char *argv[])
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
   wasm_vm_instance_t vm = NULL;
+  char error_buf[64];
 #ifdef WASM_ENABLE_REPL
   bool is_repl_mode = false;
 #endif
@@ -190,8 +193,11 @@ main(int argc, char *argv[])
     goto fail1;
 
   /* load WASM module */
-  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size)))
+  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size,
+                                        error_buf, sizeof(error_buf)))) {
+    printf("%s\n", error_buf);
     goto fail2;
+  }
 
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))

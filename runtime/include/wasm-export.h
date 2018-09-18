@@ -46,11 +46,13 @@ typedef struct WASMVmInstance *wasm_vm_instance_t;
  *
  * @param buf the byte buffer which contains the WASM binary data
  * @param size the size of the buffer
+ * @param error_buf output of the exception info
+ * @param error_buf_size the size of the exception string
  *
  * @return return module loaded, NULL if failed
  */
 wasm_module_t
-wasm_runtime_load(const uint8 *buf, uint32 size);
+wasm_runtime_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size);
 
 /**
  * Unload a WASM module.
@@ -144,6 +146,14 @@ wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
  */
 bool
 wasm_application_execute_main(int argc, char *argv[]);
+
+/**
+ * Get current exception string.
+ *
+ * @return return exception string if exception is thrown, NULL otherwise.
+ */
+const char*
+wasm_runtime_get_exception();
 
 #ifdef WASM_ENABLE_REPL
 /**

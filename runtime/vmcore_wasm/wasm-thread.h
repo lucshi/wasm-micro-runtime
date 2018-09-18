@@ -84,6 +84,9 @@ typedef struct WASMThread {
      exception. */
   void *native_stack_boundary;
 
+  /* The exception buffer of wasm interpreter for current thread. */
+  char cur_exception[128];
+
   /* The WASM stack of a WASM thread. */
   union {
     uint64 _make_it_8_byte_aligned_;

@@ -108,10 +108,32 @@ wasm_runtime_call_wasm(WASMFunctionInstance *function,
   wasm_interp_call_wasm(function, argc, argv);
 }
 
-WASMModule*
-wasm_runtime_load(const uint8 *buf, uint32 size)
+void
+wasm_runtime_set_exception(const char *exception)
 {
-  return wasm_loader_load(buf, size);
+  WASMThread *self = wasm_runtime_get_self();
+
+  if (exception)
+    snprintf(self->cur_exception, sizeof(self->cur_exception), "Exception: %s", exception);
+  else
+    self->cur_exception[0] = '\0';
+}
+
+const char*
+wasm_runtime_get_exception()
+{
+  WASMThread *self = wasm_runtime_get_self();
+
+  if (self->cur_exception[0] == '\0')
+    return NULL;
+  else
+    return self->cur_exception;
+}
+
+WASMModule*
+wasm_runtime_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size)
+{
+  return wasm_loader_load(buf, size, error_buf, error_buf_size);
 }
 
 void
