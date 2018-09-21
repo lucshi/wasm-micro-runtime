@@ -200,8 +200,12 @@ main(int argc, char *argv[])
   }
 
   /* instantiate the module */
-  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module)))
+  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
+                                                    error_buf,
+                                                    sizeof(error_buf)))) {
+    printf("%s\n", error_buf);
     goto fail3;
+  }
 
 #ifdef WASM_ENABLE_REPL
   if (is_repl_mode) {

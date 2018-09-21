@@ -52,7 +52,8 @@ typedef struct WASMVmInstance *wasm_vm_instance_t;
  * @return return module loaded, NULL if failed
  */
 wasm_module_t
-wasm_runtime_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size);
+wasm_runtime_load(const uint8 *buf, uint32 size,
+                  char *error_buf, uint32 error_buf_size);
 
 /**
  * Unload a WASM module.
@@ -66,11 +67,14 @@ wasm_runtime_unload(wasm_module_t module);
  * Instantiate a WASM module
  *
  * @param module the WASM module to instantiate
+ * @param error_buf output of the exception info
+ * @param error_buf_size the size of the exception string
  *
  * @return return the instantiated WASM module instance, NULL if failed
  */
 wasm_module_inst_t
-wasm_runtime_instantiate(const wasm_module_t module);
+wasm_runtime_instantiate(const wasm_module_t module,
+                         char *error_buf, uint32 error_buf_size);
 
 /**
  * Destroy a WASM module instance

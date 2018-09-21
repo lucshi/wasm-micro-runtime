@@ -38,6 +38,12 @@ static WASMVmInstance *supervisor_instance;
 /* The mutex for protecting the VM instance list. */
 static vmci_thread_mutex_t instance_list_lock;
 
+static void
+set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
+{
+  if (error_buf != NULL)
+    snprintf(error_buf, error_buf_size, "%s", string);
+}
 
 static bool
 wasm_runtime_create_supervisor_il_env()
@@ -159,7 +165,8 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
 
 static WASMMemoryInstance*
 memory_instantiate(uint32 init_page_count, uint32 max_page_count,
-                   uint32 addr_data_size, uint32 global_data_size)
+                   uint32 addr_data_size, uint32 global_data_size,
+                   char *error_buf, uint32 error_buf_size)
 {
   WASMMemoryInstance *memory;
   uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
@@ -167,7 +174,9 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
                       addr_data_size + global_data_size;
 
   if (!(memory = bh_malloc(total_size))) {
-    printf("Instantiate memory failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate memory failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -190,7 +199,8 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
  */
 static WASMMemoryInstance**
 memories_instantiate(const WASMModule *module, uint32 addr_data_size,
-                     uint32 global_data_size)
+                     uint32 global_data_size,
+                     char *error_buf, uint32 error_buf_size)
 {
   WASMImport *import;
   uint32 mem_index = 0, i, memory_count =
@@ -205,7 +215,9 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
   memories = bh_malloc(total_size);
 
   if (!memories) {
-    printf("Instantiate memory failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate memory failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -218,8 +230,11 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
       if (!(memory = memories[mem_index++] =
             memory_instantiate(import->u.memory.init_page_count,
                                import->u.memory. max_page_count,
-                               addr_data_size, global_data_size))) {
-        printf("Instantiate memory failed: allocate memory failed.\n");
+                               addr_data_size, global_data_size,
+                               error_buf, error_buf_size))) {
+        set_error_buf(error_buf, error_buf_size,
+                      "Instantiate memory failed: "
+                      "allocate memory failed.");
         memories_deinstantiate(memories, memory_count);
         return NULL;
       }
@@ -231,8 +246,11 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
     if (!(memory = memories[mem_index++] =
           memory_instantiate(module->memories[i].init_page_count,
                              module->memories[i].max_page_count,
-                             addr_data_size, global_data_size))) {
-      printf("Instantiate memory failed: allocate memory failed.\n");
+                             addr_data_size, global_data_size,
+                             error_buf, error_buf_size))) {
+      set_error_buf(error_buf, error_buf_size,
+                    "Instantiate memory failed: "
+                    "allocate memory failed.");
       memories_deinstantiate(memories, memory_count);
       return NULL;
     }
@@ -241,8 +259,11 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
   if (mem_index == 0) {
     /* no import memory and define memory, but has global variables */
     if (!(memory = memories[mem_index++] =
-          memory_instantiate(0, 0, addr_data_size, global_data_size))) {
-      printf("Instantiate memory failed: allocate memory failed.\n");
+          memory_instantiate(0, 0, addr_data_size, global_data_size,
+                             error_buf, error_buf_size))) {
+      set_error_buf(error_buf, error_buf_size,
+                    "Instantiate memory failed: "
+                    "allocate memory failed.\n");
       memories_deinstantiate(memories, memory_count);
       return NULL;
     }
@@ -271,7 +292,8 @@ tables_deinstantiate(WASMTableInstance **tables, uint32 count)
  * Instantiate tables in a module.
  */
 static WASMTableInstance**
-tables_instantiate(const WASMModule *module)
+tables_instantiate(const WASMModule *module,
+                   char *error_buf, uint32 error_buf_size)
 {
   WASMImport *import;
   uint32 table_index = 0, i, table_count =
@@ -280,7 +302,9 @@ tables_instantiate(const WASMModule *module)
   WASMTableInstance **tables = bh_malloc(total_size), *table;
 
   if (!tables) {
-    printf("Instantiate table failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate table failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -293,7 +317,9 @@ tables_instantiate(const WASMModule *module)
       total_size = offsetof(WASMTableInstance, base_addr) +
                    sizeof(uint32) * import->u.table.init_size;
       if (!(table = tables[table_index++] = bh_malloc(total_size))) {
-        printf("Instantiate table failed: allocate memory failed.\n");
+        set_error_buf(error_buf, error_buf_size,
+                      "Instantiate table failed: "
+                      "allocate memory failed.");
         tables_deinstantiate(tables, table_count);
         return NULL;
       }
@@ -309,7 +335,9 @@ tables_instantiate(const WASMModule *module)
     total_size = offsetof(WASMTableInstance, base_addr) +
                  sizeof(uint32) * module->tables[i].init_size;
     if (!(table = tables[table_index++] = bh_malloc(total_size))) {
-      printf("Instantiate table failed: allocate memory failed.\n");
+      set_error_buf(error_buf, error_buf_size,
+                    "Instantiate table failed: "
+                    "allocate memory failed.");
       tables_deinstantiate(tables, table_count);
       return NULL;
     }
@@ -371,7 +399,8 @@ function_init_local_offsets(WASMFunctionInstance *func)
  * Instantiate functions in a module.
  */
 static WASMFunctionInstance*
-functions_instantiate(const WASMModule *module)
+functions_instantiate(const WASMModule *module,
+                      char *error_buf, uint32 error_buf_size)
 {
   WASMImport *import;
   uint32 i, function_count =
@@ -380,7 +409,9 @@ functions_instantiate(const WASMModule *module)
   WASMFunctionInstance *functions = bh_malloc(total_size), *function;
 
   if (!functions) {
-    printf("Instantiate function failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate function failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -445,7 +476,8 @@ globals_deinstantiate(WASMGlobalInstance *globals)
 static WASMGlobalInstance*
 globals_instantiate(const WASMModule *module,
                     uint32 *p_addr_data_size,
-                    uint32 *p_global_data_size)
+                    uint32 *p_global_data_size,
+                    char *error_buf, uint32 error_buf_size)
 {
   WASMImport *import;
   uint32 addr_data_offset = 0, global_data_offset = 0;
@@ -455,7 +487,9 @@ globals_instantiate(const WASMModule *module,
   WASMGlobalInstance *globals = bh_malloc(total_size), *global;
 
   if (!globals) {
-    printf("Instantiate global failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate global failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -544,14 +578,17 @@ export_functions_deinstantiate(WASMExportFuncInstance *functions)
 static WASMExportFuncInstance*
 export_functions_instantiate(const WASMModule *module,
                              WASMModuleInstance *module_inst,
-                             uint32 export_func_count)
+                             uint32 export_func_count,
+                             char *error_buf, uint32 error_buf_size)
 {
   WASMExportFuncInstance *export_funcs, *export_func;
   WASMExport *export = module->exports;
   uint32 i, total_size = sizeof(WASMExportFuncInstance) * export_func_count;
 
   if (!(export_func = export_funcs = bh_malloc(total_size))) {
-    printf("Instantiate export function failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate export function failed: "
+                  "allocate memory failed.");
     return NULL;
   }
 
@@ -617,7 +654,7 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
  * Instantiate module
  */
 WASMModuleInstance*
-wasm_runtime_instantiate(const WASMModule *module)
+wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
   WASMModuleInstance *module_inst;
   WASMTableSeg *table_seg;
@@ -635,12 +672,15 @@ wasm_runtime_instantiate(const WASMModule *module)
   global_count = module->import_global_count + module->global_count;
   if (global_count &&
       !(globals = globals_instantiate(module, &addr_data_size,
-                                      &global_data_size)))
+                                      &global_data_size,
+                                      error_buf, error_buf_size)))
     return NULL;
 
   /* Allocate the memory */
   if (!(module_inst = bh_malloc(sizeof(WASMModuleInstance)))) {
-    printf("Instantiate module failed: allocate memory failed.\n");
+    set_error_buf(error_buf, error_buf_size,
+                  "Instantiate module failed: "
+                  "allocate memory failed.");
     globals_deinstantiate(globals);
     return NULL;
   }
@@ -660,14 +700,20 @@ wasm_runtime_instantiate(const WASMModule *module)
   /* Instantiate memories/tables/functions */
   if (((module_inst->memory_count > 0 || global_count > 0)
        && !(module_inst->memories =
-            memories_instantiate(module, addr_data_size, global_data_size)))
+            memories_instantiate(module, addr_data_size, global_data_size,
+                                 error_buf, error_buf_size)))
       || (module_inst->table_count > 0
-          && !(module_inst->tables = tables_instantiate(module)))
+          && !(module_inst->tables = tables_instantiate(module,
+                                                        error_buf,
+                                                        error_buf_size)))
       || (module_inst->function_count > 0
-          && !(module_inst->functions = functions_instantiate(module)))
+          && !(module_inst->functions = functions_instantiate(module,
+                                                              error_buf,
+                                                              error_buf_size)))
       || (module_inst->export_func_count > 0
           && !(module_inst->export_functions = export_functions_instantiate(
-                    module, module_inst, module_inst->export_func_count)))) {
+                    module, module_inst, module_inst->export_func_count,
+                    error_buf, error_buf_size)))) {
     wasm_runtime_deinstantiate(module_inst);
     return NULL;
   }
