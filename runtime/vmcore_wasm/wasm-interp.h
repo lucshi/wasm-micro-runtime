@@ -39,6 +39,7 @@ typedef struct WASMBranchBlock {
   uint8 *else_addr;
   uint8 *end_addr;
   uint32 *frame_sp;
+  uint8 *frame_ref;
 } WASMBranchBlock;
 
 struct WASMFunctionInstance;
@@ -63,6 +64,17 @@ typedef struct WASMInterpFrame {
   WASMBranchBlock *csp_boundary;
   WASMBranchBlock *csp;
 
+  /* Ref info (data type) of each local variable cell */
+  uint8 *ref_lp;
+  /* Ref info (data type) of each stack cell */
+  uint8 *ref;
+
+  /* Frame data, the layout is:
+     lp: param_cell_count + local_cell_count
+     sp_bottom to sp_boundary: stack of data
+     csp_bottom to csp_boundary: stack of block
+     ref to frame end: data types of local vairables and stack data
+     */
   uint32 lp[1];
 } WASMInterpFrame;
 

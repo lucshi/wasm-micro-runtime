@@ -44,14 +44,6 @@ extern "C" {
 /* Table Element Type */
 #define TABLE_ELEM_TYPE_ANY_FUNC 0x70
 
-#define CompartmentReservedBytes (4ull * 1024 * 1024 * 1024)
-#define MaxThunkArgAndReturnBytes 256
-#define MaxGlobalBytes (4096 - MaxThunkArgAndReturnBytes)
-#define MaxMemories 255
-#define MaxTables 256
-#define CompartmentRuntimeDataAlignmentLog2 32
-#define ContextRuntimeDataAlignment 4096
-
 #define MaxMemoryPages 65536
 #define MaxTableElems UINT32_MAX
 #define NumBytesPerPage 65536
