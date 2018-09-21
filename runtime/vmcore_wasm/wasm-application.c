@@ -23,8 +23,13 @@
  * Intel in writing.
  */
 
-#include <stdlib.h>
 #include <errno.h>
+#ifdef WASM_ENABLE_REPL
+#include <ieee754.h>
+#endif
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include "wasm.h"
 #include "wasm-interp.h"
 #include "wasm-runtime.h"
@@ -160,8 +165,19 @@ wasm_application_execute_func(int argc, char *argv[])
       case VALUE_TYPE_F32:
         {
           float32 f32 = strtof(argv[i], &endptr);
-          if (strcmp(argv[i], "-nan") == 0)
-            f32 = -f32;
+          if (isnan(f32)) {
+            if (argv[i][0] == '-') {
+              f32 = -f32;
+            }
+            if (endptr[0] == ':') {
+              uint32 sig;
+              union ieee754_float u;
+              sig = strtoul(endptr + 1, &endptr, 0);
+              u.f = f32;
+              u.ieee.mantissa = sig;
+              f32 = u.f;
+            }
+          }
           *(float32*)&argv1[p++] = f32;
           break;
         }
@@ -169,8 +185,20 @@ wasm_application_execute_func(int argc, char *argv[])
         {
           union { float64 val; uint32 parts[2]; } u;
           u.val = strtod(argv[i], &endptr);
-          if (strcmp(argv[i], "-nan") == 0)
-            u.val = -u.val;
+          if (isnan(u.val)) {
+            if (argv[i][0] == '-') {
+              u.val = -u.val;
+            }
+            if (endptr[0] == ':') {
+              uint64 sig;
+              union ieee754_double ud;
+              sig = strtoull(endptr + 1, &endptr, 0);
+              ud.d = u.val;
+              ud.ieee.mantissa0 = sig >> 32;
+              ud.ieee.mantissa1 = sig;
+              u.val = ud.d;
+            }
+          }
           argv1[p++] = u.parts[0];
           argv1[p++] = u.parts[1];
           break;
