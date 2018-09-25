@@ -539,7 +539,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
       wasm_runtime_set_exception("invalid conversion to integer");   \
       goto got_exception;                                            \
     }                                                                \
-    else if ((float64)value min_cond || (float64)value max_cond) {   \
+    else if (value min_cond || value max_cond) {                     \
       wasm_runtime_set_exception("integer overflow");                \
       goto got_exception;                                            \
     }                                                                \
@@ -1116,7 +1116,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_I64_STORE:
-        DEF_OP_STORE(uint64, I64, PUT_I64_TO_ADDR(maddr, sval));
+        DEF_OP_STORE(uint64, I64, PUT_I64_TO_ADDR((uint32*)maddr, sval));
         break;
 
       case WASM_OP_F32_STORE:
@@ -1124,7 +1124,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_F64_STORE:
-        DEF_OP_STORE(float64, F64, PUT_F64_TO_ADDR(maddr, sval));
+        DEF_OP_STORE(float64, F64, PUT_F64_TO_ADDR((uint32*)maddr, sval));
         break;
 
       case WASM_OP_I32_STORE8:
@@ -1783,19 +1783,29 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         }
 
       case WASM_OP_I32_TRUNC_S_F32:
-        DEF_OP_TRUNC(int32, I32, float32, F32, < INT32_MIN, > INT32_MAX);
+        /* Copy the float32/float64 values from WAVM, need to test more.
+           We don't use INT32_MIN/INT32_MAX/UINT32_MIN/UINT32_MAX,
+           since float/double values of ieee754 cannot precisely represent
+           all int32/uint32/int64/uint64 values, e.g.:
+           UINT32_MAX is 4294967295, but (float32)4294967295 is 4294967296.0f,
+           but not 4294967295.0f. */
+        DEF_OP_TRUNC(int32, I32, float32, F32, <= -2147483904.0f,
+                                               >= 2147483648.0f);
         break;
 
       case WASM_OP_I32_TRUNC_U_F32:
-        DEF_OP_TRUNC(uint32, I32, float32, F32, <= -1, > UINT32_MAX);
+        DEF_OP_TRUNC(uint32, I32, float32, F32, <= -1.0f,
+                                                >= 4294967296.0f);
         break;
 
       case WASM_OP_I32_TRUNC_S_F64:
-        DEF_OP_TRUNC(int32, I32, float64, F64, < INT32_MIN, > INT32_MAX);
+        DEF_OP_TRUNC(int32, I32, float64, F64, <= -2147483649.0,
+                                               >= 2147483648.0);
         break;
 
       case WASM_OP_I32_TRUNC_U_F64:
-        DEF_OP_TRUNC(uint32, I32, float64, F64, <= -1 , > UINT32_MAX);
+        DEF_OP_TRUNC(uint32, I32, float64, F64, <= -1.0 ,
+                                                >= 4294967296.0);
         break;
 
       /* conversions of i64 */
@@ -1808,19 +1818,23 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_I64_TRUNC_S_F32:
-        DEF_OP_TRUNC(int64, I64, float32, F32, < INT64_MIN, > INT64_MAX);
+        DEF_OP_TRUNC(int64, I64, float32, F32, <= -9223373136366403584.0f,
+                                               >= 9223372036854775808.0f);
         break;
 
       case WASM_OP_I64_TRUNC_U_F32:
-        DEF_OP_TRUNC(uint64, I64, float32, F32, <= -1, > UINT64_MAX);
+        DEF_OP_TRUNC(uint64, I64, float32, F32, <= -1.0f,
+                                                >= 18446744073709551616.0f);
         break;
 
       case WASM_OP_I64_TRUNC_S_F64:
-        DEF_OP_TRUNC(int64, I64, float64, F64, < INT64_MIN, > INT64_MAX);
+        DEF_OP_TRUNC(int64, I64, float64, F64, <= -9223372036854777856.0,
+                                               >= 9223372036854775808.0);
         break;
 
       case WASM_OP_I64_TRUNC_U_F64:
-        DEF_OP_TRUNC(uint64, I64, float64, F64, <= -1, > UINT64_MAX);
+        DEF_OP_TRUNC(uint64, I64, float64, F64, <= -1.0,
+                                                >= 18446744073709551616.0);
         break;
 
       /* conversions of f32 */
