@@ -184,9 +184,8 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
   memory->cur_page_count = init_page_count;
   memory->max_page_count = max_page_count;
   memory->addr_data = memory->base_addr;
-  memory->memory_data = init_page_count > 0
-                        ? memory->base_addr + addr_data_size
-                        : NULL;
+  memory->addr_data_size = addr_data_size;
+  memory->memory_data = memory->base_addr + addr_data_size;
   memory->global_data = memory->base_addr + addr_data_size +
                         NumBytesPerPage * memory->cur_page_count;
   memory->global_data_size = global_data_size;

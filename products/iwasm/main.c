@@ -211,8 +211,8 @@ main(int argc, char *argv[])
   if (is_repl_mode) {
     /* create vm instance */
     if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                            32 * 1024, /* TODO, define macro */
-                                            32 * 1024, /* TODO, define macro */
+                                            1024 * 1024, /* TODO, define macro */
+                                            1024 * 1024, /* TODO, define macro */
                                             app_instance_func, NULL,
                                             app_instance_cleanup)))
       goto fail4;

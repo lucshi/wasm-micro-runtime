@@ -44,6 +44,8 @@ typedef struct WASMMemoryInstance {
      stdin/stdout/stderr is stored here, but the actual addr info, or offset
      to memory_data is stored in global_data section */
   uint8 *addr_data;
+  /* Size of addr_data */
+  uint32 addr_data_size;
   /* Memory data */
   uint8 *memory_data;
   /* Global data of global instances */

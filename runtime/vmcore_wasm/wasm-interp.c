@@ -91,7 +91,7 @@ GET_F64_FROM_ADDR (uint32 *addr)
 
 #define CHECK_MEMORY_OVERFLOW() do {                                         \
     if (flags != 2)                                                          \
-      printf("unaligned load in wasm interp.\n");                            \
+      printf("unaligned load/store in wasm interp, flag is: %d.\n", flags);  \
     if (offset + addr < addr) {                                              \
       wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
@@ -401,8 +401,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   uint32 _off = 0;                              \
   uint64 _res64;                                \
   if (!read_leb(p, p_end, &_off, 64, false,     \
-                &_res64))                       \
+                &_res64)) {                     \
+    wasm_runtime_set_exception("read leb failed");\
     goto got_exception;                         \
+  }                                             \
   p += _off;                                    \
   res = (uint64)_res64;                         \
 } while (0)
@@ -411,8 +413,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   uint32 _off = 0;                              \
   uint64 _res64;                                \
   if (!read_leb(p, p_end, &_off, 64, true,      \
-                &_res64))                       \
+                &_res64)) {                     \
+    wasm_runtime_set_exception("read leb failed");\
     goto got_exception;                         \
+  }                                             \
   p += _off;                                    \
   res = (int64)_res64;                          \
 } while (0)
@@ -421,8 +425,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   uint32 _off = 0;                              \
   uint64 _res64;                                \
   if (!read_leb(p, p_end, &_off, 32, false,     \
-                &_res64))                       \
+                &_res64)) {                     \
+    wasm_runtime_set_exception("read leb failed");\
     goto got_exception;                         \
+  }                                             \
   p += _off;                                    \
   res = (uint32)_res64;                         \
 } while (0)
@@ -431,8 +437,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   uint32 _off = 0;                              \
   uint64 _res64;                                \
   if (!read_leb(p, p_end, &_off, 32, true,      \
-                &_res64))                       \
+                &_res64)) {                     \
+    wasm_runtime_set_exception("read leb failed");\
     goto got_exception;                         \
+  }                                             \
   p += _off;                                    \
   res = (int32)_res64;                          \
 } while (0)
@@ -441,8 +449,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   uint32 _off = 0;                              \
   uint64 _res64;                                \
   if (!read_leb(p, p_end, &_off, 7, false,      \
-                &_res64))                       \
+                &_res64)) {                     \
+    wasm_runtime_set_exception("read leb failed");\
     goto got_exception;                         \
+  }                                             \
   p += _off;                                    \
   res = (uint8)_res64;                          \
 } while (0)
@@ -556,9 +566,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     param_count = cur_func->u.func->func_type->param_count;         \
     local_count = cur_func->u.func->local_count;                    \
     read_leb_uint32(frame_ip, frame_ip_end, local_idx);             \
-    if (local_idx >= param_count + local_count)                     \
+    if (local_idx >= param_count + local_count) {                   \
+      wasm_runtime_set_exception("local index is overflow");        \
       goto got_exception;                                           \
-                                                                    \
+    }                                                               \
     if (local_idx < param_count)                                    \
       local_type = cur_func->u.func->func_type->types[local_idx];   \
     else                                                            \
@@ -621,7 +632,8 @@ ALLOC_FRAME(WASMThread *self, uint32 size, WASMInterpFrame *prev_frame)
   if (frame)
     frame->prev_frame = prev_frame;
   else {
-    /* TODO: throw soe */
+    wasm_runtime_set_exception("WASM interp failed, "
+                               "alloc frame failed.");
   }
 
   return frame;
@@ -723,6 +735,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
                                          frame_ip_end, BLOCK_TYPE_BLOCK,
                                          &else_addr, &end_addr)) {
+          wasm_runtime_set_exception("wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -735,6 +748,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
                                          frame_ip_end, BLOCK_TYPE_LOOP,
                                          &else_addr, &end_addr)) {
+          wasm_runtime_set_exception("wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -747,6 +761,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (!wasm_loader_find_block_addr(module->branch_set, frame_ip,
                                          frame_ip_end, BLOCK_TYPE_IF,
                                          &else_addr, &end_addr)) {
+          wasm_runtime_set_exception("wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -835,8 +850,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       case WASM_OP_CALL:
         read_leb_uint32(frame_ip, frame_ip_end, fidx);
-        if (fidx >= module->function_count)
+        if (fidx >= module->function_count) {
+          wasm_runtime_set_exception("function index is overflow");
           goto got_exception;
+        }
         cur_func = module->functions + fidx;
         goto call_func_from_interp;
 
@@ -936,6 +953,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUSH_F64(LOCAL_F64(local_idx));
               break;
             default:
+              wasm_runtime_set_exception("get local type is invalid");
               goto got_exception;
           }
           break;
@@ -962,6 +980,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               SET_LOCAL_F64(local_idx, POP_F64());
               break;
             default:
+              wasm_runtime_set_exception("set local type is invalid");
               goto got_exception;
           }
           break;
@@ -988,6 +1007,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               SET_LOCAL_F64(local_idx, GET_F64_FROM_ADDR(frame_sp - 2));
               break;
             default:
+              wasm_runtime_set_exception("tee local type is invalid");
               goto got_exception;
           }
           break;
@@ -1000,8 +1020,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
           if (!(global = get_global(module, global_idx))
-              || global_idx >= module->global_count)
+              || global_idx >= module->global_count) {
+            wasm_runtime_set_exception("global index is overflow");
             goto got_exception;
+          }
 
           switch (global->type) {
             case VALUE_TYPE_I32:
@@ -1017,6 +1039,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUSH_F64(*(float64*)get_global_addr(memory, global));
               break;
             default:
+              wasm_runtime_set_exception("get global type is invalid");
               goto got_exception;
           }
           break;
@@ -1030,8 +1053,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
           if (!(global = get_global(module, global_idx))
-              || global_idx >= module->global_count)
+              || global_idx >= module->global_count) {
+            wasm_runtime_set_exception("global index is overflow");
             goto got_exception;
+          }
 
           global_addr = get_global_addr(memory, global);
           switch (global->type) {
@@ -1048,6 +1073,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUT_F64_TO_ADDR((uint32*)global_addr, POP_F64());
               break;
             default:
+              wasm_runtime_set_exception("set global index is overflow");
               goto got_exception;
           }
           break;
@@ -1169,8 +1195,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (delta == 0)
           continue;
         else if (delta + prev_page_count > memory->max_page_count ||
-                 delta + prev_page_count < prev_page_count)
+                 delta + prev_page_count < prev_page_count) {
+          wasm_runtime_set_exception("WASM interp failed, "
+                                     "page count is overflow.");
           goto got_exception;
+        }
         memory->cur_page_count += delta;
         total_size = offsetof(WASMMemoryInstance, base_addr) +
                      (memory->memory_data - memory->base_addr) +
