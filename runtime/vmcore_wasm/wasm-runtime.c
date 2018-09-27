@@ -29,6 +29,7 @@
 #include "wasm-loader.h"
 #include "wasm-native.h"
 #include "wasm-interp.h"
+#include "bh_log.h"
 #include "bh_memory.h"
 
 
@@ -71,6 +72,9 @@ wasm_runtime_create_supervisor_il_env()
 bool
 wasm_runtime_init()
 {
+
+  if (bh_log_init() != 0)
+    return false;
 
   if (vmci_thread_sys_init() != 0)
     return false;

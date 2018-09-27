@@ -23,6 +23,7 @@
  * Intel in writing.
  */
 
+#include "bh_log.h"
 #include "bh_vector.h"
 #include "bh_memory.h"
 
@@ -70,7 +71,7 @@ bool
 bh_vector_init(Vector *vector, uint32 init_length, uint32 size_elem)
 {
   if (!vector) {
-    printf("Init vector failed: vector is NULL.\n");
+    LOG_ERROR("Init vector failed: vector is NULL.\n");
     return false;
   }
 
@@ -79,7 +80,7 @@ bh_vector_init(Vector *vector, uint32 init_length, uint32 size_elem)
   }
 
   if (!(vector->data = alloc_vector_data(init_length, size_elem))) {
-    printf("Init vector failed: alloc memory failed.\n");
+    LOG_ERROR("Init vector failed: alloc memory failed.\n");
     return false;
   }
 
@@ -93,12 +94,12 @@ bool
 bh_vector_set(Vector *vector, uint32 index, const void *elem_buf)
 {
   if (!vector || !elem_buf) {
-    printf("Set vector elem failed: vector or elem buf is NULL.\n");
+    LOG_ERROR("Set vector elem failed: vector or elem buf is NULL.\n");
     return false;
   }
 
   if (index >= vector->num_elements) {
-    printf("Set vector elem failed: invalid elem index.\n");
+    LOG_ERROR("Set vector elem failed: invalid elem index.\n");
     return false;
   }
 
@@ -110,12 +111,12 @@ bh_vector_set(Vector *vector, uint32 index, const void *elem_buf)
 bool bh_vector_get(const Vector *vector, uint32 index, void *elem_buf)
 {
   if (!vector || !elem_buf) {
-    printf("Get vector elem failed: vector or elem buf is NULL.\n");
+    LOG_ERROR("Get vector elem failed: vector or elem buf is NULL.\n");
     return false;
   }
 
   if (index >= vector->num_elements) {
-    printf("Get vector elem failed: invalid elem index.\n");
+    LOG_ERROR("Get vector elem failed: invalid elem index.\n");
     return false;
   }
 
@@ -130,17 +131,17 @@ bool bh_vector_insert(Vector *vector, uint32 index, const void *elem_buf)
   uint8 *p;
 
   if (!vector || !elem_buf) {
-    printf("Insert vector elem failed: vector or elem buf is NULL.\n");
+    LOG_ERROR("Insert vector elem failed: vector or elem buf is NULL.\n");
     return false;
   }
 
   if (index >= vector->num_elements) {
-    printf("Insert vector elem failed: invalid elem index.\n");
+    LOG_ERROR("Insert vector elem failed: invalid elem index.\n");
     return false;
   }
 
   if (!extend_vector(vector, vector->num_elements + 1)) {
-    printf("Insert vector elem failed: extend vector failed.\n");
+    LOG_ERROR("Insert vector elem failed: extend vector failed.\n");
     return false;
   }
 
@@ -158,12 +159,12 @@ bool bh_vector_insert(Vector *vector, uint32 index, const void *elem_buf)
 bool bh_vector_append(Vector *vector, const void *elem_buf)
 {
   if (!vector || !elem_buf) {
-    printf("Append vector elem failed: vector or elem buf is NULL.\n");
+    LOG_ERROR("Append vector elem failed: vector or elem buf is NULL.\n");
     return false;
   }
 
   if (!extend_vector(vector, vector->num_elements + 1)) {
-    printf("Append ector elem failed: extend vector failed.\n");
+    LOG_ERROR("Append ector elem failed: extend vector failed.\n");
     return false;
   }
 
@@ -180,12 +181,12 @@ bh_vector_remove(Vector *vector, uint32 index, void *old_elem_buf)
   uint8 *p;
 
   if (!vector) {
-    printf("Remove vector elem failed: vector is NULL.\n");
+    LOG_ERROR("Remove vector elem failed: vector is NULL.\n");
     return false;
   }
 
   if (index >= vector->num_elements) {
-    printf("Remove vector elem failed: invalid elem index.\n");
+    LOG_ERROR("Remove vector elem failed: invalid elem index.\n");
     return false;
   }
 
@@ -214,7 +215,7 @@ bool
 bh_vector_destroy(Vector *vector)
 {
   if (!vector) {
-    printf("Destroy vector elem failed: vector is NULL.\n");
+    LOG_ERROR("Destroy vector elem failed: vector is NULL.\n");
     return false;
   }
 

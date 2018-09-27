@@ -24,11 +24,12 @@
  */
 
 #include "wasm.h"
+#include "bh_log.h"
 #include "bh_memory.h"
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
   if (buf + length > buf_end) {                                 \
-    printf("WASM read data failed: data out of range.\n");      \
+    LOG_ERROR("WASM read data failed: data out of range.\n");   \
     return false;                                               \
   }                                                             \
 } while (0)
@@ -56,8 +57,8 @@ read_leb(const uint8 *buf, const uint8 *buf_end,
     }
     bcnt += 1;
     if (bcnt > (maxbits + 7 - 1) / 7) {
-      printf("WASM module load failed: unsigned LEB at byte %d overflow\n",
-             start_pos);
+      LOG_ERROR("WASM module load failed: unsigned LEB at byte %d overflow\n",
+                start_pos);
       return false;
     }
   }

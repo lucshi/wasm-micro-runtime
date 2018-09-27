@@ -26,5 +26,7 @@
 #ifndef _BH_CONFIG_H
 #define _BH_CONFIG_H
 
+#define WASM_ENABLE_LOG 1
+
 #endif /* end of _BH_CONFIG_H */
 

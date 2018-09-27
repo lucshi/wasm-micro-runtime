@@ -25,6 +25,7 @@
 
 #include "wasm-thread.h"
 #include "wasm-runtime.h"
+#include "bh_log.h"
 #include "bh_memory.h"
 
 
@@ -67,7 +68,7 @@ wasm_thread_create_ilr(struct WASMModuleInstance *module_inst,
   total_size = offsetof(WASMVmInstance, main_tlr.wasm_stack.s.bottom)
                + wasm_stack_size;
   if (!(ilr = bh_malloc(total_size))) {
-    printf("Initialize VM instance failed: allocate memory failed.\n");
+    LOG_ERROR("Initialize VM instance failed: allocate memory failed.\n");
     return NULL;
   }
   memset(ilr, 0, total_size);

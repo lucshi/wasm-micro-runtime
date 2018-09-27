@@ -24,7 +24,6 @@
  */
 
 #include "bh_assert.h"
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -38,18 +37,3 @@ void bh_assert_internal(int v, const char *file_name, int line_number, const cha
   printf("\nASSERTION FAILED: %s, at FILE=%s, LINE=%d\n", expr_string, file_name, line_number);
   abort();
 }
-
-void bh_debug_internal(const char *file_name, int line_number, const char *fmt, ...)
-{
-  va_list args;
-
-  va_start(args, fmt);
-  bh_assert(file_name);
-
-  printf("\nDebug info FILE=%s, LINE=%d: ", file_name, line_number);
-  vprintf(fmt, args);
-
-  va_end(args);
-  printf("\n");
-}
-

@@ -28,7 +28,9 @@
 
 #include "wasm-native.h"
 #include "wasm-runtime.h"
+#include "bh_log.h"
 #include "bh_memory.h"
+#include "bh_platform_log.h"
 
 #include <sys/ioctl.h>
 #include <sys/uio.h>
@@ -45,7 +47,7 @@
 static void
 _print_i32_wrapper(WASMThread *self, uint32 *args)
 {
-  printf("%d\n", *args);
+  bh_printf("%d\n", *args);
 }
 
 static void
@@ -53,13 +55,13 @@ _print_i64_wrapper(WASMThread *self, uint32 *args)
 {
   uint64 value;
   memcpy(&value, args, sizeof(uint64));
-  printf("%lld\n", value);
+  bh_printf("%lld\n", value);
 }
 
 static void
 _print_f32_wrapper(WASMThread *self, uint32 *args)
 {
-  printf("%f\n", *(float*)args);
+  bh_printf("%f\n", *(float*)args);
 }
 
 static void
@@ -67,7 +69,7 @@ _print_f64_wrapper(WASMThread *self, uint32 *args)
 {
   float64 value;
   memcpy(&value, args, sizeof(float64));
-  printf("%f\n", value);
+  bh_printf("%f\n", value);
 }
 #endif
 
@@ -133,7 +135,7 @@ static void
 abort_wrapper(WASMThread *self, uint32 *args)
 {
   int32 code = args[0];
-  printf("env.abort(%i)\n",code);
+  bh_printf("env.abort(%i)\n",code);
   abort();
 }
 
@@ -154,7 +156,7 @@ ___syscall140_wrapper(WASMThread *self, uint32 *args)
   *(int64*)args = *result;
 
   if (ret != 0) {
-    printf("___syscall140_wrapper execute failed.\n");
+    LOG_ERROR("___syscall140_wrapper execute failed.\n");
     abort();
   }
   */
@@ -182,7 +184,7 @@ ___syscall146_wrapper(WASMThread *self, uint32 *args)
   struct iovec *native_iovec;
 
   if(!(native_iovec = bh_malloc(sizeof(struct iovec) * iovcnt))) {
-    printf("alloc iovec failed in native function lookup.\n");
+    LOG_ERROR("alloc iovec failed in native function lookup.\n");
     abort();
   }
 

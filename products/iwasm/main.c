@@ -24,11 +24,12 @@
  */
 
 #define _GNU_SOURCE
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "bh_assert.h"
+#include "bh_log.h"
 #include "bh_platform.h"
+#include "bh_platform_log.h"
 #include "bh_thread.h"
 #include "wasm-export.h"
 #include "bh_memory.h"
@@ -52,13 +53,16 @@ vmci_set_tl_root(void *tlr)
 static int
 print_help()
 {
-  printf("Usage: iwasm [-options] wasm_file [args...]\n");
-  printf("options:\n");
-  printf("  -f|--function name     Specify function name to run "
-         "in module rather than main\n");
+  bh_printf("Usage: iwasm [-options] wasm_file [args...]\n");
+  bh_printf("options:\n");
+  bh_printf("  -f|--function name     Specify function name to run "
+            "in module rather than main\n");
+#if WASM_ENABLE_LOG != 0
+  bh_printf("  -v=X                   Set log verbose level (0 to 2, default is 1), larger level with more log\n");
+#endif
 #ifdef WASM_ENABLE_REPL
-  printf("  --repl                 Start a very simple REPL (read-eval-print-loop) mode \n"
-         "                         that runs commands in the form of `FUNC ARG...`\n");
+  bh_printf("  --repl                 Start a very simple REPL (read-eval-print-loop) mode \n"
+            "                         that runs commands in the form of `FUNC ARG...`\n");
 #endif
 
   return 1;
@@ -78,7 +82,7 @@ app_instance_main(void *arg)
   const char *exception;
   wasm_application_execute_main(app_argc, app_argv);
   if ((exception = wasm_runtime_get_exception()))
-    printf("%s", exception);
+    bh_printf("%s", exception);
   return NULL;
 }
 
@@ -118,7 +122,7 @@ app_instance_func(void *arg)
   size_t len = 0;
   ssize_t n;
 
-  while ((printf("webassembly> "), n = getline(&cmd, &len, stdin)) != -1) {
+  while ((bh_printf("webassembly> "), n = getline(&cmd, &len, stdin)) != -1) {
     bh_assert(n > 0);
     if (cmd[n - 1] == '\n') {
       if (n == 1)
@@ -128,7 +132,7 @@ app_instance_func(void *arg)
     }
     app_argv = split_string(cmd, &app_argc);
     if (app_argv == NULL) {
-      printf("Wasm prepare param failed: split string failed.\n");
+      LOG_ERROR("Wasm prepare param failed: split string failed.\n");
       break;
     }
     if (app_argc != 0) {
@@ -153,6 +157,9 @@ main(int argc, char *argv[])
   wasm_module_inst_t wasm_module_inst = NULL;
   wasm_vm_instance_t vm = NULL;
   char error_buf[64];
+#if WASM_ENABLE_LOG != 0
+  int log_verbose_level = 1;
+#endif
 #ifdef WASM_ENABLE_REPL
   bool is_repl_mode = false;
 #endif
@@ -168,6 +175,13 @@ main(int argc, char *argv[])
        }
        func_name = argv[0];
     }
+#if WASM_ENABLE_LOG != 0
+    else if (!strncmp (argv[0], "-v=", 3)) {
+      log_verbose_level = atoi(argv[0] + 3);
+      if (log_verbose_level < 0 || log_verbose_level > 2)
+        return print_help ();
+    }
+#endif
 #ifdef WASM_ENABLE_REPL
     else if (!strcmp(argv[0], "--repl"))
       is_repl_mode = true;
@@ -187,6 +201,8 @@ main(int argc, char *argv[])
   if (!wasm_runtime_init())
     return -1;
 
+  bh_log_set_verbose_level(log_verbose_level);
+
   /* load WASM byte buffer from WASM bin file */
   if (!(wasm_file_buf = (uint8*)
         bh_read_file_to_buffer(wasm_file, &wasm_file_size)))
@@ -195,7 +211,7 @@ main(int argc, char *argv[])
   /* load WASM module */
   if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size,
                                         error_buf, sizeof(error_buf)))) {
-    printf("%s\n", error_buf);
+    bh_printf("%s\n", error_buf);
     goto fail2;
   }
 
@@ -203,7 +219,7 @@ main(int argc, char *argv[])
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
-    printf("%s\n", error_buf);
+    bh_printf("%s\n", error_buf);
     goto fail3;
   }
 

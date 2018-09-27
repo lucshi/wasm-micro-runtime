@@ -27,6 +27,7 @@
 #include "wasm.h"
 #include "wasm-native.h"
 #include "wasm-opcode.h"
+#include "bh_log.h"
 #include "bh_memory.h"
 
 /* Read a value of given type from the address pointed to by the given
@@ -259,7 +260,7 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
   }
 
   *p_buf = p;
-  /* printf("Load type section success.\n"); */
+  LOG_VERBOSE("Load type section success.\n");
   return true;
 }
 
@@ -415,7 +416,7 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  /* printf("Load import section success.\n"); */
+  LOG_VERBOSE("Load import section success.\n");
   return true;
 }
 
@@ -564,7 +565,7 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
   }
 
   *p_buf = p;
-  /* printf("Load function section success.\n"); */
+  LOG_VERBOSE("Load function section success.\n");
   return true;
 }
 
@@ -610,7 +611,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   }
 
   *p_buf = p;
-  /* printf("Load table section success.\n"); */
+  LOG_VERBOSE("Load table section success.\n");
   return true;
 }
 
@@ -656,7 +657,7 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  /* printf("Load memory section success.\n"); */
+  LOG_VERBOSE("Load memory section success.\n");
   return true;
 }
 
@@ -705,7 +706,7 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  /* printf("Load global section success.\n"); */
+  LOG_VERBOSE("Load global section success.\n");
   return true;
 }
 
@@ -802,7 +803,7 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   }
 
   *p_buf = p;
-  /* printf("Load export section success.\n"); */
+  LOG_VERBOSE("Load export section success.\n");
   return true;
 }
 
@@ -861,7 +862,7 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
   }
 
   *p_buf = p;
-  /* printf("Load table segment section success.\n"); */
+  LOG_VERBOSE("Load table segment section success.\n");
   return true;
 }
 
@@ -922,7 +923,7 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
   }
 
   *p_buf = p;
-  /* printf("Load data segment section success.\n"); */
+  LOG_VERBOSE("Load data segment section success.\n");
   return true;
 }
 
@@ -940,7 +941,7 @@ load_code_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
   /* TODO: should check if there really have section_size code bytes */
   p += section_size;
   *p_buf = p;
-  /* printf("Load code segment section success.\n"); */
+  LOG_VERBOSE("Load code segment section success.\n");
 
   return true;
 }
@@ -975,7 +976,7 @@ load_start_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   }
 
   *p_buf = p;
-  /* printf("Load start section success.\n"); */
+  LOG_VERBOSE("Load start section success.\n");
   return true;
 }
 
@@ -1001,7 +1002,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
   while (p < p_end) {
     CHECK_BUF(p, p_end, 1);
     uint8 section_type = read_uint8(p);
-    /* printf("section_type: %d\n", section_type); */
+    LOG_VERBOSE("section_type: %d\n", section_type);
 
     switch (section_type) {
       case SECTION_TYPE_USER:
@@ -1062,7 +1063,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
         return false;
     }
   }
-  /* printf("Load module success.\n"); */
+  LOG_VERBOSE("Load module success.\n");
   return true;
 }
 
@@ -1435,8 +1436,8 @@ wasm_loader_find_block_addr(HashMap *branch_set,
         break;
 
       default:
-        printf("WASM loader find block addr failed: invalid opcode %02x.\n",
-               opcode);
+        LOG_ERROR("WASM loader find block addr failed: invalid opcode %02x.\n",
+                  opcode);
         break;
     }
   }

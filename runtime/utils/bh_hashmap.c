@@ -24,6 +24,7 @@
  */
 
 #include "bh_hashmap.h"
+#include "bh_log.h"
 #include "bh_thread.h"
 #include "bh_memory.h"
 
@@ -59,13 +60,13 @@ bh_hash_map_create(uint32 size, bool use_lock,
   uint32 total_size;
 
   if (size > HASH_MAP_MAX_SIZE) {
-    printf("HashMap create failed: size is too large.\n");
+    LOG_ERROR("HashMap create failed: size is too large.\n");
     return NULL;
   }
 
   if (!hash_func || !key_equal_func) {
-    printf("HashMap create failed: hash function or key equal function "
-           " is NULL.\n");
+    LOG_ERROR("HashMap create failed: hash function or key equal function "
+              " is NULL.\n");
     return NULL;
   }
 
@@ -74,7 +75,7 @@ bh_hash_map_create(uint32 size, bool use_lock,
                (use_lock ? sizeof(korp_mutex) : 0);
 
   if (!(map = bh_malloc(total_size))) {
-    printf("HashMap create failed: alloc memory failed.\n");
+    LOG_ERROR("HashMap create failed: alloc memory failed.\n");
     return NULL;
   }
 
@@ -84,7 +85,7 @@ bh_hash_map_create(uint32 size, bool use_lock,
     map->lock = (korp_mutex*)
       ((uint8*)map + offsetof(HashMap, elements) + sizeof(HashMapElem) * size);
     if (vm_mutex_init(map->lock, false)) {
-      printf("HashMap create failed: init map lock failed.\n");
+      LOG_ERROR("HashMap create failed: init map lock failed.\n");
       bh_free(map);
       return NULL;
     }
@@ -105,7 +106,7 @@ bh_hash_map_insert(HashMap *map, void *key, void *value)
   HashMapElem *elem;
 
   if (!map || !key) {
-    printf("HashMap insert elem failed: map or key is NULL.\n");
+    LOG_ERROR("HashMap insert elem failed: map or key is NULL.\n");
     return false;
   }
 
@@ -117,14 +118,14 @@ bh_hash_map_insert(HashMap *map, void *key, void *value)
   elem = map->elements[index];
   while (elem) {
     if (map->key_equal_func(elem->key, key)) {
-      printf("HashMap insert elem failed: duplicated key found.\n");
+      LOG_ERROR("HashMap insert elem failed: duplicated key found.\n");
       goto fail;
     }
     elem = elem->next;
   }
 
   if (!(elem = bh_malloc(sizeof(HashMapElem)))) {
-    printf("HashMap insert elem failed: alloc memory failed.\n");
+    LOG_ERROR("HashMap insert elem failed: alloc memory failed.\n");
     goto fail;
   }
 
@@ -153,7 +154,7 @@ bh_hash_map_find(HashMap *map, void *key)
   void *value;
 
   if (!map || !key) {
-    printf("HashMap find elem failed: map or key is NULL.\n");
+    LOG_ERROR("HashMap find elem failed: map or key is NULL.\n");
     return NULL;
   }
 
@@ -189,7 +190,7 @@ bh_hash_map_update(HashMap *map, void *key, void *value,
   HashMapElem *elem;
 
   if (!map || !key) {
-    printf("HashMap update elem failed: map or key is NULL.\n");
+    LOG_ERROR("HashMap update elem failed: map or key is NULL.\n");
     return false;
   }
 
@@ -227,7 +228,7 @@ bh_hash_map_remove(HashMap *map, void *key,
   HashMapElem *elem, *prev;
 
   if (!map || !key) {
-    printf("HashMap remove elem failed: map or key is NULL.\n");
+    LOG_ERROR("HashMap remove elem failed: map or key is NULL.\n");
     return false;
   }
 
@@ -275,7 +276,7 @@ bh_hash_map_destroy(HashMap *map)
   HashMapElem *elem, *next;
 
   if (!map) {
-    printf("HashMap destroy failed: map is NULL.\n");
+    LOG_ERROR("HashMap destroy failed: map is NULL.\n");
     return false;
   }
 

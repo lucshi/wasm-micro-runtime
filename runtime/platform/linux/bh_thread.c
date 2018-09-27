@@ -23,6 +23,7 @@
  * Intel in writing.
  */
 
+#include "bh_log.h"
 #include "bh_thread.h"
 #include "bh_assert.h"
 #include "bh_memory.h"
@@ -30,8 +31,6 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-
-#define LOG_FATAL printf
 
 static korp_mutex thread_list_lock;
 static pthread_key_t thread_local_storage_key[BH_MAX_TLS_NUM];
@@ -90,8 +89,8 @@ int vm_thread_create_with_prio(korp_tid *tid,
   pthread_attr_init(&tattr);
   pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_JOINABLE);
   if(pthread_attr_setstacksize(&tattr, stack_size) != 0) {
-    bh_debug("Invalid thread stack size %u. Min stack size on Linux = %u",
-             stack_size, PTHREAD_STACK_MIN);
+    LOG_ERROR("Invalid thread stack size %u. Min stack size on Linux = %u\n",
+              stack_size, PTHREAD_STACK_MIN);
     pthread_attr_destroy(&tattr);
     return BHT_ERROR;
   }
@@ -191,7 +190,7 @@ void vm_mutex_lock(korp_mutex *mutex)
   bh_assert(mutex);
   ret = pthread_mutex_lock(mutex);
   if (0 != ret) {
-    LOG_FATAL("vm mutex lock failed (ret=%d)!\n", ret);
+    fprintf(stderr, "vm mutex lock failed (ret=%d)!\n", ret);
     exit(-1);
   }
 }
@@ -217,7 +216,7 @@ void vm_mutex_unlock(korp_mutex *mutex)
   bh_assert(mutex);
   ret = pthread_mutex_unlock(mutex);
   if (0 != ret) {
-    LOG_FATAL("vm mutex unlock failed (ret=%d)!\n", ret);
+    fprintf(stderr, "vm mutex unlock failed (ret=%d)!\n", ret);
     exit(-1);
   }
 }

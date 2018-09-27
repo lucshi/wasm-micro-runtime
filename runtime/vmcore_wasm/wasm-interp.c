@@ -28,6 +28,7 @@
 #include "wasm-thread.h"
 #include "wasm-opcode.h"
 #include "wasm-loader.h"
+#include "bh_log.h"
 #include "bh_memory.h"
 
 typedef int32 CellType_I32;
@@ -91,7 +92,7 @@ GET_F64_FROM_ADDR (uint32 *addr)
 
 #define CHECK_MEMORY_OVERFLOW() do {                                         \
     if (flags != 2)                                                          \
-      printf("unaligned load/store in wasm interp, flag is: %d.\n", flags);  \
+      LOG_WARNING("unaligned load/store in wasm interp, flag is: %d.\n", flags);\
     if (offset + addr < addr) {                                              \
       wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
@@ -2018,7 +2019,6 @@ wasm_interp_call_func_bytecode(WASMThread *self,
     }
 
   got_exception:
-    printf("WASM Interpreter failed: got exception.\n");
     if (depths && depths != depth_buf) {
       bh_free(depths);
       depths = NULL;
