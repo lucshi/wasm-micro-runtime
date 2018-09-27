@@ -92,7 +92,7 @@ GET_F64_FROM_ADDR (uint32 *addr)
 
 #define CHECK_MEMORY_OVERFLOW() do {                                         \
     if (flags != 2)                                                          \
-      LOG_WARNING("unaligned load/store in wasm interp, flag is: %d.\n", flags);\
+      LOG_VERBOSE("unaligned load/store in wasm interp, flag is: %d.\n", flags);\
     if (offset + addr < addr) {                                              \
       wasm_runtime_set_exception("out of bounds memory access");             \
       goto got_exception;                                                    \
@@ -1186,7 +1186,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       case WASM_OP_MEMORY_GROW:
       {
-        uint32 reserved, prev_page_count, delta, total_size;
+        uint32 reserved, prev_page_count, delta, total_size, tmp;
         WASMMemoryInstance *new_memory;
 
         read_leb_uint32(frame_ip, frame_ip_end, reserved);
@@ -1197,9 +1197,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           continue;
         else if (delta + prev_page_count > memory->max_page_count ||
                  delta + prev_page_count < prev_page_count) {
-          wasm_runtime_set_exception("WASM interp failed, "
-                                     "page count is overflow.");
-          goto got_exception;
+          tmp = POP_I32();
+          PUSH_I32(-1);
+          (void)tmp;
+          continue;
         }
         memory->cur_page_count += delta;
         total_size = offsetof(WASMMemoryInstance, base_addr) +

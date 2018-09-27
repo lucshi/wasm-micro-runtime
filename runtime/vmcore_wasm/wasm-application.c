@@ -206,7 +206,7 @@ wasm_application_execute_func(int argc, char *argv[])
           break;
         }
     }
-    if (*endptr != '\0') {
+    if (*endptr != '\0' && *endptr != '_') {
       LOG_ERROR("Wasm prepare param failed: invalid num (%s).\n", argv[i]);
       goto fail;
     }
