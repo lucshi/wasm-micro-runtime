@@ -230,6 +230,14 @@ _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
   *args = off_dest;
 }
 
+#ifdef WASM_ENABLE_REPL
+static void
+print_i32_wrapper(WASMThread *self, uint32 *args)
+{
+  bh_printf("%d\n", *args);
+}
+#endif
+
 /* TODO: add function parameter/result types check */
 #define REG_NATIVE_FUNC(module_name, func_name) \
     {#module_name, #func_name, func_name##_wrapper}
@@ -258,7 +266,10 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, ___syscall146),
   REG_NATIVE_FUNC(env, ___syscall54),
   REG_NATIVE_FUNC(env, ___syscall6),
-  REG_NATIVE_FUNC(env, _emscripten_memcpy_big)
+  REG_NATIVE_FUNC(env, _emscripten_memcpy_big),
+#ifdef WASM_ENABLE_REPL
+  REG_NATIVE_FUNC(spectest, print_i32)
+#endif
 };
 
 void*
@@ -298,7 +309,10 @@ static WASMNativeGlobalDef native_global_defs[] = {
   { "env", "STACK_MAX", .global_data.u32 = 128 * NumBytesPerPage },
   { "env", "ABORT", .global_data.u32 = 0 },
   { "env", "memoryBase", .global_data.u32 = 1024 },
-  { "env", "tableBase", .global_data.u32 = 0 }
+  { "env", "tableBase", .global_data.u32 = 0 },
+#ifdef WASM_ENABLE_REPL
+  { "spectest", "global_i32", .global_data.u32 = 666}
+#endif
 };
 
 bool
@@ -355,4 +369,5 @@ wasm_native_init()
   /* TODO: qsort the function defs and global defs. */
   return true;
 }
+
 
