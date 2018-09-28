@@ -32,16 +32,6 @@
 extern "C" {
 #endif
 
-typedef struct WASMBranchBlock {
-  uint8 block_type;
-  uint8 return_type;
-  uint8 *start_addr;
-  uint8 *else_addr;
-  uint8 *end_addr;
-  uint32 *frame_sp;
-  uint8 *frame_ref;
-} WASMBranchBlock;
-
 struct WASMFunctionInstance;
 
 typedef struct WASMInterpFrame {

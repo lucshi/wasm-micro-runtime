@@ -668,11 +668,13 @@ wasm_interp_call_func_native(WASMThread *self,
   if (cur_func->ret_cell_num == 1) {
     prev_frame->sp[0] = argv[0];
     prev_frame->sp++;
+    prev_frame->ref++;
   }
   else if (cur_func->ret_cell_num == 2) {
     prev_frame->sp[0] = argv[0];
     prev_frame->sp[1] = argv[1];
     prev_frame->sp += 2;
+    prev_frame->ref += 2;
   }
 
   FREE_FRAME(self, frame);
@@ -1139,12 +1141,33 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_F32_STORE:
-        DEF_OP_STORE(float32, F32, *(float32*)maddr = sval);
-        break;
+        {
+          uint32 offset, flags, addr;
+          read_leb_uint32(frame_ip, frame_ip_end, flags);
+          read_leb_uint32(frame_ip, frame_ip_end, offset);
+          frame_sp--;
+          frame_ref--;
+          addr = POP_I32();
+          CHECK_MEMORY_OVERFLOW();
+          *(uint32*)maddr = frame_sp[1];
+          (void)flags;
+          break;
+        }
 
       case WASM_OP_F64_STORE:
-        DEF_OP_STORE(float64, F64, PUT_F64_TO_ADDR((uint32*)maddr, sval));
-        break;
+        {
+          uint32 offset, flags, addr;
+          read_leb_uint32(frame_ip, frame_ip_end, flags);
+          read_leb_uint32(frame_ip, frame_ip_end, offset);
+          frame_sp -= 2;
+          frame_ref -= 2;
+          addr = POP_I32();
+          CHECK_MEMORY_OVERFLOW();
+          *(uint32*)maddr = frame_sp[1];
+          *((uint32*)maddr + 1) = frame_sp[2];
+          (void)flags;
+          break;
+        }
 
       case WASM_OP_I32_STORE8:
         DEF_OP_STORE(uint32, I32, *(uint8*)maddr = (uint8)sval);
@@ -1971,7 +1994,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         WASMType *func_type;
 
         all_cell_num = cur_func->param_cell_num + cur_func->local_cell_num
-                       + self->stack_cell_num + self->block_cell_num;
+                       + cur_func->u.func->max_stack_cell_num
+                       + cur_func->u.func->max_block_num * sizeof(WASMBranchBlock) / 4;
         frame_size = wasm_interp_interp_frame_size(all_cell_num);
 
         if (!(frame = ALLOC_FRAME(self, frame_size, prev_frame))) {
@@ -1987,10 +2011,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         frame_sp = frame->sp_bottom = frame_lp + cur_func->param_cell_num
                                                + cur_func->local_cell_num;
-        frame->sp_boundary = frame->sp_bottom + self->stack_cell_num;
+        frame->sp_boundary = frame->sp_bottom + cur_func->u.func->max_stack_cell_num;
 
         frame_csp = frame->csp_bottom = (WASMBranchBlock*)frame->sp_boundary;
-        frame->csp_boundary = frame->csp_bottom + self->block_cell_num;
+        frame->csp_boundary = frame->csp_bottom + cur_func->u.func->max_block_num;
 
         frame->ref_lp = (uint8*)frame->csp_boundary;
         frame_ref = frame->ref_lp + cur_func->param_cell_num

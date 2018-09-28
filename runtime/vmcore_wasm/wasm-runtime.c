@@ -227,20 +227,18 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
   memset(memories, 0, total_size);
 
   /* instantiate memories from import section */
-  import = module->imports;
-  for (i = 0; i < module->import_count; i++, import++) {
-    if (import->kind == IMPORT_KIND_MEMORY) {
-      if (!(memory = memories[mem_index++] =
-            memory_instantiate(import->u.memory.init_page_count,
-                               import->u.memory. max_page_count,
-                               addr_data_size, global_data_size,
-                               error_buf, error_buf_size))) {
-        set_error_buf(error_buf, error_buf_size,
-                      "Instantiate memory failed: "
-                      "allocate memory failed.");
-        memories_deinstantiate(memories, memory_count);
-        return NULL;
-      }
+  import = module->import_memories;
+  for (i = 0; i < module->import_memory_count; i++, import++) {
+    if (!(memory = memories[mem_index++] =
+          memory_instantiate(import->u.memory.init_page_count,
+                             import->u.memory. max_page_count,
+                             addr_data_size, global_data_size,
+                             error_buf, error_buf_size))) {
+      set_error_buf(error_buf, error_buf_size,
+                    "Instantiate memory failed: "
+                    "allocate memory failed.");
+      memories_deinstantiate(memories, memory_count);
+      return NULL;
     }
   }
 
@@ -314,23 +312,21 @@ tables_instantiate(const WASMModule *module,
   memset(tables, 0, total_size);
 
   /* instantiate tables from import section */
-  import = module->imports;
-  for (i = 0; i < module->import_count; i++, import++) {
-    if (import->kind == IMPORT_KIND_TABLE) {
-      total_size = offsetof(WASMTableInstance, base_addr) +
-                   sizeof(uint32) * import->u.table.init_size;
-      if (!(table = tables[table_index++] = bh_malloc(total_size))) {
-        set_error_buf(error_buf, error_buf_size,
-                      "Instantiate table failed: "
-                      "allocate memory failed.");
-        tables_deinstantiate(tables, table_count);
-        return NULL;
-      }
-
-      memset(table, 0, total_size);
-      table->cur_size = import->u.table.init_size;
-      table->max_size = import->u.table.max_size;
+  import = module->import_tables;
+  for (i = 0; i < module->import_table_count; i++, import++) {
+    total_size = offsetof(WASMTableInstance, base_addr) +
+                 sizeof(uint32) * import->u.table.init_size;
+    if (!(table = tables[table_index++] = bh_malloc(total_size))) {
+      set_error_buf(error_buf, error_buf_size,
+                    "Instantiate table failed: "
+                    "allocate memory failed.");
+      tables_deinstantiate(tables, table_count);
+      return NULL;
     }
+
+    memset(table, 0, total_size);
+    table->cur_size = import->u.table.init_size;
+    table->max_size = import->u.table.max_size;
   }
 
   /* instantiate tables from table section */
@@ -422,20 +418,18 @@ functions_instantiate(const WASMModule *module,
 
   /* instantiate functions from import section */
   function = functions;
-  import = module->imports;
-  for (i = 0; i < module->import_count; i++, import++) {
-    if (import->kind == IMPORT_KIND_FUNC) {
-      function->is_import_func = true;
-      function->u.func_import = &import->u.function;
+  import = module->import_functions;
+  for (i = 0; i < module->import_function_count; i++, import++) {
+    function->is_import_func = true;
+    function->u.func_import = &import->u.function;
 
-      function->param_cell_num =
-        wasm_type_param_cell_num(import->u.function.func_type);
-      function->ret_cell_num =
-        wasm_type_return_cell_num(import->u.function.func_type);
-      function->local_cell_num = 0;
+    function->param_cell_num =
+      wasm_type_param_cell_num(import->u.function.func_type);
+    function->ret_cell_num =
+      wasm_type_return_cell_num(import->u.function.func_type);
+    function->local_cell_num = 0;
 
-      function++;
-    }
+    function++;
   }
 
   /* instantiate functions from function section */
@@ -500,22 +494,20 @@ globals_instantiate(const WASMModule *module,
 
   /* instantiate globals from import section */
   global = globals;
-  import = module->imports;
-  for (i = 0; i < module->import_count; i++, import++) {
-    if (import->kind == IMPORT_KIND_GLOBAL) {
-      WASMGlobalImport *global_import = &module->imports[i].u.global;
-      global->type = global_import->type;
-      global->is_mutable = global_import->is_mutable;
-      global->is_addr = global_import->is_addr;
-      global->initial_value = global_import->global_data_linked;
-      global->data_offset = global_data_offset;
-      global_data_offset += wasm_value_type_size(global->type);
+  import = module->import_globals;
+  for (i = 0; i < module->import_global_count; i++, import++) {
+    WASMGlobalImport *global_import = &import->u.global;
+    global->type = global_import->type;
+    global->is_mutable = global_import->is_mutable;
+    global->is_addr = global_import->is_addr;
+    global->initial_value = global_import->global_data_linked;
+    global->data_offset = global_data_offset;
+    global_data_offset += wasm_value_type_size(global->type);
 
-      if (global->is_addr)
-        addr_data_offset += sizeof(uint32);
+    if (global->is_addr)
+      addr_data_offset += sizeof(uint32);
 
-      global++;
-    }
+    global++;
   }
 
   /* instantiate globals from global section */
@@ -609,45 +601,6 @@ export_functions_instantiate(const WASMModule *module,
 
   bh_assert((uint32)(export_func - export_funcs) == export_func_count);
   return export_funcs;
-}
-
-static uint32
-branch_set_hash(const void *key)
-{
-  return ((uint32)key >> 4) ^ ((uint32)key >> 14);
-}
-
-static bool
-branch_set_key_equal(void *start_addr1, void *start_addr2)
-{
-  return start_addr1 == start_addr2 ? true : false;
-}
-
-static void
-branch_set_value_destroy(void *value)
-{
-  bh_free(value);
-}
-
-static bool
-branch_set_create(WASMModuleInstance *module_inst)
-{
-  module_inst->branch_set =
-    bh_hash_map_create(64, true,
-                       branch_set_hash,
-                       branch_set_key_equal,
-                       NULL,
-                       branch_set_value_destroy);
-  return module_inst->branch_set ? true : false;
-}
-
-static void
-branch_set_destroy(WASMModuleInstance *module_inst)
-{
-  if (module_inst->branch_set) {
-    bh_hash_map_destroy(module_inst->branch_set);
-    module_inst->branch_set = NULL;
-  }
 }
 
 void
@@ -809,10 +762,10 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
         length = table_seg->function_count;
         if (table_seg->base_offset.u.i32 + length >
             module_inst->default_table->cur_size)
-          length = table_seg->function_count -
-                   table_seg->base_offset.u.i32;
+          length = module_inst->default_table->cur_size
+                   - table_seg->base_offset.u.i32;
         memcpy(table_data + table_seg->base_offset.u.i32,
-               table_seg->func_indexes, length);
+               table_seg->func_indexes, length * sizeof(uint32));
       }
     }
   }
@@ -823,11 +776,7 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
       &module_inst->functions[module->start_function];
   }
 
-  /* Create the branch hash table */
-  if (!branch_set_create(module_inst)) {
-    wasm_runtime_deinstantiate(module_inst);
-    return NULL;
-  }
+  module_inst->branch_set = module->branch_set;
 
   (void)addr_data_end;
   (void)global_data_end;
@@ -851,7 +800,6 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   functions_deinstantiate(module_inst->functions, module_inst->function_count);
   globals_deinstantiate(module_inst->globals);
   export_functions_deinstantiate(module_inst->export_functions);
-  branch_set_destroy(module_inst);
   bh_free(module_inst);
 }
 

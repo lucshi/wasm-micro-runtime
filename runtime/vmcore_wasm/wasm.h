@@ -133,7 +133,28 @@ typedef struct WASMMemory {
   uint32 max_page_count;
 } WASMMemory;
 
+typedef struct WASMTableImport {
+  char *module_name;
+  char *field_name;
+  uint8 elem_type;
+  uint32 flags;
+  uint32 init_size;
+  /* specified if (flags & 1), else it is 0x10000 */
+  uint32 max_size;
+} WASMTableImport;
+
+typedef struct WASMMemoryImport {
+  char *module_name;
+  char *field_name;
+  uint32 flags;
+  /* 64 kbytes one page by default */
+  uint32 init_page_count;
+  uint32 max_page_count;
+} WASMMemoryImport;
+
 typedef struct WASMFunctionImport {
+  char *module_name;
+  char *field_name;
   /* function type */
   WASMType *func_type;
   /* function pointer after linked */
@@ -141,6 +162,8 @@ typedef struct WASMFunctionImport {
 } WASMFunctionImport;
 
 typedef struct WASMGlobalImport {
+  char *module_name;
+  char *field_name;
   uint8 type;
   bool is_mutable;
   bool is_addr;
@@ -149,14 +172,16 @@ typedef struct WASMGlobalImport {
 } WASMGlobalImport;
 
 typedef struct WASMImport {
-  char *module_name;
-  char *field_name;
   uint8 kind;
   union {
     WASMFunctionImport function;
-    WASMTable table;
-    WASMMemory memory;
+    WASMTableImport table;
+    WASMMemoryImport memory;
     WASMGlobalImport global;
+    struct {
+      char *module_name;
+      char *field_name;
+    } names;
   } u;
 } WASMImport;
 
@@ -165,6 +190,8 @@ typedef struct WASMFunction {
   WASMType *func_type;
   uint32 local_count;
   uint8 *local_types;
+  uint32 max_stack_cell_num;
+  uint32 max_block_num;
   uint32 code_size;
   uint8 code[1];
 } WASMFunction;
@@ -212,6 +239,11 @@ typedef struct WASMModule {
   uint32 import_memory_count;
   uint32 import_global_count;
 
+  WASMImport *import_functions;
+  WASMImport *import_tables;
+  WASMImport *import_memories;
+  WASMImport *import_globals;
+
   WASMType **types;
   WASMImport *imports;
   WASMFunction **functions;
@@ -224,7 +256,18 @@ typedef struct WASMModule {
   uint32 start_function;
 
   HashMap *const_str_set;
+  HashMap *branch_set;
 } WASMModule;
+
+typedef struct WASMBranchBlock {
+  uint8 block_type;
+  uint8 return_type;
+  uint8 *start_addr;
+  uint8 *else_addr;
+  uint8 *end_addr;
+  uint32 *frame_sp;
+  uint8 *frame_ref;
+} WASMBranchBlock;
 
 /**
  * Align an unsigned value on a alignment boundary.
