@@ -498,14 +498,6 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     PUSH_##src_op_type(cval);                                        \
   } while (0)
 
-#define DEF_OP_F_CONST(ctype, src_op_type) do {                      \
-    ctype cval;                                                      \
-    uint8 *p_cval = (uint8*)&cval;                                   \
-    for (i = 0; i < sizeof(ctype); i++)                              \
-      *p_cval++ = *frame_ip++;                                       \
-    PUSH_##src_op_type(cval);                                        \
-  } while (0)
-
 #define DEF_OP_EQZ(src_op_type) do {                                 \
     uint32 val;                                                      \
     val = POP_##src_op_type() == 0;                                  \
@@ -1242,12 +1234,24 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         break;
 
       case WASM_OP_F32_CONST:
-        DEF_OP_F_CONST(float32, F32);
-        break;
+        {
+          uint8 *p_float = (uint8*)frame_sp++;
+          for (i = 0; i < sizeof(float32); i++)
+            *p_float++ = *frame_ip++;
+          *frame_ref++ = REF_F32;
+          break;
+        }
 
       case WASM_OP_F64_CONST:
-        DEF_OP_F_CONST(float64, F64);
-        break;
+        {
+          uint8 *p_float = (uint8*)frame_sp++;
+          frame_sp++;
+          for (i = 0; i < sizeof(float64); i++)
+            *p_float++ = *frame_ip++;
+          *frame_ref++ = REF_F64_1;
+          *frame_ref++ = REF_F64_2;
+          break;
+        }
 
       /* comparison instructions of i32 */
       case WASM_OP_I32_EQZ:
