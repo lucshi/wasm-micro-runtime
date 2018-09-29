@@ -122,7 +122,9 @@ typedef struct WASMModuleInstance {
   WASMTableInstance *default_table;
 
   WASMFunctionInstance *start_function;
+
   HashMap *branch_set;
+  const WASMModule *module;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;

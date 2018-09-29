@@ -777,6 +777,7 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
   }
 
   module_inst->branch_set = module->branch_set;
+  module_inst->module = module;
 
   (void)addr_data_end;
   (void)global_data_end;
@@ -800,6 +801,7 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   functions_deinstantiate(module_inst->functions, module_inst->function_count);
   globals_deinstantiate(module_inst->globals);
   export_functions_deinstantiate(module_inst->export_functions);
+
   bh_free(module_inst);
 }
 

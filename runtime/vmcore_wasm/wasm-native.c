@@ -124,6 +124,14 @@ _fputc_wrapper(WASMThread *self, uint32 *args)
 }
 
 static void
+_puts_wrapper(WASMThread *self, uint32 *args)
+{
+  uint8 *memory_base = MEMORY_BASE(self);
+  int32 ret = puts((const char*)memory_base + args[0]);
+  *args = ret;
+}
+
+static void
 _fflush_wrapper(WASMThread *self, uint32 *args)
 {
   int32 file = args[0];
@@ -260,6 +268,7 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _fread),
   REG_NATIVE_FUNC(env, _fwrite),
   REG_NATIVE_FUNC(env, _fputc),
+  REG_NATIVE_FUNC(env, _puts),
   REG_NATIVE_FUNC(env, _fflush),
   REG_NATIVE_FUNC(env, abort),
   REG_NATIVE_FUNC(env, ___syscall140),
@@ -308,7 +317,7 @@ static WASMNativeGlobalDef native_global_defs[] = {
   { "env", "STACKTOP", .global_data.u32 = 64 * NumBytesPerPage },
   { "env", "STACK_MAX", .global_data.u32 = 128 * NumBytesPerPage },
   { "env", "ABORT", .global_data.u32 = 0 },
-  { "env", "memoryBase", .global_data.u32 = 1024 },
+  { "env", "memoryBase", .global_data.u32 = 0 },
   { "env", "tableBase", .global_data.u32 = 0 },
 #ifdef WASM_ENABLE_REPL
   { "spectest", "global_i32", .global_data.u32 = 666}
