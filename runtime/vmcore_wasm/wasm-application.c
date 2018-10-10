@@ -40,8 +40,21 @@
 #include "bh_platform_log.h"
 
 
-/* TODO: resolve start function and execute it, check whether we
-         need to call it firstly when running main function. */
+bool
+wasm_application_execute_start(void)
+{
+  WASMThread *self = wasm_runtime_get_self();
+  WASMFunctionInstance *func = self->vm_instance->module->start_function;
+
+  if (!func)
+    return true;
+
+  bh_assert(!func->is_import_func && func->param_cell_num == 0 && func->ret_cell_num == 0);
+
+  wasm_runtime_call_wasm(func, 0, NULL);
+
+  return !wasm_runtime_get_exception() ? true : false;
+}
 
 static WASMFunctionInstance*
 resolve_main_function(const WASMModuleInstance *module_inst)

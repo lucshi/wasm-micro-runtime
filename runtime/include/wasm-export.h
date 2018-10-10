@@ -140,6 +140,14 @@ void
 wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
 
 /**
+ * Execute start function of WASM module of current instance.
+ *
+ * @return true if the start function is called, false otherwise.
+ */
+bool
+wasm_application_execute_start(void);
+
+/**
  * Find the unique main function from WASM module of current instance
  * and execute that function.
  *

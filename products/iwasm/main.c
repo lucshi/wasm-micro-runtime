@@ -80,6 +80,14 @@ static void*
 app_instance_main(void *arg)
 {
   const char *exception;
+  bool res;
+
+  res = wasm_application_execute_start();
+  if ((exception = wasm_runtime_get_exception()))
+    bh_printf("%s", exception);
+  if (!res)
+    return NULL;
+
   wasm_application_execute_main(app_argc, app_argv);
   if ((exception = wasm_runtime_get_exception()))
     bh_printf("%s", exception);
@@ -121,6 +129,14 @@ app_instance_func(void *arg)
   char *cmd = NULL;
   size_t len = 0;
   ssize_t n;
+  const char *exception;
+  bool res;
+
+  res = wasm_application_execute_start();
+  if ((exception = wasm_runtime_get_exception()))
+    bh_printf("%s", exception);
+  if (!res)
+    return NULL;
 
   while ((bh_printf("webassembly> "), n = getline(&cmd, &len, stdin)) != -1) {
     bh_assert(n > 0);
@@ -137,7 +153,6 @@ app_instance_func(void *arg)
     }
     if (app_argc != 0) {
       wasm_application_execute_func(app_argc, app_argv);
-      /* TODO: check exception */
     }
     free(app_argv);
   }
