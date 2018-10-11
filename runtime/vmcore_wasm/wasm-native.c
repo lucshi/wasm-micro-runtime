@@ -244,6 +244,12 @@ print_i32_wrapper(WASMThread *self, uint32 *args)
 {
   bh_printf("%d\n", *args);
 }
+
+static void
+print_wrapper(WASMThread *self, uint32 *args)
+{
+  bh_printf("%d\n", *args);
+}
 #endif
 
 /* TODO: add function parameter/result types check */
@@ -277,7 +283,8 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, ___syscall6),
   REG_NATIVE_FUNC(env, _emscripten_memcpy_big),
 #ifdef WASM_ENABLE_REPL
-  REG_NATIVE_FUNC(spectest, print_i32)
+  REG_NATIVE_FUNC(spectest, print_i32),
+  REG_NATIVE_FUNC(spectest, print)
 #endif
 };
 
