@@ -1629,17 +1629,17 @@ wasm_loader_find_block_addr(HashMap *branch_set,
   return false;
 }
 
-#define REF_EMPTY 0
-#define REF_I32   1
-#define REF_F32   2
-#define REF_I64_1 3
-#define REF_I64_2 4
-#define REF_F64_1 5
-#define REF_F64_2 6
+#define REF_I32   VALUE_TYPE_I32
+#define REF_F32   VALUE_TYPE_F32
+#define REF_I64_1 VALUE_TYPE_I64
+#define REF_I64_2 VALUE_TYPE_I64
+#define REF_F64_1 VALUE_TYPE_F64
+#define REF_F64_2 VALUE_TYPE_F64
 
 typedef struct BranchBlock {
   uint8 block_type;
   uint8 return_type;
+  bool jumped_by_br;
   uint8 *start_addr;
   uint8 *else_addr;
   uint8 *end_addr;
@@ -1670,45 +1670,65 @@ memory_realloc(void *mem_old, uint32 size_old, uint32 size_new)
     mem = mem_new;                                          \
   } while (0)
 
-#define CHECK_STACK_PUSH() do {                             \
-    if (frame_ref >= frame_ref_boundary) {                  \
-      MEM_REALLOC(frame_ref_bottom, frame_ref_size,         \
-                  frame_ref_size + 16);                     \
-      frame_ref_size += 16;                                 \
-      frame_ref_boundary = frame_ref_bottom + frame_ref_size;\
-      frame_ref = frame_ref_bottom + stack_cell_num;        \
-    }                                                       \
+static bool
+check_stack_push(uint8 **p_frame_ref_bottom, uint8 **p_frame_ref_boundary,
+                 uint8 **p_frame_ref, uint32 *p_frame_ref_size,
+                 uint32 stack_cell_num,
+                 char *error_buf, uint32 error_buf_size)
+{
+  if (*p_frame_ref >= *p_frame_ref_boundary) {
+    MEM_REALLOC(*p_frame_ref_bottom, *p_frame_ref_size,
+                *p_frame_ref_size + 16);
+    *p_frame_ref_size += 16;
+    *p_frame_ref_boundary = *p_frame_ref_bottom + *p_frame_ref_size;
+    *p_frame_ref = *p_frame_ref_bottom + stack_cell_num;
+  }
+  return true;
+fail:
+  return false;
+}
+
+#define CHECK_STACK_PUSH() do {                                 \
+    if (!check_stack_push(&frame_ref_bottom, &frame_ref_boundary,\
+                          &frame_ref, &frame_ref_size,          \
+                          stack_cell_num,                       \
+                          error_buf, error_buf_size))           \
+      goto fail;                                                \
   } while (0)
 
+static bool
+check_stack_pop(uint8 type, uint8 *frame_ref, uint32 stack_cell_num,
+                char *error_buf, uint32 error_buf_size,
+                const char *type_str)
+{
+  if (((type == VALUE_TYPE_I32 || type == VALUE_TYPE_F32)
+       && stack_cell_num < 1)
+      || ((type == VALUE_TYPE_I64 || type == VALUE_TYPE_F64)
+          && stack_cell_num < 2)) {
+    set_error_buf(error_buf, error_buf_size,
+                  "type mismatch: expected data but stack was empty");
+    return false;
+  }
+
+  if ((type == VALUE_TYPE_I32 && *(frame_ref - 1) != REF_I32)
+      || (type == VALUE_TYPE_F32 && *(frame_ref - 1) != REF_F32)
+      || (type == VALUE_TYPE_I64
+          && (*(frame_ref - 2) != REF_I64_1 || *(frame_ref - 1) != REF_I64_2))
+      || (type == VALUE_TYPE_F64
+          && (*(frame_ref - 2) != REF_F64_1 || *(frame_ref - 1) != REF_F64_2))) {
+    if (error_buf != NULL)
+      snprintf(error_buf, error_buf_size, "%s%s%s",
+               "type mismatch: expected ", type_str, " but got other");
+    return false;
+  }
+  return true;
+}
+
 #define CHECK_STACK_POP(TYPE, type) do {                    \
-    /* It is complex to check the POP type due to the       \
-       BR, BR_TABLE and RETURN opcode, we just caculate     \
-       the max stack cell num and max block num currently. */\
-    /*                                                      \
-    if (((VALUE_TYPE_##TYPE == VALUE_TYPE_I32               \
-          || VALUE_TYPE_##TYPE == VALUE_TYPE_F32)           \
-         && stack_cell_num < 1)                             \
-        || ((VALUE_TYPE_##TYPE == VALUE_TYPE_I64            \
-             || VALUE_TYPE_##TYPE == VALUE_TYPE_F64)        \
-            && stack_cell_num < 2)) {                       \
-      set_error_buf(error_buf, error_buf_size,              \
-        "type mismatch: expected data but stack was empty");\
+    if (!check_stack_pop(VALUE_TYPE_##TYPE,                 \
+                         frame_ref, stack_cell_num,         \
+                         error_buf, error_buf_size, #type)) \
       goto fail;                                            \
-    }                                                       \
-    if ((VALUE_TYPE_##TYPE == VALUE_TYPE_I32                \
-         && *(frame_ref - 1) != REF_I32)                    \
-        || (VALUE_TYPE_##TYPE == VALUE_TYPE_F32             \
-            && *(frame_ref - 1) != REF_F32)                 \
-        || (VALUE_TYPE_##TYPE == VALUE_TYPE_I64             \
-            && (*(frame_ref - 2) != REF_I64_1               \
-                || *(frame_ref - 1) != REF_I64_2))          \
-        || (VALUE_TYPE_##TYPE == VALUE_TYPE_F64             \
-            && (*(frame_ref - 2) != REF_F64_1               \
-                || *(frame_ref - 1) != REF_F64_2))) {       \
-      set_error_buf(error_buf, error_buf_size,              \
-        "type mismatch: expected "#type" but got other");   \
-      goto fail;                                            \
-    }*/                                                     \
   } while (0)
 
 #define PUSH_I32() do {                         \
@@ -1751,34 +1771,116 @@ memory_realloc(void *mem_old, uint32 size_old, uint32 size_new)
 
 #define POP_I32() do {                          \
     CHECK_STACK_POP(I32, i32);                  \
-    if (stack_cell_num >= 1) {                  \
-      stack_cell_num--;                         \
-      frame_ref--;                              \
-    }                                           \
+    stack_cell_num--;                           \
+    frame_ref--;                                \
   } while (0)
 
 #define POP_I64() do {                          \
     CHECK_STACK_POP(I64, i64);                  \
-    if (stack_cell_num >= 2) {                  \
-      stack_cell_num -= 2;                      \
-      frame_ref -= 2;                           \
-    }                                           \
+    stack_cell_num -= 2;                        \
+    frame_ref -= 2;                             \
   } while (0)
 
 #define POP_F32() do {                          \
     CHECK_STACK_POP(F32, f32);                  \
-    if (stack_cell_num >= 1) {                  \
-      stack_cell_num--;                         \
-      frame_ref--;                              \
-    }                                           \
+    stack_cell_num--;                           \
+    frame_ref--;                                \
   } while (0)
 
 #define POP_F64() do {                          \
     CHECK_STACK_POP(F64, f64);                  \
-    if (stack_cell_num >= 2) {                  \
-      stack_cell_num -= 2;                      \
-      frame_ref -= 2;                           \
-    }                                           \
+    stack_cell_num -= 2;                        \
+    frame_ref -= 2;                             \
+  } while (0)
+
+static bool
+push_type(uint8 type, uint8 **p_frame_ref_bottom,
+          uint8 **p_frame_ref_boundary,
+          uint8 **p_frame_ref, uint32 *p_frame_ref_size,
+          uint32 *p_stack_cell_num, uint32 *p_max_stack_cell_num,
+          char *error_buf, uint32 error_buf_size)
+{
+  uint8 *frame_ref = *p_frame_ref;
+  uint32 frame_ref_size = *p_frame_ref_size;
+  uint32 max_stack_cell_num = *p_max_stack_cell_num;
+  uint32 stack_cell_num = *p_stack_cell_num;
+
+  switch (type) {
+    case VALUE_TYPE_I64:
+    case VALUE_TYPE_F64:
+      if (!check_stack_push(p_frame_ref_bottom, p_frame_ref_boundary,
+                            &frame_ref, &frame_ref_size,
+                            stack_cell_num,
+                            error_buf, error_buf_size))
+        goto fail;
+      *frame_ref++ = type;
+      stack_cell_num++;
+      if (stack_cell_num > max_stack_cell_num)
+        max_stack_cell_num = stack_cell_num;
+    case VALUE_TYPE_I32:
+    case VALUE_TYPE_F32:
+      if (!check_stack_push(p_frame_ref_bottom, p_frame_ref_boundary,
+                            &frame_ref, &frame_ref_size,
+                            stack_cell_num,
+                            error_buf, error_buf_size))
+        goto fail;
+      *frame_ref++ = type;
+      stack_cell_num++;
+      if (stack_cell_num > max_stack_cell_num)
+        max_stack_cell_num = stack_cell_num;
+      break;
+  }
+
+  *p_frame_ref = frame_ref;
+  *p_frame_ref_size = frame_ref_size;
+  *p_max_stack_cell_num = max_stack_cell_num;
+  *p_stack_cell_num = stack_cell_num;
+  return true;
+fail:
+  return false;
+}
+
+#define PUSH_TYPE(type) do {                        \
+    if (!push_type(type, &frame_ref_bottom,         \
+            &frame_ref_boundary,                    \
+            &frame_ref, &frame_ref_size,            \
+            &stack_cell_num, &max_stack_cell_num,   \
+            error_buf, error_buf_size))             \
+        goto fail;                                  \
+  } while (0)
+
+static bool
+pop_type(uint8 type, uint8 **p_frame_ref, uint32 *p_stack_cell_num,
+         char *error_buf, uint32 error_buf_size)
+{
+  char *type_str[] = { "f64", "f32", "i64", "i32" };
+  switch (type) {
+    case VALUE_TYPE_I64:
+    case VALUE_TYPE_F64:
+      if (!check_stack_pop(type, *p_frame_ref, *p_stack_cell_num,
+                           error_buf, error_buf_size,
+                           type_str[type - VALUE_TYPE_F64]))
+        return false;
+      *p_frame_ref -= 2;
+      *p_stack_cell_num -= 2;
+      break;
+    case VALUE_TYPE_I32:
+    case VALUE_TYPE_F32:
+      if (!check_stack_pop(type, *p_frame_ref, *p_stack_cell_num,
+                           error_buf, error_buf_size,
+                           type_str[type - VALUE_TYPE_F64]))
+        return false;
+      *p_frame_ref -= 1;
+      *p_stack_cell_num -= 1;
+      break;
+  }
+  return true;
+}
+
+#define POP_TYPE(type) do {                         \
+    if (!pop_type(type, &frame_ref, &stack_cell_num,\
+                  error_buf, error_buf_size))       \
+      goto fail;                                    \
   } while (0)
 
 #define CHECK_CSP_PUSH() do {                               \
@@ -1803,6 +1905,7 @@ memory_realloc(void *mem_old, uint32 size_old, uint32 size_new)
 #define PUSH_CSP(type, ret_type, _start_addr) do {  \
     CHECK_CSP_PUSH();                               \
     frame_csp->block_type = type;                   \
+    frame_csp->jumped_by_br = false;                \
     frame_csp->return_type = ret_type;              \
     frame_csp->start_addr = _start_addr;            \
     frame_csp->else_addr = NULL;                    \
@@ -1830,6 +1933,33 @@ memory_realloc(void *mem_old, uint32 size_old, uint32 size_new)
     local_type = local_idx < param_count            \
         ? param_types[local_idx]                    \
         : local_types[local_idx - param_count];     \
+  } while (0)
+
+#define CHECK_BR(depth) do {                                        \
+    if (csp_num < depth + 1) {                                      \
+      set_error_buf(error_buf, error_buf_size, "type mismatch: "    \
+                    "expected data but block stack was empty");     \
+      goto fail;                                                    \
+    }                                                               \
+    if (frame_csp[-(depth + 1)].block_type != BLOCK_TYPE_LOOP) {    \
+      if ((frame_csp[-1].return_type == VALUE_TYPE_I32              \
+            && (stack_cell_num < 1 || frame_ref[-1] != REF_I32))    \
+          || (frame_csp[-1].return_type == VALUE_TYPE_F32           \
+              && (stack_cell_num < 1 || frame_ref[-1] != REF_F32))  \
+          || (frame_csp[-1].return_type == VALUE_TYPE_I64           \
+              && (stack_cell_num < 2                                \
+                  || frame_ref[-2] != REF_I64_1                     \
+                  || frame_ref[-1] != REF_I64_2))                   \
+          || (frame_csp[-1].return_type == VALUE_TYPE_F64           \
+              && (stack_cell_num < 2                                \
+                  || frame_ref[-2] != REF_F64_1                     \
+                  || frame_ref[-1] != REF_F64_2))) {                \
+        set_error_buf(error_buf, error_buf_size, "type mismatch: "  \
+              "expected data but stack was empty or other type");   \
+        goto fail;                                                  \
+      }                                                             \
+      frame_csp[-(depth + 1)].jumped_by_br = true;                  \
+    }                                                               \
   } while (0)
 
 static bool
@@ -1893,26 +2023,14 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   frame_csp_boundary = frame_csp_bottom + 8;
 
   PUSH_CSP(BLOCK_TYPE_FUNCTION, ret_type[0], p);
+  frame_csp[-1].jumped_by_br = true;
 
   while (p < p_end) {
     opcode = *p++;
 
     switch (opcode) {
       case WASM_OP_UNREACHABLE:
-        if(!wasm_loader_find_block_addr(branch_set,
-                                        frame_csp[-1].start_addr,
-                                        p_end,
-                                        frame_csp[-1].block_type,
-                                        &frame_csp[-1].else_addr,
-                                        &frame_csp[-1].end_addr))
-          goto fail;
-
-        if (frame_csp[-1].block_type == BLOCK_TYPE_IF
-            && p < frame_csp[-1].else_addr)
-          p = frame_csp[-1].else_addr;
-        else
-          p = frame_csp[-1].end_addr;
-        break;
+        goto handle_op_br;
 
       case WASM_OP_NOP:
         break;
@@ -1930,6 +2048,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
       case WASM_OP_IF:
         read_leb_uint32(p, p_end, block_return_type);
         PUSH_CSP(BLOCK_TYPE_IF, block_return_type, p);
+        frame_csp[-1].jumped_by_br = true;
         break;
 
       case WASM_OP_ELSE:
@@ -1953,7 +2072,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         {
           POP_CSP();
 
-          /* TODO: check return type of block */
+          POP_TYPE(frame_csp->return_type);
+          PUSH_TYPE(frame_csp->return_type);
 
           if (csp_num > 0) {
             frame_csp->end_addr = p - 1;
@@ -1971,7 +2091,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
             if (!bh_hash_map_find(branch_set, (void*)frame_csp->start_addr)
                 && !bh_hash_map_insert(branch_set, (void*)frame_csp->start_addr,
-                                    block)) {
+                                       block)) {
               set_error_buf(error_buf, error_buf_size,
                             "WASM loader prepare bytecode failed: "
                             "alloc memory failed");
@@ -1985,65 +2105,62 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
       case WASM_OP_BR:
         {
           read_leb_uint32(p, p_end, depth);
+          CHECK_BR(depth);
+
       handle_op_br:
+          for (i = 1; i <= csp_num; i++)
+            if (frame_csp[-i].jumped_by_br)
+              break;
+
+          block_return_type = frame_csp[-i].return_type;
+
           if(!wasm_loader_find_block_addr(branch_set,
-                                          frame_csp[-1].start_addr,
+                                          frame_csp[-i].start_addr,
                                           p_end,
-                                          frame_csp[-1].block_type,
-                                          &frame_csp[-1].else_addr,
-                                          &frame_csp[-1].end_addr))
+                                          frame_csp[-i].block_type,
+                                          &frame_csp[-i].else_addr,
+                                          &frame_csp[-i].end_addr))
             goto fail;
+
+          stack_cell_num = frame_csp[-i].stack_cell_num;
+          frame_ref = frame_ref_bottom + stack_cell_num;
+          csp_num -= i - 1;
+          frame_csp -= i - 1;
 
           if (frame_csp[-1].block_type == BLOCK_TYPE_IF
               && p < frame_csp[-1].else_addr)
             p = frame_csp[-1].else_addr;
-          else
+          else {
             p = frame_csp[-1].end_addr;
+            PUSH_TYPE(block_return_type);
+          }
 
           break;
         }
 
       case WASM_OP_BR_IF:
-        read_leb_uint32(p, p_end, u32); /* labelidx */
+        read_leb_uint32(p, p_end, depth);
         POP_I32();
+        CHECK_BR(depth);
+        frame_csp[-(depth + 1)].jumped_by_br = true;
         break;
 
       case WASM_OP_BR_TABLE:
         {
-          uint32 depth_min = 0xFFFFFFFF;
-
           read_leb_uint32(p, p_end, count);
+          POP_I32();
+
           for (i = 0; i <= count; i++) {
             read_leb_uint32(p, p_end, depth);
-            if (depth < depth_min)
-              depth_min = depth;
+            CHECK_BR(depth);
           }
-
-          depth = depth_min;
-          POP_I32();
           goto handle_op_br;
         }
 
       case WASM_OP_RETURN:
         {
-          switch (ret_type[0]) {
-            case VALUE_TYPE_I32:
-              POP_I32();
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              PUSH_F64();
-              break;
-          }
+          POP_TYPE(ret_type[0]);
+          PUSH_TYPE(ret_type[0]);
 
           if(!wasm_loader_find_block_addr(branch_set,
                                           frame_csp[-1].start_addr,
@@ -2061,20 +2178,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           }
           else {
             p = frame_csp[-1].end_addr;
-            switch (frame_csp[-1].return_type) {
-              case VALUE_TYPE_I32:
-                PUSH_I32();
-                break;
-              case VALUE_TYPE_I64:
-                PUSH_I64();
-                break;
-              case VALUE_TYPE_F32:
-                PUSH_F32();
-                break;
-              case VALUE_TYPE_F64:
-                PUSH_F64();
-                break;
-            }
+            PUSH_TYPE(frame_csp[-1].return_type);
           }
           break;
         }
@@ -2098,37 +2202,10 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             func_type =
               module->functions[func_idx - module->import_function_count]->func_type;
 
-          for (idx = func_type->param_count - 1; idx >= 0; idx--) {
-            switch (func_type->types[idx]) {
-              case VALUE_TYPE_I32:
-              POP_I32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              break;
-            }
-          }
+          for (idx = func_type->param_count - 1; idx >= 0; idx--)
+            POP_TYPE(func_type->types[idx]);
 
-          switch (func_type->types[func_type->param_count]) {
-            case VALUE_TYPE_I32:
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_I64:
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F32:
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_F64:
-              PUSH_F64();
-              break;
-          }
+          PUSH_TYPE(func_type->types[func_type->param_count]);
           break;
         }
 
@@ -2149,38 +2226,10 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
           func_type = module->types[type_idx];
 
-          for (idx = func_type->param_count - 1; idx >= 0; idx--) {
-            switch (func_type->types[idx]) {
-              case VALUE_TYPE_I32:
-              POP_I32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              break;
-            }
-          }
+          for (idx = func_type->param_count - 1; idx >= 0; idx--)
+            POP_TYPE(func_type->types[idx]);
 
-          switch (func_type->types[func_type->param_count]) {
-            case VALUE_TYPE_I32:
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_I64:
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F32:
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_F64:
-              PUSH_F64();
-              break;
-          }
-
+          PUSH_TYPE(func_type->types[func_type->param_count]);
           break;
         }
 
@@ -2198,6 +2247,11 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             stack_cell_num--;
           }
           else {
+            if (stack_cell_num <= 1) {
+              set_error_buf(error_buf, error_buf_size,
+                            "invalid drop: stack was empty");
+              goto fail;
+            }
             frame_ref -= 2;
             stack_cell_num -= 2;
           }
@@ -2206,6 +2260,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
       case WASM_OP_SELECT:
         {
+          uint8 ref_type;
+
           POP_I32();
 
           if (stack_cell_num <= 0) {
@@ -2214,92 +2270,32 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             goto fail;
           }
 
-          switch (*(frame_ref -1)) {
-            case REF_I32:
-              POP_I32();
-              POP_I32();
-              PUSH_I32();
-              break;
-            case REF_I64_2:
-              POP_I64();
-              POP_I64();
-              PUSH_I64();
-              break;
-            case REF_F32:
-              POP_F32();
-              POP_F32();
-              PUSH_F32();
-              break;
-            case REF_F64_2:
-              POP_F64();
-              POP_F64();
-              PUSH_F64();
-              break;
-          }
+          ref_type = *(frame_ref - 1);
+          POP_TYPE(ref_type);
+          POP_TYPE(ref_type);
+          PUSH_TYPE(ref_type);
           break;
         }
 
       case WASM_OP_GET_LOCAL:
         {
           GET_LOCAL_INDEX_AND_TYPE();
-          switch (local_type) {
-            case VALUE_TYPE_I32:
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_F32:
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_I64:
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F64:
-              PUSH_F64();
-              break;
-          }
+          PUSH_TYPE(local_type);
           break;
         }
 
       case WASM_OP_SET_LOCAL:
         {
           GET_LOCAL_INDEX_AND_TYPE();
-          switch (local_type) {
-            case VALUE_TYPE_I32:
-              POP_I32();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              break;
-          }
+          POP_TYPE(local_type);
           break;
         }
 
       case WASM_OP_TEE_LOCAL:
         {
           GET_LOCAL_INDEX_AND_TYPE();
-          switch (local_type) {
-            case VALUE_TYPE_I32:
-              POP_I32();
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              PUSH_F64();
-              break;
-          }
+          POP_TYPE(local_type);
+          PUSH_TYPE(local_type);
           break;
         }
 
@@ -2316,20 +2312,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             ? module->import_globals[global_idx].u.global.type
             :module->globals[global_idx - module->import_global_count].type;
 
-          switch (global_type) {
-            case VALUE_TYPE_I32:
-              PUSH_I32();
-              break;
-            case VALUE_TYPE_I64:
-              PUSH_I64();
-              break;
-            case VALUE_TYPE_F32:
-              PUSH_F32();
-              break;
-            case VALUE_TYPE_F64:
-              PUSH_F64();
-              break;
-          }
+          PUSH_TYPE(global_type);
           break;
         }
 
@@ -2346,20 +2329,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             ? module->import_globals[global_idx].u.global.type
             :module->globals[global_idx - module->import_global_count].type;
 
-          switch (global_type) {
-            case VALUE_TYPE_I32:
-              POP_I32();
-              break;
-            case VALUE_TYPE_I64:
-              POP_I64();
-              break;
-            case VALUE_TYPE_F32:
-              POP_F32();
-              break;
-            case VALUE_TYPE_F64:
-              POP_F64();
-              break;
-          }
+          POP_TYPE(global_type);
           break;
         }
 

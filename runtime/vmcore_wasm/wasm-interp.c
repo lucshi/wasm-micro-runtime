@@ -98,7 +98,7 @@ GET_F64_FROM_ADDR (uint32 *addr)
       goto got_exception;                                                       \
     }                                                                           \
     if (module->memory_base_flag)                                               \
-      maddr = NULL + (offset + addr);                                           \
+      maddr = (uint8*)NULL + (offset + addr);                                   \
     else                                                                        \
       maddr = memory->memory_data + (offset + addr);                            \
     if (!module->memory_base_flag) {                                            \
