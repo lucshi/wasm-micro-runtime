@@ -94,6 +94,9 @@ extern int fopen_s(FILE ** pFile, const char *filename, const char *mode);
 char*
 bh_read_file_to_buffer(const char *filename, int *ret_size);
 
+void*
+bh_dlsym(void *handle, const char *symbol);
+
 #ifdef __cplusplus
 }
 #endif

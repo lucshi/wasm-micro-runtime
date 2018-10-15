@@ -5,5 +5,5 @@ include_directories (. ../../runtime/include
 
 add_executable (iwasm main.c)
 
-target_link_libraries (iwasm platformlib vmcorelib vmutilslib platformlib -lm)
+target_link_libraries (iwasm platformlib vmcorelib vmutilslib platformlib -lm -ldl)
 

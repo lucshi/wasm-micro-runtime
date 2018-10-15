@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 char*
 bh_read_file_to_buffer(const char *filename, int *ret_size)
@@ -104,3 +105,8 @@ int fopen_s(FILE ** pFile, const char *filename, const char *mode)
   return 0;
 }
 
+void*
+bh_dlsym(void *handle, const char *symbol)
+{
+  return dlsym(handle, symbol);
+}

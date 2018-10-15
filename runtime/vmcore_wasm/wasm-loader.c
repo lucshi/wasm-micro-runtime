@@ -335,6 +335,21 @@ load_memory(const uint8 **p_buf, const uint8 *buf_end, WASMMemory *memory)
   return true;
 }
 
+static void*
+resolve_sym(const char *module_name, const char *field_name)
+{
+  void *sym;
+
+  if (strcmp(module_name, "env") != 0)
+    return NULL;
+
+  if (field_name[0] == '_'
+      && (sym = bh_dlsym(NULL, field_name + 1)))
+    return sym;
+
+  return NULL;
+}
+
 static bool
 load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
                     char *error_buf, uint32 error_buf_size)
@@ -473,11 +488,18 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 
           if (!(import->u.function.func_ptr_linked = wasm_native_func_lookup
                 (module_name, field_name))) {
-            set_error_buf(error_buf, error_buf_size,
-                          "Load import section failed: "
-                          "resolve import function failed.");
-            return false;
+            if (!(import->u.function.func_ptr_linked =
+                  resolve_sym(module_name, field_name))) {
+              set_error_buf(error_buf, error_buf_size,
+                            "Load import section failed: "
+                            "resolve import function failed.");
+              return false;
+
+            }
+            import->u.function.call_type = CALL_TYPE_C_INTRINSIC;
+            break;
           }
+          import->u.function.call_type = CALL_TYPE_WRAPPER;
           break;
 
         case IMPORT_KIND_TABLE: /* import table */

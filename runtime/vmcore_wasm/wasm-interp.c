@@ -90,22 +90,24 @@ GET_F64_FROM_ADDR (uint32 *addr)
 }
 #endif  /* WASM_CPU_SUPPORTS_UNALIGNED_64BIT_ACCESS != 0 */
 
-#define CHECK_MEMORY_OVERFLOW() do {                                         \
-    if (flags != 2)                                                          \
+#define CHECK_MEMORY_OVERFLOW() do {                                            \
+    if (flags != 2)                                                             \
       LOG_VERBOSE("unaligned load/store in wasm interp, flag is: %d.\n", flags);\
-    if (offset + addr < addr) {                                              \
-      wasm_runtime_set_exception("out of bounds memory access");             \
-      goto got_exception;                                                    \
-    }                                                                        \
-    maddr = memory->memory_data + offset + addr;                             \
-    if (maddr < memory->addr_data) {                                         \
-      wasm_runtime_set_exception("out of bounds memory access");             \
-      goto got_exception;                                                    \
-    }                                                                        \
-    if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data) {\
-      wasm_runtime_set_exception("out of bounds memory access");             \
-      goto got_exception;                                                    \
-    }                                                                        \
+    if (offset + addr < addr) {                                                 \
+      wasm_runtime_set_exception("out of bounds memory access");                \
+      goto got_exception;                                                       \
+    }                                                                           \
+    maddr = memory->memory_data + (offset + addr);                              \
+    if (memory->memory_data) {                                                  \
+      if (maddr < memory->addr_data) {                                          \
+        wasm_runtime_set_exception("out of bounds memory access");              \
+        goto got_exception;                                                     \
+      }                                                                         \
+      if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data) { \
+        wasm_runtime_set_exception("out of bounds memory access");              \
+        goto got_exception;                                                     \
+      }                                                                         \
+    }                                                                           \
   } while (0)
 
 static inline uint32
@@ -638,6 +640,21 @@ FREE_FRAME(WASMThread *self, WASMInterpFrame *frame)
   wasm_thread_free_wasm_frame(self, frame);
 }
 
+typedef void (*GenericFunctionPointer)();
+int64 invokeNative(uint32 *args, uint32 sz, GenericFunctionPointer f);
+
+typedef float64 (*Float64FuncPtr)(uint32*, uint32, GenericFunctionPointer);
+typedef float32 (*Float32FuncPtr)(uint32*, uint32, GenericFunctionPointer);
+typedef int64 (*Int64FuncPtr)(uint32*, uint32, GenericFunctionPointer);
+typedef int32 (*Int32FuncPtr)(uint32*, uint32, GenericFunctionPointer);
+typedef void (*VoidFuncPtr)(uint32*, uint32, GenericFunctionPointer);
+
+static Int64FuncPtr invokeNative_Int64 = (Int64FuncPtr)invokeNative;
+static Int32FuncPtr invokeNative_Int32 = (Int32FuncPtr)invokeNative;
+static Float64FuncPtr invokeNative_Float64 = (Float64FuncPtr)invokeNative;
+static Float32FuncPtr invokeNative_Float32 = (Float32FuncPtr)invokeNative;
+static VoidFuncPtr invokeNative_Void = (VoidFuncPtr)invokeNative;
+
 static void
 wasm_interp_call_func_native(WASMThread *self,
                              WASMFunctionInstance *cur_func,
@@ -647,7 +664,7 @@ wasm_interp_call_func_native(WASMThread *self,
   WASMInterpFrame *frame;
   typedef void (*F)(WASMThread*, uint32 *argv);
   union { F f; void *v; } u;
-  uint32 argv_buf[128], *argv;
+  uint32 argv_buf[128], *argv, argc = cur_func->param_cell_num;
 
   if (!(frame = ALLOC_FRAME
         (self, wasm_interp_interp_frame_size(local_cell_num), prev_frame)))
@@ -660,10 +677,36 @@ wasm_interp_call_func_native(WASMThread *self,
   wasm_thread_set_cur_frame (self, frame);
 
   argv = argv_buf; /* TODO: allocate memory if buf length is not enough. */
-  word_copy(argv, frame->lp, cur_func->param_cell_num);
+  word_copy(argv, frame->lp, argc);
 
   u.v = cur_func->u.func_import->func_ptr_linked;
-  u.f(self, argv);
+  if (cur_func->u.func_import->call_type == CALL_TYPE_WRAPPER)
+    u.f(self, argv);
+  else {
+    WASMType *func_type = cur_func->u.func_import->func_type;
+    uint8 ret_type = func_type->types[func_type->param_count];
+    GenericFunctionPointer f = (GenericFunctionPointer)(uintptr_t)u.v;
+
+    if (func_type->result_count == 0) {
+      invokeNative_Void(argv, argc, f);
+    }
+    else {
+      switch (ret_type) {
+        case VALUE_TYPE_I32:
+          argv[0] = invokeNative_Int32(argv, argc, f);
+          break;
+        case VALUE_TYPE_I64:
+          PUT_I64_TO_ADDR(argv, invokeNative_Int64(argv, argc, f));
+          break;
+        case VALUE_TYPE_F32:
+          *(float32*)argv = invokeNative_Float32(argv, argc, f);
+          break;
+        case VALUE_TYPE_F64:
+          PUT_F64_TO_ADDR(argv, invokeNative_Float64(argv, argc, f));
+          break;
+      }
+    }
+  }
 
   if (cur_func->ret_cell_num == 1) {
     prev_frame->sp[0] = argv[0];

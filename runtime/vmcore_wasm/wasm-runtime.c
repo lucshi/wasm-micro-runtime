@@ -541,6 +541,26 @@ globals_instantiate(const WASMModule *module,
   return globals;
 }
 
+static void
+globals_instantiate_fix(WASMGlobalInstance *globals,
+                        const WASMModule *module,
+                        const WASMModuleInstance *module_inst)
+{
+  WASMImport *import = module->import_globals;
+  uint32 i;
+
+  /* Fix globals from import section */
+  for (i = 0; i < module->import_global_count; i++, import++, globals++) {
+    if (strcmp(import->u.names.module_name, "env") == 0
+        && strcmp(import->u.names.field_name, "memoryBase") == 0) {
+      globals->initial_value.addr =
+        (uintptr_t)module_inst->default_memory->memory_data;
+      module_inst->default_memory->memory_data = NULL;
+      break;
+    }
+  }
+}
+
 /**
  * Return export function count in module export section.
  */
@@ -702,6 +722,9 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
       }
     }
 
+    /* fix import memoryBase */
+    globals_instantiate_fix(globals, module, module_inst);
+
     /* Initialize the global data */
     addr_data = memory->addr_data;
     addr_data_end = addr_data + addr_data_size;
@@ -717,7 +740,7 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
           else {
             *(int32*)addr_data = global->initial_value.i32;
             /* Store the offset to memory data for global of addr */
-            *(int32*)global_data = addr_data - memory->memory_data;
+            *(int32*)global_data = addr_data - memory_data;
             addr_data += sizeof(int32);
           }
           global_data += sizeof(int32);

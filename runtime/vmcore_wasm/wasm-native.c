@@ -38,8 +38,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#if 0
 #define MEMORY(self) (self->vm_instance->module->default_memory)
 #define MEMORY_BASE(self) (MEMORY(self)->memory_data)
+#else
+#define MEMORY_BASE(self) (0)
+#endif
 
 #define DEBUG_PRINT 1
 
@@ -74,77 +78,19 @@ _print_f64_wrapper(WASMThread *self, uint32 *args)
 #endif
 
 static void
-_getc_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 file = args[0];
-  int32 ret = getc((void*)file);
-  *args = ret;
-}
-
-static void
-_ungetc_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 character = args[0];
-  int32 file = args[1];
-  int32 ret = ungetc(character, (void*)file);
-  *args = ret;
-}
-
-static void
-_fread_wrapper(WASMThread *self, uint32 *args)
-{
-  uint8 *memory_base = MEMORY_BASE(self);
-  int32 off = args[0];
-  int32 size = args[1];
-  int32 nmemb = args[2];
-  int32 file = args[3];
-  int32 ret = fread(memory_base + off, size, nmemb, (void*)file);
-  *args = ret;
-}
-
-static void
-_fwrite_wrapper(WASMThread *self, uint32 *args)
-{
-  uint8 *memory_base = MEMORY_BASE(self);
-  int32 off = args[0];
-  int32 size = args[1];
-  int32 nmemb = args[2];
-  int32 file = args[3];
-  int32 ret = fwrite(memory_base + off, size, nmemb, (void*)file);
-  *args = ret;
-}
-
-static void
-_fputc_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 character = args[0];
-  int32 file = args[1];
-  int32 ret = fputc(character, (void*)file);
-  *args = ret;
-}
-
-static void
-_puts_wrapper(WASMThread *self, uint32 *args)
-{
-  uint8 *memory_base = MEMORY_BASE(self);
-  int32 ret = puts((const char*)memory_base + args[0]);
-  *args = ret;
-}
-
-static void
-_fflush_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 file = args[0];
-  int32 ret = fflush((void*)file);
-  *args = ret;
-}
-
-static void
 abort_wrapper(WASMThread *self, uint32 *args)
 {
   int32 code = args[0];
   bh_printf("env.abort(%i)\n",code);
   abort();
+}
+
+static void
+_printf_wrapper(WASMThread *self, uint32 *args)
+{
+  const char * fmt = (const char*)args[0];
+  va_list va_args = (va_list)args[1];
+  *args = vprintf(fmt, va_args);
 }
 
 static void
@@ -269,13 +215,7 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _print_f32),
   REG_NATIVE_FUNC(env, _print_f64),
 #endif
-  REG_NATIVE_FUNC(env, _getc),
-  REG_NATIVE_FUNC(env, _ungetc),
-  REG_NATIVE_FUNC(env, _fread),
-  REG_NATIVE_FUNC(env, _fwrite),
-  REG_NATIVE_FUNC(env, _fputc),
-  REG_NATIVE_FUNC(env, _puts),
-  REG_NATIVE_FUNC(env, _fflush),
+  REG_NATIVE_FUNC(env, _printf),
   REG_NATIVE_FUNC(env, abort),
   REG_NATIVE_FUNC(env, ___syscall140),
   REG_NATIVE_FUNC(env, ___syscall146),

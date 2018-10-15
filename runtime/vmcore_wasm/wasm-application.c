@@ -49,11 +49,33 @@ wasm_application_execute_start(void)
   if (!func)
     return true;
 
-  bh_assert(!func->is_import_func && func->param_cell_num == 0 && func->ret_cell_num == 0);
+  bh_assert(!func->is_import_func && func->param_cell_num == 0
+            && func->ret_cell_num == 0);
 
   wasm_runtime_call_wasm(func, 0, NULL);
 
   return !wasm_runtime_get_exception() ? true : false;
+}
+
+static WASMFunctionInstance*
+resolve_post_instantiate_function(const WASMModuleInstance *module_inst)
+{
+  uint32 i;
+  for (i = 0; i < module_inst->export_func_count; i++)
+    if (!strcmp(module_inst->export_functions[i].name, "__post_instantiate"))
+      return module_inst->export_functions[i].function;
+  return NULL;
+}
+
+static bool
+check_post_instantiate_func_type(const WASMType *type)
+{
+  if (!(type->param_count == 0 && type->result_count == 0)) {
+    LOG_ERROR("WASM execute application failed: "
+              "invalid __post_instantiate function type.\n");
+    return false;
+  }
+  return true;
 }
 
 static WASMFunctionInstance*
@@ -99,8 +121,14 @@ wasm_application_execute_main(int argc, char *argv[])
 {
   WASMThread *self = wasm_runtime_get_self();
   WASMModuleInstance *module_inst = self->vm_instance->module;
+  WASMFunctionInstance *func_post_instantiate =
+    resolve_post_instantiate_function(module_inst);
   WASMFunctionInstance *func = resolve_main_function(module_inst);
   uint32 argc1 = 0, argv1[2] = { 0 };
+
+  if (func_post_instantiate &&
+      !check_post_instantiate_func_type(func_post_instantiate->u.func->func_type))
+    return false;
 
   if (!func || func->is_import_func)
     return false;
@@ -112,6 +140,12 @@ wasm_application_execute_main(int argc, char *argv[])
     argc1 = 2;
     argv1[0] = argc;
     argv1[1] = (uint32)argv;
+  }
+
+  if (func_post_instantiate) {
+    wasm_runtime_call_wasm(func_post_instantiate, 0, NULL);
+    if (wasm_runtime_get_exception())
+      return false;
   }
 
   wasm_runtime_call_wasm(func, argc1, argv1);
