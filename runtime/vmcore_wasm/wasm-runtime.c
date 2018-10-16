@@ -544,7 +544,7 @@ globals_instantiate(const WASMModule *module,
 static void
 globals_instantiate_fix(WASMGlobalInstance *globals,
                         const WASMModule *module,
-                        const WASMModuleInstance *module_inst)
+                        WASMModuleInstance *module_inst)
 {
   WASMImport *import = module->import_globals;
   uint32 i;
@@ -555,7 +555,7 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
         && strcmp(import->u.names.field_name, "memoryBase") == 0) {
       globals->initial_value.addr =
         (uintptr_t)module_inst->default_memory->memory_data;
-      module_inst->default_memory->memory_data = NULL;
+      module_inst->memory_base_flag = true;
       break;
     }
   }

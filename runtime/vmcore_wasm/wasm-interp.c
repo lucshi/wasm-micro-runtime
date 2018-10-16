@@ -97,8 +97,11 @@ GET_F64_FROM_ADDR (uint32 *addr)
       wasm_runtime_set_exception("out of bounds memory access");                \
       goto got_exception;                                                       \
     }                                                                           \
-    maddr = memory->memory_data + (offset + addr);                              \
-    if (memory->memory_data) {                                                  \
+    if (module->memory_base_flag)                                               \
+      maddr = NULL + (offset + addr);                                           \
+    else                                                                        \
+      maddr = memory->memory_data + (offset + addr);                            \
+    if (!module->memory_base_flag) {                                            \
       if (maddr < memory->addr_data) {                                          \
         wasm_runtime_set_exception("out of bounds memory access");              \
         goto got_exception;                                                     \
@@ -664,7 +667,7 @@ wasm_interp_call_func_native(WASMThread *self,
   WASMInterpFrame *frame;
   typedef void (*F)(WASMThread*, uint32 *argv);
   union { F f; void *v; } u;
-  uint32 argv_buf[128], *argv, argc = cur_func->param_cell_num;
+  uint32 argv_buf[32], *argv, argc = cur_func->param_cell_num;
 
   if (!(frame = ALLOC_FRAME
         (self, wasm_interp_interp_frame_size(local_cell_num), prev_frame)))
@@ -676,7 +679,16 @@ wasm_interp_call_func_native(WASMThread *self,
 
   wasm_thread_set_cur_frame (self, frame);
 
-  argv = argv_buf; /* TODO: allocate memory if buf length is not enough. */
+  if (argc <= 32)
+    argv = argv_buf;
+  else {
+    if (!(argv = bh_malloc(sizeof(uint32) * argc))) {
+      wasm_runtime_set_exception("WASM call native failed: "
+                                 "alloc memory for argv failed.");
+      return;
+    }
+  }
+
   word_copy(argv, frame->lp, argc);
 
   u.v = cur_func->u.func_import->func_ptr_linked;
@@ -719,6 +731,9 @@ wasm_interp_call_func_native(WASMThread *self,
     prev_frame->sp += 2;
     prev_frame->ref += 2;
   }
+
+  if (argc > 32)
+    bh_free(argv);
 
   FREE_FRAME(self, frame);
   wasm_thread_set_cur_frame(self, prev_frame);
@@ -2090,7 +2105,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         cur_func = frame->function;
         UPDATE_ALL_FROM_FRAME();
 
-        /* TODO: check exception */
+        if (wasm_runtime_get_exception())
+          goto got_exception;
       }
       else {
         WASMType *func_type;

@@ -125,6 +125,7 @@ typedef struct WASMModuleInstance {
 
   HashMap *branch_set;
   const WASMModule *module;
+  bool memory_base_flag;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
