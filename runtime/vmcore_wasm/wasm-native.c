@@ -88,9 +88,85 @@ abort_wrapper(WASMThread *self, uint32 *args)
 static void
 _printf_wrapper(WASMThread *self, uint32 *args)
 {
-  const char * fmt = (const char*)args[0];
+  const char *fmt = (const char*)args[0];
   va_list va_args = (va_list)args[1];
   *args = vprintf(fmt, va_args);
+}
+
+static void
+_fprintf_wrapper(WASMThread *self, uint32 *args)
+{
+  FILE *stream = (FILE*)args[0];
+  const char *fmt = (const char*)args[1];
+  va_list va_args = (va_list)args[2];
+  *args = vfprintf(stream, fmt, va_args);
+}
+
+static void
+_sprintf_wrapper(WASMThread *self, uint32 *args)
+{
+  char *str = (char*)args[0];
+  const char *fmt = (const char*)args[1];
+  va_list va_args = (va_list)args[2];
+  *args = vsprintf(str, fmt, va_args);
+}
+
+static void
+_snprintf_wrapper(WASMThread *self, uint32 *args)
+{
+  char *str = (char*)args[0];
+  size_t size = args[1];
+  const char *fmt = (const char*)args[2];
+  va_list va_args = (va_list)args[3];
+  *args = vsnprintf(str, size, fmt, va_args);
+}
+
+static void
+_scanf_wrapper(WASMThread *self, uint32 *args)
+{
+  const char *fmt = (const char*)args[0];
+  va_list va_args = (va_list)args[1];
+  *args = scanf(fmt, va_args);
+}
+
+static void
+_fscanf_wrapper(WASMThread *self, uint32 *args)
+{
+  FILE *stream = (FILE*)args[0];
+  const char *fmt = (const char*)args[1];
+  va_list va_args = (va_list)args[2];
+  *args = vfprintf(stream, fmt, va_args);
+}
+
+static void
+_sscanf_wrapper(WASMThread *self, uint32 *args)
+{
+  char *str= (char*)args[0];
+  const char *fmt = (const char*)args[1];
+  va_list va_args = (va_list)args[2];
+  *args = vsprintf(str, fmt, va_args);
+}
+
+void *__wrap_malloc(size_t size);
+void *__wrap_calloc(size_t nmemb, size_t size);
+void __wrap_free(void *ptr);
+
+static void
+_malloc_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)__wrap_malloc(args[0]);
+}
+
+static void
+_calloc_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)__wrap_calloc(args[0], args[1]);
+}
+
+static void
+_free_wrapper(WASMThread *self, uint32 *args)
+{
+  __wrap_free((void*)args[0]);
 }
 
 static void
@@ -215,8 +291,17 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _print_f32),
   REG_NATIVE_FUNC(env, _print_f64),
 #endif
-  REG_NATIVE_FUNC(env, _printf),
   REG_NATIVE_FUNC(env, abort),
+  REG_NATIVE_FUNC(env, _printf),
+  REG_NATIVE_FUNC(env, _fprintf),
+  REG_NATIVE_FUNC(env, _sprintf),
+  REG_NATIVE_FUNC(env, _snprintf),
+  REG_NATIVE_FUNC(env, _scanf),
+  REG_NATIVE_FUNC(env, _fscanf),
+  REG_NATIVE_FUNC(env, _sscanf),
+  REG_NATIVE_FUNC(env, _malloc),
+  REG_NATIVE_FUNC(env, _calloc),
+  REG_NATIVE_FUNC(env, _free),
   REG_NATIVE_FUNC(env, ___syscall140),
   REG_NATIVE_FUNC(env, ___syscall146),
   REG_NATIVE_FUNC(env, ___syscall54),
