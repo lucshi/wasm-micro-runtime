@@ -126,7 +126,7 @@ _scanf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
   va_list va_args = (va_list)args[1];
-  *args = scanf(fmt, va_args);
+  *args = vscanf(fmt, va_args);
 }
 
 static void
@@ -135,7 +135,7 @@ _fscanf_wrapper(WASMThread *self, uint32 *args)
   FILE *stream = (FILE*)args[0];
   const char *fmt = (const char*)args[1];
   va_list va_args = (va_list)args[2];
-  *args = vfprintf(stream, fmt, va_args);
+  *args = vfscanf(stream, fmt, va_args);
 }
 
 static void
@@ -144,7 +144,7 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
   char *str= (char*)args[0];
   const char *fmt = (const char*)args[1];
   va_list va_args = (va_list)args[2];
-  *args = vsprintf(str, fmt, va_args);
+  *args = vsscanf(str, fmt, va_args);
 }
 
 void *__wrap_malloc(size_t size);
