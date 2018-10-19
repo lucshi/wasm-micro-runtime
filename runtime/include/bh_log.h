@@ -82,6 +82,8 @@ void _bh_log (int level, const char *file, int line,
 # define LOG_DEBUG(...)         (void)0
 #endif  /* defined(BH_DEBUG) */
 
+#define LOG_PROFILE_HEAP_GC(heap, size)                         \
+  LOG_VERBOSE("PROF.HEAP.GC: HEAP=%08X SIZE=%d", heap, size)
 
 #ifdef __cplusplus
 }

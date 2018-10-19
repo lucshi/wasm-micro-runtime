@@ -20,6 +20,12 @@ extern void bh_assert_internal(int v, const char *file_name, int line_number, co
 
 #endif /* end of BH_DEBUG */
 
+#ifdef BH_TEST
+#   define BH_STATIC
+#else
+#   define BH_STATIC static
+#endif
+
 #ifdef __cplusplus
 }
 #endif

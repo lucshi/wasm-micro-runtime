@@ -23,39 +23,59 @@
  * Intel in writing.
  */
 
-#ifndef _BH_MEMORY_H
-#define _BH_MEMORY_H
+#include <stdlib.h>
+#include <kernel.h>
+#include <string.h>
+#include "bh_memory.h"
+#include "bh_platform.h"
+#include "ems_gc.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "bh_config.h"
-
-#define BH_KB (1024)
-#define BH_MB ((BH_KB)*1024)
-#define BH_GB ((BH_MB)*1024)
-
-/** 
- * This function allocates a memory chunk from system
- * 
- * @param size bytes need allocate
- * 
- * @return the pointer to memory allocated
- */
-void *bh_malloc(unsigned int size);
-
-
-/** 
- * This function frees memory chunk
- * 
- * @param ptr the pointer to memory need free
- */
-void bh_free(void *ptr);
-
-#ifdef __cplusplus
+void* __real_malloc(size_t size)
+{
+  return gc_alloc_vo(size, MMT_SHARED);
 }
-#endif
 
-#endif /* end of _BH_MEMORY_H */
+void* __real_calloc(size_t nmemb, size_t size)
+{
+  void *ret = gc_alloc_vo(nmemb * size, MMT_SHARED);
+  if (ret)
+    memset(ret, 0, nmemb * size);
+  return ret;
+}
+
+void __real_free(void *ptr)
+{
+  if (ptr)
+    gc_free(ptr);
+}
+
+void *
+__wrap_malloc(size_t size)
+{
+  return __real_malloc(size);
+}
+
+void *
+__wrap_calloc(size_t nmemb, size_t size)
+{
+  return __real_calloc(nmemb, size);
+}
+
+void
+__wrap_free(void *ptr)
+{
+  __real_free(ptr);
+}
+
+void*
+bh_malloc(unsigned int size)
+{
+  return __real_malloc(size);
+}
+
+void bh_free(void *ptr)
+{
+  if (ptr)
+    __real_free(ptr);
+}
 

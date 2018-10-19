@@ -24,6 +24,7 @@
  */
 
 #include "wasm-import.h"
+#include "bh_memory.h"
 
 
 bool
@@ -43,7 +44,21 @@ vmci_thread_create_with_prio(vmci_thread_t *thread,
                              vmci_thread_start_routine_t start_routine, void *arg,
                              unsigned stack_size, int prio)
 {
+#ifndef __ZEPHYR__
   return vm_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
+#else
+  int ret;
+  struct k_thread *kthread = bh_malloc(sizeof(struct k_thread));
+  if (!kthread)
+    return BHT_ERROR;
+
+  memset(kthread, 0, sizeof(struct k_thread));
+  *thread = (vmci_thread_t)kthread;
+  ret = vm_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
+  if (ret != BHT_OK)
+    bh_free(kthread);
+  return ret;
+#endif
 }
 
 int
@@ -51,7 +66,21 @@ vmci_thread_create(vmci_thread_t *thread,
                    vmci_thread_start_routine_t start_routine, void *arg,
                    unsigned stack_size)
 {
+#ifndef __ZEPHYR__
   return vm_thread_create(thread, start_routine, arg, stack_size);
+#else
+  int ret;
+  struct k_thread *kthread = bh_malloc(sizeof(struct k_thread));
+  if (!kthread)
+    return BHT_ERROR;
+
+  memset(kthread, 0, sizeof(struct k_thread));
+  *thread = (vmci_thread_t)kthread;
+  ret = vm_thread_create(thread, start_routine, arg, stack_size);
+  if (ret != BHT_OK)
+    bh_free(kthread);
+  return ret;
+#endif
 }
 
 int

@@ -23,39 +23,19 @@
  * Intel in writing.
  */
 
-#ifndef _BH_MEMORY_H
-#define _BH_MEMORY_H
+#include "bh_assert.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+extern void abort();
 
-#include "bh_config.h"
+void bh_assert_internal(int v, const char *file_name, int line_number, const char *expr_string)
+{
+  if(v) return;
 
-#define BH_KB (1024)
-#define BH_MB ((BH_KB)*1024)
-#define BH_GB ((BH_MB)*1024)
+  if(!file_name) file_name = "NULL FILENAME";
+  if(!expr_string) expr_string = "NULL EXPR_STRING";
 
-/** 
- * This function allocates a memory chunk from system
- * 
- * @param size bytes need allocate
- * 
- * @return the pointer to memory allocated
- */
-void *bh_malloc(unsigned int size);
-
-
-/** 
- * This function frees memory chunk
- * 
- * @param ptr the pointer to memory need free
- */
-void bh_free(void *ptr);
-
-#ifdef __cplusplus
+  printf("\nASSERTION FAILED: %s, at FILE=%s, LINE=%d\n", expr_string, file_name, line_number);
+  abort();
 }
-#endif
-
-#endif /* end of _BH_MEMORY_H */
-

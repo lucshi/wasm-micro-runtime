@@ -32,11 +32,13 @@
 #include "bh_memory.h"
 #include "bh_platform_log.h"
 
+#ifndef __ZEPHYR__
 #include <sys/ioctl.h>
 #include <sys/uio.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #if 0
 #define MEMORY(self) (self->vm_instance->module->default_memory)
@@ -82,7 +84,9 @@ abort_wrapper(WASMThread *self, uint32 *args)
 {
   int32 code = args[0];
   bh_printf("env.abort(%i)\n",code);
+#ifndef __ZEPHYR__
   abort();
+#endif
 }
 
 static void
@@ -90,16 +94,7 @@ _printf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
   va_list va_args = (va_list)args[1];
-  *args = vprintf(fmt, va_args);
-}
-
-static void
-_fprintf_wrapper(WASMThread *self, uint32 *args)
-{
-  FILE *stream = (FILE*)args[0];
-  const char *fmt = (const char*)args[1];
-  va_list va_args = (va_list)args[2];
-  *args = vfprintf(stream, fmt, va_args);
+  *args = bh_vprintf(fmt, va_args);
 }
 
 static void
@@ -119,6 +114,16 @@ _snprintf_wrapper(WASMThread *self, uint32 *args)
   const char *fmt = (const char*)args[2];
   va_list va_args = (va_list)args[3];
   *args = vsnprintf(str, size, fmt, va_args);
+}
+
+#ifndef __ZEPHYR__
+static void
+_fprintf_wrapper(WASMThread *self, uint32 *args)
+{
+  FILE *stream = (FILE*)args[0];
+  const char *fmt = (const char*)args[1];
+  va_list va_args = (va_list)args[2];
+  *args = vfprintf(stream, fmt, va_args);
 }
 
 static void
@@ -146,6 +151,15 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
   va_list va_args = (va_list)args[2];
   *args = vsscanf(str, fmt, va_args);
 }
+#endif
+
+#ifdef __ZEPHYR__
+static void
+_puts_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)printf("%s\n", (char*)args[0]);
+}
+#endif
 
 void *__wrap_malloc(size_t size);
 void *__wrap_calloc(size_t nmemb, size_t size);
@@ -169,6 +183,7 @@ _free_wrapper(WASMThread *self, uint32 *args)
   __wrap_free((void*)args[0]);
 }
 
+#ifndef __ZEPHYR__
 static void
 ___syscall140_wrapper(WASMThread *self, uint32 *args)
 {
@@ -248,6 +263,7 @@ ___syscall6_wrapper(WASMThread *self, uint32 *args)
   int32 ret = close(fd);
   *args = ret;
 }
+#endif
 
 static void
 _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
@@ -293,19 +309,26 @@ static WASMNativeFuncDef native_func_defs[] = {
 #endif
   REG_NATIVE_FUNC(env, abort),
   REG_NATIVE_FUNC(env, _printf),
-  REG_NATIVE_FUNC(env, _fprintf),
   REG_NATIVE_FUNC(env, _sprintf),
   REG_NATIVE_FUNC(env, _snprintf),
+#ifndef __ZEPHYR__
+  REG_NATIVE_FUNC(env, _fprintf),
   REG_NATIVE_FUNC(env, _scanf),
   REG_NATIVE_FUNC(env, _fscanf),
   REG_NATIVE_FUNC(env, _sscanf),
+#endif
+#ifdef __ZEPHYR__
+  REG_NATIVE_FUNC(env, _puts),
+#endif
   REG_NATIVE_FUNC(env, _malloc),
   REG_NATIVE_FUNC(env, _calloc),
   REG_NATIVE_FUNC(env, _free),
+#ifndef __ZEPHYR__
   REG_NATIVE_FUNC(env, ___syscall140),
   REG_NATIVE_FUNC(env, ___syscall146),
   REG_NATIVE_FUNC(env, ___syscall54),
   REG_NATIVE_FUNC(env, ___syscall6),
+#endif
   REG_NATIVE_FUNC(env, _emscripten_memcpy_big),
 #ifdef WASM_ENABLE_REPL
   REG_NATIVE_FUNC(spectest, print_i32),
@@ -337,7 +360,9 @@ wasm_native_func_lookup(const char *module_name, const char *func_name)
  * Global Variables                  *
  *************************************/
 
+#ifndef __ZEPHYR__
 extern char **environ;
+#endif
 
 typedef struct WASMNativeGlobalDef {
   const char *module_name;
@@ -394,11 +419,13 @@ wasm_native_global_lookup(const char *module_name, const char *global_name,
       global->is_addr = true;
       return true;
     }
+#ifndef __ZEPHYR__
     else if (!strcmp(global_name, "_environ")) {
       global->global_data_linked.addr = (uintptr_t)environ;
       global->is_addr = true;
       return true;
     }
+#endif
   }
 
   return false;

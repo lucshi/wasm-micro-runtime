@@ -26,8 +26,8 @@
 #include <errno.h>
 #ifdef WASM_ENABLE_REPL
 #include <ieee754.h>
-#endif
 #include <math.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "wasm.h"

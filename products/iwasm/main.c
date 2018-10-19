@@ -33,6 +33,9 @@
 #include "bh_thread.h"
 #include "wasm-export.h"
 #include "bh_memory.h"
+#ifdef __ZEPHYR__
+#include "test_wasm.h"
+#endif
 
 
 static int app_argc;
@@ -50,6 +53,7 @@ vmci_set_tl_root(void *tlr)
   vm_tls_put(0, tlr);
 }
 
+#ifndef __ZEPHYR__
 static int
 print_help()
 {
@@ -67,6 +71,7 @@ print_help()
 
   return 1;
 }
+#endif /* end of __ZEPHYR__ */
 
 static void
 app_instance_cleanup(void)
@@ -161,6 +166,7 @@ app_instance_func(void *arg)
 }
 #endif /* WASM_ENABLE_REPL */
 
+#ifndef __ZEPHYR__
 int
 main(int argc, char *argv[])
 {
@@ -171,7 +177,7 @@ main(int argc, char *argv[])
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
   wasm_vm_instance_t vm = NULL;
-  char error_buf[64];
+  char error_buf[128];
 #if WASM_ENABLE_LOG != 0
   int log_verbose_level = 1;
 #endif
@@ -285,3 +291,92 @@ fail1:
   return 0;
 }
 
+#else /* end of __ZEPHYR__ */
+
+void iwasm_main(void *arg1, void *arg2, void *arg3)
+{
+  uint8 *wasm_file_buf = NULL;
+  int wasm_file_size;
+  wasm_module_t wasm_module = NULL;
+  wasm_module_inst_t wasm_module_inst = NULL;
+  wasm_vm_instance_t vm = NULL;
+  char error_buf[128];
+#if WASM_ENABLE_LOG != 0
+  int log_verbose_level = 1;
+#endif
+
+  (void)arg1;
+  (void)arg2;
+  (void)arg3;
+
+  /* initialize runtime environment */
+  if (!wasm_runtime_init())
+    return;
+
+#if WASM_ENABLE_LOG != 0
+  bh_log_set_verbose_level(log_verbose_level);
+#endif
+
+  /* load WASM byte buffer from byte buffer of include file */
+  wasm_file_buf = (uint8*)wasm_test_file;
+  wasm_file_size = sizeof(wasm_test_file);
+
+  /* load WASM module */
+  if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size,
+                                        error_buf, sizeof(error_buf)))) {
+    bh_printf("%s\n", error_buf);
+    goto fail1;
+  }
+
+  /* instantiate the module */
+  if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
+                                                    error_buf,
+                                                    sizeof(error_buf)))) {
+    bh_printf("%s\n", error_buf);
+    goto fail2;
+  }
+
+  /* create vm instance */
+  if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
+                                          32 * 1024, /* TODO, define macro */
+                                          32 * 1024, /* TODO, define macro */
+                                          app_instance_main, NULL,
+                                          app_instance_cleanup)))
+    goto fail3;
+
+  /* wait for the instance to terminate */
+  wasm_runtime_wait_for_instance(vm, -1);
+
+  /* destroy the instance */
+  wasm_runtime_destroy_instance(vm);
+
+fail3:
+  /* destroy the module instance */
+  wasm_runtime_deinstantiate(wasm_module_inst);
+
+fail2:
+  /* unload the module */
+  wasm_runtime_unload(wasm_module);
+
+fail1:
+  /* destroy runtime environment */
+  wasm_runtime_destroy();
+}
+
+#define DEFAULT_THREAD_STACKSIZE (6 * 1024)
+#define DEFAULT_THREAD_PRIORITY 5
+
+K_THREAD_STACK_DEFINE(iwasm_main_thread_stack, DEFAULT_THREAD_STACKSIZE);
+static struct k_thread iwasm_main_thread;
+
+bool
+iwasm_init(void)
+{
+  k_tid_t tid = k_thread_create(&iwasm_main_thread,
+                                iwasm_main_thread_stack,
+                                DEFAULT_THREAD_STACKSIZE,
+                                iwasm_main, NULL, NULL, NULL,
+                                DEFAULT_THREAD_PRIORITY, 0, K_NO_WAIT);
+  return tid ? true : false;
+}
+#endif /* end of __ZEPHYR__ */

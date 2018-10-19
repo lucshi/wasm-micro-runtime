@@ -490,9 +490,11 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
                 (module_name, field_name))) {
             if (!(import->u.function.func_ptr_linked =
                   resolve_sym(module_name, field_name))) {
-              set_error_buf(error_buf, error_buf_size,
-                            "Load import section failed: "
-                            "resolve import function failed.");
+              if (error_buf != NULL)
+                snprintf(error_buf, error_buf_size,
+                         "Load import section failed: "
+                         "resolve import function (%s, %s) failed.",
+                         module_name, field_name);
               return false;
 
             }

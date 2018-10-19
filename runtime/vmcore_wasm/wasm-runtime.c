@@ -31,6 +31,9 @@
 #include "wasm-interp.h"
 #include "bh_log.h"
 #include "bh_memory.h"
+#ifdef __ZEPHYR__
+#include "ems_gc.h"
+#endif
 
 
 /* The supervisor VM instance. */
@@ -69,9 +72,27 @@ wasm_runtime_create_supervisor_il_env()
   return true;
 }
 
+#ifdef __ZEPHYR__
+static int
+_stdout_hook_iwasm(int c)
+{
+  printk("%c", (char)c);
+  return 1;
+}
+
+extern void __stdout_hook_install(int (*hook)(int));
+#endif
+
 bool
 wasm_runtime_init()
 {
+#ifdef __ZEPHYR__
+  /* Enable printf() in Zephyr */
+  __stdout_hook_install(_stdout_hook_iwasm);
+
+  if (!gc_init(16 * 1024 * 1024))
+    return false;
+#endif
 
   if (bh_log_init() != 0)
     return false;

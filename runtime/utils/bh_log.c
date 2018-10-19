@@ -50,7 +50,9 @@ bool
 _bh_log_begin (int level)
 {
   korp_tid self;
+#ifndef __ZEPHYR__
   char buf[32];
+#endif
 
   if (level > log_verbose_level) {
     return false;
@@ -59,9 +61,13 @@ _bh_log_begin (int level)
   /* Try to own the log stream and start the log output.  */
   vm_mutex_lock (&log_stream_lock);
   self = vm_self_thread ();
+#ifndef __ZEPHYR__
   bh_time_strftime (buf, 32, "%Y-%m-%d %H:%M:%S",
                     bh_time_get_millisecond_from_1970 ());
   bh_printf ("[%s - %X]: ", buf, (int)self);
+#else
+  bh_printf ("[%X]: ", (int)self);
+#endif
 
   return true;
 }
