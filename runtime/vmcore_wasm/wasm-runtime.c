@@ -58,8 +58,8 @@ wasm_runtime_create_supervisor_il_env()
   bh_assert(!wasm_runtime_get_self());
 
   if (!(ilr = wasm_thread_create_ilr(NULL,
-                                     vmci_reserved_native_stack_size,
-                                     vmci_reserved_wasm_stack_size,
+                                     0,
+                                     0,
                                      NULL, NULL, NULL)))
     return false;
 

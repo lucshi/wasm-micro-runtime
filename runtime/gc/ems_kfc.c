@@ -24,7 +24,11 @@
 gc_heap_t shared_heap;
 
 #ifdef __ZEPHYR__
+#ifdef CONFIG_BOARD_NUCLEO_F446RE
+static char shared_heap_buf[110 * 1024 + GC_HEAD_PADDING] = { 0 };
+#else
 static char shared_heap_buf[512 * 1024 + GC_HEAD_PADDING] = { 0 };
+#endif
 #endif
 
 

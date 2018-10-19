@@ -89,11 +89,19 @@ abort_wrapper(WASMThread *self, uint32 *args)
 #endif
 }
 
+static inline va_list
+get_va_list(uint32 *args)
+{
+  union { uint32 u; va_list v; } u;
+  u.u  = args[0];
+  return u.v;
+}
+
 static void
 _printf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
-  va_list va_args = (va_list)args[1];
+  va_list va_args = get_va_list(args + 1);
   *args = bh_vprintf(fmt, va_args);
 }
 
@@ -102,7 +110,7 @@ _sprintf_wrapper(WASMThread *self, uint32 *args)
 {
   char *str = (char*)args[0];
   const char *fmt = (const char*)args[1];
-  va_list va_args = (va_list)args[2];
+  va_list va_args = get_va_list(args + 2);
   *args = vsprintf(str, fmt, va_args);
 }
 
@@ -112,7 +120,7 @@ _snprintf_wrapper(WASMThread *self, uint32 *args)
   char *str = (char*)args[0];
   size_t size = args[1];
   const char *fmt = (const char*)args[2];
-  va_list va_args = (va_list)args[3];
+  va_list va_args = get_va_list(args + 3);
   *args = vsnprintf(str, size, fmt, va_args);
 }
 
@@ -122,7 +130,7 @@ _fprintf_wrapper(WASMThread *self, uint32 *args)
 {
   FILE *stream = (FILE*)args[0];
   const char *fmt = (const char*)args[1];
-  va_list va_args = (va_list)args[2];
+  va_list va_args = get_va_list(args + 2);
   *args = vfprintf(stream, fmt, va_args);
 }
 
@@ -130,7 +138,7 @@ static void
 _scanf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
-  va_list va_args = (va_list)args[1];
+  va_list va_args = get_va_list(args + 1);
   *args = vscanf(fmt, va_args);
 }
 
@@ -139,7 +147,7 @@ _fscanf_wrapper(WASMThread *self, uint32 *args)
 {
   FILE *stream = (FILE*)args[0];
   const char *fmt = (const char*)args[1];
-  va_list va_args = (va_list)args[2];
+  va_list va_args = get_va_list(args + 2);
   *args = vfscanf(stream, fmt, va_args);
 }
 
@@ -148,7 +156,7 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
 {
   char *str= (char*)args[0];
   const char *fmt = (const char*)args[1];
-  va_list va_args = (va_list)args[2];
+  va_list va_args = get_va_list(args + 2);
   *args = vsscanf(str, fmt, va_args);
 }
 #endif
