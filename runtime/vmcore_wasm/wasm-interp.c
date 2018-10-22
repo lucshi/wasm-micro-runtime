@@ -696,7 +696,9 @@ wasm_interp_call_func_native(WASMThread *self,
     u.f(self, argv);
   else {
     WASMType *func_type = cur_func->u.func_import->func_type;
-    uint8 ret_type = func_type->types[func_type->param_count];
+    uint8 ret_type = func_type->result_count
+                     ? func_type->types[func_type->param_count]
+                     : VALUE_TYPE_VOID;
     GenericFunctionPointer f = (GenericFunctionPointer)(uintptr_t)u.v;
 
     if (func_type->result_count == 0) {
@@ -2110,6 +2112,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       }
       else {
         WASMType *func_type;
+        uint8 ret_type;
 
         all_cell_num = cur_func->param_cell_num + cur_func->local_cell_num
                        + cur_func->u.func->max_stack_cell_num
@@ -2144,7 +2147,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
         /* Push function block as first block */
         func_type = cur_func->u.func->func_type;
-        PUSH_CSP(BLOCK_TYPE_FUNCTION, func_type->types[func_type->param_count],
+        ret_type = func_type->result_count
+                   ? func_type->types[func_type->param_count]
+                   : VALUE_TYPE_VOID;
+        PUSH_CSP(BLOCK_TYPE_FUNCTION, ret_type,
                  frame_ip, NULL, frame_ip_end - 1);
 
         wasm_thread_set_cur_frame(self, (WASMRuntimeFrame*)frame);

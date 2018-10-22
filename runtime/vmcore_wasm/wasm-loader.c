@@ -531,9 +531,11 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           import->u.global.is_mutable = mutable & 1 ? true : false;
           if (!(wasm_native_global_lookup(module_name, field_name,
                                           &import->u.global))) {
-            set_error_buf(error_buf, error_buf_size,
-                          "Load import section failed: "
-                          "resolve import global failed.");
+            if (error_buf != NULL)
+              snprintf(error_buf, error_buf_size,
+                       "Load import section failed: "
+                       "resolve import global (%s, %s) failed.",
+                       module_name, field_name);
             return false;
           }
           break;
@@ -1979,7 +1981,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   uint32 max_stack_cell_num = 0, max_csp_num = 0;
   uint32 stack_cell_num = 0, csp_num = 0;
   uint32 frame_ref_size, frame_csp_size;
-  uint8 *param_types, *ret_type, *local_types, local_type, global_type;
+  uint8 *param_types, ret_type, *local_types, local_type, global_type;
   uint32 count, i, local_idx, global_idx, block_return_type, depth, u32;
   int32 i32;
   int64 i64;
@@ -1990,7 +1992,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
   param_count = func->func_type->param_count;
   param_types = func->func_type->types;
-  ret_type = param_types + param_count;
+  ret_type = func->func_type->result_count
+             ? param_types[param_count] : VALUE_TYPE_VOID;
 
   local_count = func->local_count;
   local_types = func->local_types;
@@ -2024,7 +2027,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   memset(frame_csp_bottom, 0, frame_csp_size);
   frame_csp_boundary = frame_csp_bottom + 8;
 
-  PUSH_CSP(BLOCK_TYPE_FUNCTION, ret_type[0], p);
+  PUSH_CSP(BLOCK_TYPE_FUNCTION, ret_type, p);
   frame_csp[-1].jumped_by_br = true;
 
   while (p < p_end) {
@@ -2080,6 +2083,9 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           if (csp_num > 0) {
             frame_csp->end_addr = p - 1;
 
+            if (bh_hash_map_find(branch_set, (void*)frame_csp->start_addr))
+              break;
+
             if (!(block = bh_malloc(sizeof(block_addr)))) {
               set_error_buf(error_buf, error_buf_size,
                             "WASM loader prepare bytecode failed: "
@@ -2091,9 +2097,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             block->else_addr = (void*)frame_csp->else_addr;
             block->end_addr = (void*)frame_csp->end_addr;
 
-            if (!bh_hash_map_find(branch_set, (void*)frame_csp->start_addr)
-                && !bh_hash_map_insert(branch_set, (void*)frame_csp->start_addr,
-                                       block)) {
+            if (!bh_hash_map_insert(branch_set, (void*)frame_csp->start_addr,
+                                    block)) {
               set_error_buf(error_buf, error_buf_size,
                             "WASM loader prepare bytecode failed: "
                             "alloc memory failed");
@@ -2161,8 +2166,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
       case WASM_OP_RETURN:
         {
-          POP_TYPE(ret_type[0]);
-          PUSH_TYPE(ret_type[0]);
+          POP_TYPE(ret_type);
+          PUSH_TYPE(ret_type);
 
           if(!wasm_loader_find_block_addr(branch_set,
                                           frame_csp[-1].start_addr,
@@ -2207,7 +2212,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           for (idx = func_type->param_count - 1; idx >= 0; idx--)
             POP_TYPE(func_type->types[idx]);
 
-          PUSH_TYPE(func_type->types[func_type->param_count]);
+          if (func_type->result_count)
+            PUSH_TYPE(func_type->types[func_type->param_count]);
           break;
         }
 

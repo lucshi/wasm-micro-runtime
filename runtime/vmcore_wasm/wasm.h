@@ -40,6 +40,7 @@ extern "C" {
 #define VALUE_TYPE_I64 0X7E
 #define VALUE_TYPE_F32 0x7D
 #define VALUE_TYPE_F64 0x7C
+#define VALUE_TYPE_VOID 0x00
 
 /* Table Element Type */
 #define TABLE_ELEM_TYPE_ANY_FUNC 0x70
