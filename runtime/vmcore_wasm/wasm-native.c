@@ -83,10 +83,10 @@ static void
 abort_wrapper(WASMThread *self, uint32 *args)
 {
   int32 code = args[0];
-  bh_printf("env.abort(%i)\n",code);
-#ifndef __ZEPHYR__
-  abort();
-#endif
+  char buf[32];
+
+  snprintf(buf, sizeof(buf), "env.abort(%i)", code);
+  wasm_runtime_set_exception(buf);
 }
 
 static inline va_list
@@ -284,6 +284,26 @@ _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
   *args = off_dest;
 }
 
+static void
+abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
+{
+  int32 code = args[0];
+  char buf[32];
+
+  snprintf(buf, sizeof(buf), "env.abortStackOverflow(%i)", code);
+  wasm_runtime_set_exception(buf);
+}
+
+static void
+nullFunc_X_wrapper(WASMThread *self, uint32 *args)
+{
+  int32 code = args[0];
+  char buf[32];
+
+  snprintf(buf, sizeof(buf), "env.nullFunc_X(%i)", code);
+  wasm_runtime_set_exception(buf);
+}
+
 #ifdef WASM_ENABLE_REPL
 static void
 print_i32_wrapper(WASMThread *self, uint32 *args)
@@ -338,6 +358,8 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, ___syscall6),
 #endif
   REG_NATIVE_FUNC(env, _emscripten_memcpy_big),
+  REG_NATIVE_FUNC(env, abortStackOverflow),
+  REG_NATIVE_FUNC(env, nullFunc_X),
 #ifdef WASM_ENABLE_REPL
   REG_NATIVE_FUNC(spectest, print_i32),
   REG_NATIVE_FUNC(spectest, print)
@@ -384,6 +406,11 @@ static WASMNativeGlobalDef native_global_defs[] = {
   { "env", "ABORT", .global_data.u32 = 0 },
   { "env", "memoryBase", .global_data.u32 = 0 },
   { "env", "tableBase", .global_data.u32 = 0 },
+  { "env", "DYNAMICTOP_PTR", .global_data.addr = 0 },
+  { "env", "tempDoublePtr", .global_data.addr = 0 },
+  { "global", "NaN", .global_data.u64 = 0x7FF8000000000000LL },
+  { "global", "Infinity", .global_data.u64 = 0x7FF0000000000000LL },
+
 #ifdef WASM_ENABLE_REPL
   { "spectest", "global_i32", .global_data.u32 = 666}
 #endif

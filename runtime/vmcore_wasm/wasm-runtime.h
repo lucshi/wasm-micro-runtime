@@ -51,6 +51,12 @@ typedef struct WASMMemoryInstance {
   /* Global data of global instances */
   uint8 *global_data;
   uint32 global_data_size;
+
+  /* global env.DYNAMICTOP_PTR */
+  uint32 DYNAMICTOP;
+  /* global env.tempDoublePtr */
+  float64 tempDouble;
+
   /* Base address, the layout is:
      addr_data + memory data + global data
      memory data init size is: NumBytesPerPage * cur_page_count

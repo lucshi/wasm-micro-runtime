@@ -568,6 +568,7 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
                         WASMModuleInstance *module_inst)
 {
   WASMImport *import = module->import_globals;
+  WASMMemoryInstance *memory = module_inst->default_memory;
   uint32 i;
 
   /* Fix globals from import section */
@@ -575,9 +576,24 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
     if (strcmp(import->u.names.module_name, "env") == 0
         && strcmp(import->u.names.field_name, "memoryBase") == 0) {
       globals->initial_value.addr =
-        (uintptr_t)module_inst->default_memory->memory_data;
+        (uintptr_t)memory->memory_data;
       module_inst->memory_base_flag = true;
-      break;
+    }
+    else if (strcmp(import->u.names.module_name, "env") == 0
+        && strcmp(import->u.names.field_name, "tableBase") == 0) {
+      globals->initial_value.addr =
+        (uintptr_t)module_inst->default_table->base_addr;
+    }
+    else if (strcmp(import->u.names.module_name, "env") == 0
+        && strcmp(import->u.names.field_name, "DYNAMICTOP_PTR") == 0) {
+      memory->DYNAMICTOP = (uint32)(uintptr_t)
+        (module_inst->default_memory->memory_data +
+         NumBytesPerPage * module_inst->default_memory->cur_page_count);
+      globals->initial_value.addr = (uintptr_t)&memory->DYNAMICTOP;
+    }
+    else if (strcmp(import->u.names.module_name, "env") == 0
+        && strcmp(import->u.names.field_name, "tempDoublePtr") == 0) {
+      globals->initial_value.addr = (uintptr_t)&memory->tempDouble;
     }
   }
 }
