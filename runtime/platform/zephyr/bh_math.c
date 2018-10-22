@@ -375,13 +375,11 @@ int isnan(double x)
 
 double trunc(double x)
 {
-  bh_printf("##unsupported double trunc(double x) called!\n");
-  return 0;
+  return (x > 0) ? fdlibm_floor(x) : fdlibm_ceil(x);
 }
 
 int signbit(double x)
 {
-  bh_printf("##unsupported double signbit(double x) called!\n");
-  return 0;
+  return ((__HI(x) & 0x80000000) >> 31);
 }
 
