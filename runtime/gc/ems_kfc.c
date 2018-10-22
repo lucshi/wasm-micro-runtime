@@ -336,3 +336,34 @@ void gci_verify_heap(gc_heap_t *heap)
 }
 #endif
 
+void* gc_heap_stats(void *heap_arg, int* stats, int size, gc_mm_t mmt) {
+  (void)mmt;
+  int i;
+  gc_heap_t *heap = (gc_heap_t *)heap_arg;
+
+  if (!heap_arg)
+    heap = &shared_heap;
+
+  for( i=0; i< size; i++) {
+    switch (i) {
+      case GC_STAT_TOTAL:
+        stats[i] = heap->current_size;
+        break;
+      case GC_STAT_FREE:
+        stats[i] = heap->total_free_size;
+        break;
+      case GC_STAT_HIGHMARK:
+        stats[i] = heap->highmark_size;
+        break;
+      case GC_STAT_COUNT:
+        stats[i] = heap->total_gc_count;
+        break;
+      case GC_STAT_TIME:
+        stats[i] = (int)heap->total_gc_time;
+        break;
+      default:
+        break;
+    }
+  }
+  return heap;
+}

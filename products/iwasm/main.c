@@ -35,6 +35,7 @@
 #include "bh_memory.h"
 #ifdef __ZEPHYR__
 #include "test_wasm.h"
+#include "ems_gc.h"
 #endif
 
 
@@ -338,8 +339,8 @@ void iwasm_main(void *arg1, void *arg2, void *arg3)
 
   /* create vm instance */
   if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                          8 * 1024, /* TODO, define macro */
-                                          4 * 1024, /* TODO, define macro */
+                                          8 * 1024, /* native stack size */
+                                          8 * 1024, /* wasm stack size */
                                           app_instance_main, NULL,
                                           app_instance_cleanup)))
     goto fail3;
@@ -361,6 +362,13 @@ fail2:
 fail1:
   /* destroy runtime environment */
   wasm_runtime_destroy();
+
+#if 0   /* print the memory usage */
+  int stats[GC_STAT_MAX];
+  gc_heap_stats(NULL, stats, GC_STAT_MAX, MMT_INSTANCE);
+  printf("heap status: total: %d, free: %d, highmark: %d\n",
+         stats[GC_STAT_TOTAL], stats[GC_STAT_FREE], stats[GC_STAT_HIGHMARK]);
+#endif
 }
 
 #define DEFAULT_THREAD_STACKSIZE (6 * 1024)

@@ -38,11 +38,8 @@ typedef double float64;
 #define offsetof(Type, field) ((size_t)(&((Type *)0)->field))
 #endif
 
-#define _STACK_SIZE_ADJUSTMENT (0 * 1024)
-
 /* Stack size of applet threads's native part.  */
-#define BH_APPLET_PRESERVED_NATIVE_STACK_SIZE \
-    (4 * 1024 + _STACK_SIZE_ADJUSTMENT)
+#define BH_APPLET_PRESERVED_NATIVE_STACK_SIZE (0 * 1024)
 
 /* Stack size of applet threads's interpreter part.  */
 #define BH_APPLET_PRESERVED_WASM_STACK_SIZE (0 * 1024)
