@@ -28,8 +28,23 @@ gpio_pin_configure_wrapper(struct device *port, u32_t pin, int flags)
   return gpio_pin_configure(port, pin, flags);
 }
 
+static int
+gpio_pin_read_wrapper(struct device *port, u32_t pin, u32_t *value)
+{
+  return gpio_pin_read(port, pin, value);
+}
+
+static int
+gpio_pin_write_wrapper(struct device *port, u32_t pin, u32_t value)
+{
+  return gpio_pin_write(port, pin, value);
+}
+
 static const struct NativeSymbol native_symbol_defs[] = {
+  REG_SYMBOL(device_get_binding),
   { "gpio_pin_configure", (symbol_func)gpio_pin_configure_wrapper },
+  { "gpio_pin_read", (symbol_func)gpio_pin_read_wrapper },
+  { "gpio_pin_write", (symbol_func)gpio_pin_write_wrapper },
   REG_SYMBOL(memcmp),
   REG_SYMBOL(memcpy),
   REG_SYMBOL(memmove),
