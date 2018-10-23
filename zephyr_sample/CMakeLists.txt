@@ -32,7 +32,7 @@ set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/bh_hashmap.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-import.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-interp.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-loader.c
-                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-native.c
+                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-native_zephyr.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-runtime.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-thread.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/invokeNative_general.c
