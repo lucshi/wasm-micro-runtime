@@ -1,3 +1,8 @@
+#include <zephyr.h>
+#include <kernel.h>
+#include <misc/printk.h>
+#include <gpio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,16 +15,21 @@ struct NativeSymbol {
 
 #define REG_SYMBOL(symbol) {#symbol, (symbol_func)symbol}
 
-void snprintf(void);
-void sprintf(void);
-int printk(const char *format, ...);
-int putchar(int c)
+static int
+putchar(int c)
 {
   printk("%c", (char)c);
   return 1;
 }
 
+static int
+gpio_pin_configure_wrapper(struct device *port, u32_t pin, int flags)
+{
+  return gpio_pin_configure(port, pin, flags);
+}
+
 static const struct NativeSymbol native_symbol_defs[] = {
+  { "gpio_pin_configure", (symbol_func)gpio_pin_configure_wrapper },
   REG_SYMBOL(memcmp),
   REG_SYMBOL(memcpy),
   REG_SYMBOL(memmove),
@@ -35,7 +45,8 @@ static const struct NativeSymbol native_symbol_defs[] = {
   REG_SYMBOL(strncpy),
 };
 
-void *bh_dlsym(void *handle, const char *symbol)
+void *
+bh_dlsym(void *handle, const char *symbol)
 {
   int low = 0;
   int high = sizeof(native_symbol_defs) / sizeof(NativeSymbol) - 1;
