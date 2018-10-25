@@ -741,6 +741,19 @@ wasm_interp_call_func_native(WASMThread *self,
   wasm_thread_set_cur_frame(self, prev_frame);
 }
 
+#if WASM_ENABLE_LABELS_AS_VALUES != 0
+
+#define HANDLE_OP(opcode) HANDLE_##opcode
+#define FETCH_OPCODE_AND_DISPATCH() goto *handle_table[*frame_ip++]
+#define HANDLE_OP_END() FETCH_OPCODE_AND_DISPATCH()
+
+#else   /* else of WASM_ENABLE_LABELS_AS_VALUES */
+
+#define HANDLE_OP(opcode) case opcode
+#define HANDLE_OP_END() break
+
+#endif  /* end of WASM_ENABLE_LABELS_AS_VALUES */
+
 static void
 wasm_interp_call_func_bytecode(WASMThread *self,
                                WASMFunctionInstance *cur_func,
@@ -766,6 +779,12 @@ wasm_interp_call_func_bytecode(WASMThread *self,
   int32 didx, val;
   uint8 *else_addr, *end_addr;
   uint8 *maddr;
+
+#if WASM_ENABLE_LABELS_AS_VALUES != 0
+  #define HANDLE_OPCODE(op) &&HANDLE_##op
+  DEFINE_GOTO_TABLE (handle_table);
+  #undef HANDLE_OPCODE
+#endif
 
   /* Size of memory load.
      This starts with the first memory load operator at opcode 0x28 */
