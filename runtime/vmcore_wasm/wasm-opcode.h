@@ -452,7 +452,7 @@ static const void *_name[WASM_INSTRUCTION_NUM] = {           \
   HANDLE_OPCODE (WASM_OP_I64_TRUNC_U_F64),   /* 0xb1 */      \
   HANDLE_OPCODE (WASM_OP_F32_CONVERT_S_I32), /* 0xb2 */      \
   HANDLE_OPCODE (WASM_OP_F32_CONVERT_U_I32), /* 0xb3 */      \
-  HANDLE_OPCODE (WASM_OP_F32_CONVERT_S_I640),/* 0xb4 */      \
+  HANDLE_OPCODE (WASM_OP_F32_CONVERT_S_I64), /* 0xb4 */      \
   HANDLE_OPCODE (WASM_OP_F32_CONVERT_U_I64), /* 0xb5 */      \
   HANDLE_OPCODE (WASM_OP_F32_DEMOTE_F64),    /* 0xb6 */      \
   HANDLE_OPCODE (WASM_OP_F64_CONVERT_S_I32), /* 0xb7 */      \
