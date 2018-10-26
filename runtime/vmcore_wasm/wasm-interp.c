@@ -281,11 +281,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   } while (0)
 
 #define PUSH_CSP(type, ret_type, start, else_, end) do {\
-    if (frame_csp >= frame->csp_boundary) {             \
-      wasm_runtime_set_exception("WASM intepreter failed: "\
-                                 "block stack overflow.");\
-      goto got_exception;                               \
-    }                                                   \
+    bh_assert(frame_csp < frame->csp_boundary);         \
     frame_csp->block_type = type;                       \
     frame_csp->return_type = ret_type;                  \
     frame_csp->start_addr = start;                      \
@@ -305,11 +301,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define POP_F64() (frame_ref -= 2, frame_sp -= 2, GET_F64_FROM_ADDR(frame_sp))
 
 #define POP_CSP_CHECK_OVERFLOW(n) do {                          \
-    if (frame_csp - n < frame->csp_bottom) {                    \
-      wasm_runtime_set_exception("WASM intepreter failed: "     \
-                                 "block stack pop failed.");    \
-      goto got_exception;                                       \
-    }                                                           \
+    bh_assert(frame_csp - n >= frame->csp_bottom);              \
   } while (0)
 
 #define POP_CSP() do {                                          \
@@ -406,11 +398,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define read_leb_uint64(p, p_end, res) do {     \
   uint32 _off = 0;                              \
   uint64 _res64;                                \
-  if (!read_leb(p, p_end, &_off, 64, false,     \
-                &_res64)) {                     \
-    wasm_runtime_set_exception("read leb failed");\
-    goto got_exception;                         \
-  }                                             \
+  bool _ret = read_leb(p, p_end, &_off, 64,     \
+                       false, &_res64);         \
+  bh_assert(_ret);                              \
+  (void)_ret;                                   \
   p += _off;                                    \
   res = (uint64)_res64;                         \
 } while (0)
@@ -418,11 +409,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define read_leb_int64(p, p_end, res) do {      \
   uint32 _off = 0;                              \
   uint64 _res64;                                \
-  if (!read_leb(p, p_end, &_off, 64, true,      \
-                &_res64)) {                     \
-    wasm_runtime_set_exception("read leb failed");\
-    goto got_exception;                         \
-  }                                             \
+  bool _ret = read_leb(p, p_end, &_off, 64,     \
+                       true, &_res64);          \
+  bh_assert(_ret);                              \
+  (void)_ret;                                   \
   p += _off;                                    \
   res = (int64)_res64;                          \
 } while (0)
@@ -430,11 +420,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define read_leb_uint32(p, p_end, res) do {     \
   uint32 _off = 0;                              \
   uint64 _res64;                                \
-  if (!read_leb(p, p_end, &_off, 32, false,     \
-                &_res64)) {                     \
-    wasm_runtime_set_exception("read leb failed");\
-    goto got_exception;                         \
-  }                                             \
+  bool _ret = read_leb(p, p_end, &_off, 32,     \
+                       false, &_res64);         \
+  bh_assert(_ret);                              \
+  (void)_ret;                                   \
   p += _off;                                    \
   res = (uint32)_res64;                         \
 } while (0)
@@ -442,11 +431,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define read_leb_int32(p, p_end, res) do {      \
   uint32 _off = 0;                              \
   uint64 _res64;                                \
-  if (!read_leb(p, p_end, &_off, 32, true,      \
-                &_res64)) {                     \
-    wasm_runtime_set_exception("read leb failed");\
-    goto got_exception;                         \
-  }                                             \
+  bool _ret = read_leb(p, p_end, &_off, 32,     \
+                       true, &_res64);          \
+  bh_assert(_ret);                              \
+  (void)_ret;                                   \
   p += _off;                                    \
   res = (int32)_res64;                          \
 } while (0)
@@ -454,11 +442,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define read_leb_uint8(p, p_end, res) do {      \
   uint32 _off = 0;                              \
   uint64 _res64;                                \
-  if (!read_leb(p, p_end, &_off, 7, false,      \
-                &_res64)) {                     \
-    wasm_runtime_set_exception("read leb failed");\
-    goto got_exception;                         \
-  }                                             \
+  bool _ret = read_leb(p, p_end, &_off, 7,      \
+                       false, &_res64);         \
+  bh_assert(_ret);                              \
+  (void)_ret;                                   \
   p += _off;                                    \
   res = (uint8)_res64;                          \
 } while (0)
@@ -572,10 +559,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     param_count = cur_func->u.func->func_type->param_count;         \
     local_count = cur_func->u.func->local_count;                    \
     read_leb_uint32(frame_ip, frame_ip_end, local_idx);             \
-    if (local_idx >= param_count + local_count) {                   \
-      wasm_runtime_set_exception("local index is overflow");        \
-      goto got_exception;                                           \
-    }                                                               \
+    bh_assert(local_idx < param_count + local_count);               \
     if (local_idx < param_count)                                    \
       local_type = cur_func->u.func->func_type->types[local_idx];   \
     else                                                            \
