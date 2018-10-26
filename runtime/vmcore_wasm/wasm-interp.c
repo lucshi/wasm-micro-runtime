@@ -475,8 +475,15 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     frame_ref = frame->ref;                                          \
   } while (0)
 
+#if WASM_ENABLE_LABELS_AS_VALUES != 0
+#define GET_OPCODE() opcode = *(frame_ip - 1);
+#else
+#define GET_OPCODE() (void)0
+#endif
+
 #define DEF_OP_LOAD(operation) do {                                  \
     uint32 offset, flags, addr;                                      \
+    GET_OPCODE();                                                    \
     read_leb_uint32(frame_ip, frame_ip_end, flags);                  \
     read_leb_uint32(frame_ip, frame_ip_end, offset);                 \
     addr = POP_I32();                                                \
@@ -488,6 +495,7 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 #define DEF_OP_STORE(sval_type, sval_op_type, operation) do {        \
     uint32 offset, flags, addr;                                      \
     sval_type sval;                                                  \
+    GET_OPCODE();                                                    \
     read_leb_uint32(frame_ip, frame_ip_end, flags);                  \
     read_leb_uint32(frame_ip, frame_ip_end, offset);                 \
     sval = POP_##sval_op_type();                                     \
