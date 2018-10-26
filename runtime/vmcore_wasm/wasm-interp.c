@@ -921,10 +921,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_CALL):
         read_leb_uint32(frame_ip, frame_ip_end, fidx);
-        if (fidx >= module->function_count) {
-          wasm_runtime_set_exception("function index is overflow");
-          goto got_exception;
-        }
+        bh_assert(fidx < module->function_count);
         cur_func = module->functions + fidx;
         goto call_func_from_interp;
 
@@ -1149,11 +1146,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           uint32 global_idx;
 
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
-          if (!(global = get_global(module, global_idx))
-              || global_idx >= module->global_count) {
-            wasm_runtime_set_exception("global index is overflow");
-            goto got_exception;
-          }
+
+          global = get_global(module, global_idx);
+          bh_assert(global && global_idx < module->global_count);
 
           switch (global->type) {
             case VALUE_TYPE_I32:
@@ -1182,11 +1177,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           uint8 *global_addr;
 
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
-          if (!(global = get_global(module, global_idx))
-              || global_idx >= module->global_count) {
-            wasm_runtime_set_exception("global index is overflow");
-            goto got_exception;
-          }
+
+          global = get_global(module, global_idx);
+          bh_assert(global && global_idx < module->global_count);
 
           global_addr = get_global_addr(memory, global);
           switch (global->type) {
