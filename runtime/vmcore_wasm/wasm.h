@@ -373,6 +373,16 @@ wasm_type_return_cell_num(const WASMType *type)
                            type->result_count);
 }
 
+inline static bool
+wasm_type_equal(const WASMType *type1, const WASMType *type2)
+{
+  return (type1->param_count == type2->param_count
+          && type1->result_count == type2->result_count
+          && memcmp(type1->types, type2->types,
+                    type1->param_count + type1->result_count) == 0)
+         ? true : false;
+}
+
 bool
 read_leb(const uint8 *buf, const uint8 *buf_end,
          uint32 *p_offset, uint32 maxbits,

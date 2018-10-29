@@ -789,7 +789,6 @@ wasm_interp_call_func_bytecode(WASMThread *self,
     opcode = *frame_ip++;
     switch (opcode) {
 #else
-  fetch_opcode_and_dispatch:
       FETCH_OPCODE_AND_DISPATCH ();
 #endif
       /* control instructions */
@@ -927,9 +926,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_CALL_INDIRECT):
         {
-          uint32 i, j;
-          uint8 *frame_ref_tmp, *type_tmp, *frame_ref_bottom = NULL;
-          WASMType *cur_type;
+          WASMType *cur_type, *cur_func_type;
           /* TODO: test */
           read_leb_uint32(frame_ip, frame_ip_end, tidx);
 
@@ -954,65 +951,15 @@ wasm_interp_call_func_bytecode(WASMThread *self,
             goto got_exception;
           }
 
-          frame_ref_bottom = frame->ref_lp + cur_func->param_cell_num +
-                             cur_func->local_cell_num;
           cur_func = module->functions + fidx;
 
-          if (frame_sp - frame->sp_bottom < cur_func->param_cell_num) {
+          if (cur_func->is_import_func)
+            cur_func_type = cur_func->u.func_import->func_type;
+          else
+            cur_func_type = cur_func->u.func->func_type;
+          if (!wasm_type_equal(cur_type, cur_func_type)) {
             wasm_runtime_set_exception("indirect call type mismatch");
             goto got_exception;
-          }
-
-          j = cur_func->u.func->func_type->param_count;
-
-          if (cur_func->u.func->func_type->param_count != cur_type->param_count) {
-            wasm_runtime_set_exception("indirect call type mismatch");
-            goto got_exception;
-          }
-
-          frame_ref_tmp = frame_ref - cur_func->param_cell_num;
-
-          if (frame_ref_tmp < frame_ref_bottom) {
-            wasm_runtime_set_exception("frame ref is overflow");
-            goto got_exception;
-          }
-
-          type_tmp = cur_func->u.func->func_type->types;
-
-          for (i = 0; i < j; i++, type_tmp++, frame_ref_tmp++) {
-            switch (*type_tmp) {
-              case VALUE_TYPE_I32:
-                if (*frame_ref_tmp != REF_I32) {
-                  wasm_runtime_set_exception("indirect call type mismatch");
-                  goto got_exception;
-                }
-                break;
-              case VALUE_TYPE_F32:
-                if (*frame_ref_tmp != REF_F32) {
-                  wasm_runtime_set_exception("indirect call type mismatch");
-                  goto got_exception;
-                }
-                break;
-              case VALUE_TYPE_I64:
-                if (*frame_ref_tmp != REF_I64_1 ||
-                    *(frame_ref_tmp + 1) != REF_I64_2) {
-                  wasm_runtime_set_exception("indirect call type mismatch");
-                  goto got_exception;
-                }
-                frame_ref_tmp++;
-                break;
-              case VALUE_TYPE_F64:
-                if (*frame_ref_tmp != REF_F64_1 ||
-                    *(frame_ref_tmp + 1) != REF_F64_2) {
-                  wasm_runtime_set_exception("indirect call type mismatch");
-                  goto got_exception;
-                }
-                frame_ref_tmp++;
-                break;
-              default:
-                wasm_runtime_set_exception("indirect call type mismatch");
-                goto got_exception;
-            }
           }
           goto call_func_from_interp;
         }
