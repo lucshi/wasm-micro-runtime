@@ -42,7 +42,7 @@ field-release: $(builddir_field_release)
 		if [ ! -f Makefile ]; then\
 		  export CFLAGS="$(footprint_extra)";\
 		  export CXXFLAGS="$(footprint_extra)";\
-		  cmake ../../ -DCMAKE_BUILD_TYPE=MinSizeRel $(oom_extra);\
+		  cmake ../../ -DCMAKE_BUILD_TYPE=Release $(oom_extra);\
 		fi;\
 		make;\
 		cd -;\
