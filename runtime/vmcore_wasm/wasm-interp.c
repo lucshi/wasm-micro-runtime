@@ -979,6 +979,42 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           HANDLE_OP_END ();
         }
 
+      HANDLE_OP (WASM_OP_DROP_32):
+        {
+          frame_sp--;
+          frame_ref--;
+          HANDLE_OP_END ();
+        }
+
+      HANDLE_OP (WASM_OP_DROP_64):
+        {
+          frame_sp -= 2;
+          frame_ref -= 2;
+          HANDLE_OP_END ();
+        }
+
+      HANDLE_OP (WASM_OP_SELECT_32):
+        {
+          cond = POP_I32();
+          frame_sp--;
+          frame_ref--;
+          if (!cond)
+            *(frame_sp - 1) = *frame_sp;
+          HANDLE_OP_END ();
+        }
+
+      HANDLE_OP (WASM_OP_SELECT_64):
+        {
+          cond = POP_I32();
+          frame_sp -= 2;
+          frame_ref -= 2;
+          if (!cond) {
+            *(frame_sp - 2) = *frame_sp;
+            *(frame_sp - 1) = *(frame_sp + 1);
+          }
+          HANDLE_OP_END ();
+        }
+
       HANDLE_OP (WASM_OP_SELECT):
         {
           uint8 ref_type;

@@ -1440,6 +1440,10 @@ wasm_loader_find_block_addr(HashMap *branch_set,
 
       case WASM_OP_DROP:
       case WASM_OP_SELECT:
+      case WASM_OP_DROP_32:
+      case WASM_OP_DROP_64:
+      case WASM_OP_SELECT_32:
+      case WASM_OP_SELECT_64:
         break;
 
       case WASM_OP_GET_LOCAL:
@@ -2253,6 +2257,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
               || *(frame_ref - 1) == REF_F32) {
             frame_ref--;
             stack_cell_num--;
+            *(p - 1) = WASM_OP_DROP_32;
           }
           else {
             if (stack_cell_num <= 1) {
@@ -2262,6 +2267,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             }
             frame_ref -= 2;
             stack_cell_num -= 2;
+            *(p - 1) = WASM_OP_DROP_64;
           }
           break;
         }
@@ -2276,6 +2282,17 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             set_error_buf(error_buf, error_buf_size,
                           "invalid drop: stack was empty");
             goto fail;
+          }
+
+          switch (*(frame_ref - 1)) {
+            case REF_I32:
+            case REF_F32:
+              *(p - 1) = WASM_OP_SELECT_32;
+              break;
+            case REF_I64_2:
+            case REF_F64_2:
+              *(p - 1) = WASM_OP_SELECT_64;
+              break;
           }
 
           ref_type = *(frame_ref - 1);
