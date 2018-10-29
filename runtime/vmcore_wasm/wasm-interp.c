@@ -492,13 +492,10 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
     PUSH_##src_op_type(val2);                                        \
   } while (0)
 
-#define DEF_OP_NUMERIC(src_type1, src_type2, src_op_type, operation) do { \
-    src_type1 val1, val3;                                                 \
-    src_type2 val2;                                                       \
-    val2 = POP_##src_op_type();                                           \
-    val1 = POP_##src_op_type();                                           \
-    val3 = val1 operation val2;                                           \
-    PUSH_##src_op_type(val3);                                             \
+#define DEF_OP_NUMERIC(src_type1, src_type2, src_op_type, operation) do {   \
+    frame_sp -= sizeof(src_type2)/sizeof(uint32);                           \
+    *(src_type1*)(frame_sp - sizeof(src_type1)/sizeof(uint32)) operation##= \
+    *(src_type2*)(frame_sp);                                                \
   } while (0)
 
 #define DEF_OP_MATH(src_type, src_op_type, method) do {              \
