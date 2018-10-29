@@ -54,11 +54,6 @@ typedef struct WASMInterpFrame {
   WASMBranchBlock *csp_boundary;
   WASMBranchBlock *csp;
 
-  /* Ref info (data type) of each local variable cell */
-  uint8 *ref_lp;
-  /* Ref info (data type) of each stack cell */
-  uint8 *ref;
-
   /* Frame data, the layout is:
      lp: param_cell_count + local_cell_count
      sp_bottom to sp_boundary: stack of data
