@@ -383,11 +383,6 @@ wasm_type_equal(const WASMType *type1, const WASMType *type2)
          ? true : false;
 }
 
-bool
-read_leb(const uint8 *buf, const uint8 *buf_end,
-         uint32 *p_offset, uint32 maxbits,
-         bool sign, uint64 *p_result);
-
 #ifdef __cplusplus
 } /* end of extern "C" */
 #endif

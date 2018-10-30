@@ -37,6 +37,48 @@
 #define TEMPLATE_READ_VALUE(Type, p)                    \
     (p += sizeof(Type), *(Type *)(p - sizeof(Type)))
 
+#define CHECK_BUF(buf, buf_end, length) {                       \
+  if (buf + length > buf_end) {                                 \
+    LOG_ERROR("WASM read data failed: data out of range.\n");   \
+    return false;                                               \
+  }                                                             \
+}
+
+static bool
+read_leb(const uint8 *buf, const uint8 *buf_end,
+         uint32 *p_offset, uint32 maxbits,
+         bool sign, uint64 *p_result)
+{
+  uint64 result = 0;
+  uint32 shift = 0;
+  uint32 bcnt = 0;
+  uint32 start_pos = *p_offset;
+  uint64 byte;
+
+  while (true) {
+    byte = buf[*p_offset];
+    *p_offset += 1;
+    result |= ((byte & 0x7f) << shift);
+    shift += 7;
+    if ((byte & 0x80) == 0) {
+      break;
+    }
+    bcnt += 1;
+  }
+  CHECK_BUF(buf, buf_end, *p_offset);
+  if (bcnt > (((maxbits + 8) >> 3) - (maxbits + 8))) {
+    LOG_ERROR("WASM module load failed: unsigned LEB at byte %d overflow\n",
+              start_pos);
+    return false;
+  }
+  if (sign && (shift < maxbits) && (byte & 0x40)) {
+    /* Sign extend */
+    result |= - (1 << shift);
+  }
+  *p_result = result;
+  return true;
+}
+
 #define read_uint8(p)  TEMPLATE_READ_VALUE(uint8, p)
 #define read_uint32(p) TEMPLATE_READ_VALUE(uint32, p)
 #define read_bool(p)   TEMPLATE_READ_VALUE(bool, p)

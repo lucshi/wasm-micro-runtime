@@ -43,9 +43,11 @@ typedef float64 CellType_F64;
 #define PUT_I64_TO_ADDR(addr, value) do {       \
     *(int64*)(addr) = (int64)(value);           \
   } while (0)
+
 #define PUT_F64_TO_ADDR(addr, value) do {       \
     *(float64*)(addr) = (float64)(value);       \
   } while (0)
+
 #define GET_I64_FROM_ADDR(addr) (*(int64*)(addr))
 #define GET_F64_FROM_ADDR(addr) (*(float64*)(addr))
 #else  /* WASM_CPU_SUPPORTS_UNALIGNED_64BIT_ACCESS != 0 */
@@ -247,6 +249,32 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
   return memory->global_data + global->data_offset;
 }
 
+static uint64
+read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
+{
+  uint64 result = 0;
+  uint32 shift = 0;
+  uint32 bcnt = 0;
+  uint32 start_pos = *p_offset;
+  uint64 byte;
+
+  while (true) {
+    byte = buf[*p_offset];
+    *p_offset += 1;
+    result |= ((byte & 0x7f) << shift);
+    shift += 7;
+    if ((byte & 0x80) == 0) {
+      break;
+    }
+    bcnt += 1;
+  }
+  if (sign && (shift < maxbits) && (byte & 0x40)) {
+    /* Sign extend */
+    result |= - (1 << shift);
+  }
+  return result;
+}
+
 #define PUSH_I32(value) do {                    \
     *(int32*)frame_sp++ = (int32)(value);       \
   } while (0)
@@ -370,57 +398,32 @@ get_global_addr(WASMMemoryInstance *memory, WASMGlobalInstance *global)
 
 #define read_leb_uint64(p, p_end, res) do {     \
   uint32 _off = 0;                              \
-  uint64 _res64;                                \
-  bool _ret = read_leb(p, p_end, &_off, 64,     \
-                       false, &_res64);         \
-  bh_assert(_ret);                              \
-  (void)_ret;                                   \
+  res = read_leb(p, &_off, 64, false);          \
   p += _off;                                    \
-  res = (uint64)_res64;                         \
 } while (0)
 
 #define read_leb_int64(p, p_end, res) do {      \
   uint32 _off = 0;                              \
-  uint64 _res64;                                \
-  bool _ret = read_leb(p, p_end, &_off, 64,     \
-                       true, &_res64);          \
-  bh_assert(_ret);                              \
-  (void)_ret;                                   \
+  res = (int64)read_leb(p, &_off, 64, true);    \
   p += _off;                                    \
-  res = (int64)_res64;                          \
 } while (0)
 
 #define read_leb_uint32(p, p_end, res) do {     \
   uint32 _off = 0;                              \
-  uint64 _res64;                                \
-  bool _ret = read_leb(p, p_end, &_off, 32,     \
-                       false, &_res64);         \
-  bh_assert(_ret);                              \
-  (void)_ret;                                   \
+  res = (uint32)read_leb(p, &_off, 32, false);  \
   p += _off;                                    \
-  res = (uint32)_res64;                         \
 } while (0)
 
 #define read_leb_int32(p, p_end, res) do {      \
   uint32 _off = 0;                              \
-  uint64 _res64;                                \
-  bool _ret = read_leb(p, p_end, &_off, 32,     \
-                       true, &_res64);          \
-  bh_assert(_ret);                              \
-  (void)_ret;                                   \
+  res = (int32)read_leb(p, &_off, 32, true);    \
   p += _off;                                    \
-  res = (int32)_res64;                          \
 } while (0)
 
 #define read_leb_uint8(p, p_end, res) do {      \
   uint32 _off = 0;                              \
-  uint64 _res64;                                \
-  bool _ret = read_leb(p, p_end, &_off, 7,      \
-                       false, &_res64);         \
-  bh_assert(_ret);                              \
-  (void)_ret;                                   \
+  res = (uint8)read_leb(p, &_off, 7, false);    \
   p += _off;                                    \
-  res = (uint8)_res64;                          \
 } while (0)
 
 #define RECOVER_CONTEXT(new_frame) do {                              \
