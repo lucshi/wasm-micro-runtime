@@ -23,7 +23,9 @@
  * Intel in writing.
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "bh_assert.h"
@@ -42,6 +44,11 @@
 static int app_argc;
 static char **app_argv;
 
+#ifdef __cplusplus
+#include <iostream>
+extern "C" {
+#endif
+
 void*
 vmci_get_tl_root(void)
 {
@@ -53,6 +60,20 @@ vmci_set_tl_root(void *tlr)
 {
   vm_tls_put(0, tlr);
 }
+
+void*
+vmci_get_std_cout()
+{
+#ifdef __cplusplus
+  return &std::cout;
+#else
+  return NULL;
+#endif
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef __ZEPHYR__
 static int

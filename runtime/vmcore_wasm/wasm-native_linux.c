@@ -304,6 +304,34 @@ print_wrapper(WASMThread *self, uint32 *args)
 }
 #endif
 
+void*
+vmci_get_std_cout();
+
+static void
+_cout_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)vmci_get_std_cout();
+}
+
+static void
+_stdout_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)stdout;
+}
+
+static void
+_stderr_wrapper(WASMThread *self, uint32 *args)
+{
+  *args = (uint32)stderr;
+}
+
+static void
+_atexit_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO: implement callback for atexit */
+  wasm_runtime_set_exception("atexit unsupported");
+}
+
 /* TODO: add function parameter/result types check */
 #define REG_NATIVE_FUNC(module_name, func_name) \
     {#module_name, #func_name, func_name##_wrapper}
@@ -321,6 +349,7 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _print_f32),
   REG_NATIVE_FUNC(env, _print_f64),
 #endif
+  REG_NATIVE_FUNC(env, _atexit),
   REG_NATIVE_FUNC(env, abort),
   REG_NATIVE_FUNC(env, _printf),
   REG_NATIVE_FUNC(env, _sprintf),
@@ -332,6 +361,9 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _malloc),
   REG_NATIVE_FUNC(env, _calloc),
   REG_NATIVE_FUNC(env, _free),
+  { "env", "g$__ZSt4cout", _cout_wrapper },
+  { "env", "g$_stdout", _stdout_wrapper },
+  { "env", "g$_stderr", _stderr_wrapper },
   REG_NATIVE_FUNC(env, ___syscall140),
   REG_NATIVE_FUNC(env, ___syscall146),
   REG_NATIVE_FUNC(env, ___syscall54),

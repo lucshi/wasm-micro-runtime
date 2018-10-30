@@ -255,7 +255,6 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
   uint64 result = 0;
   uint32 shift = 0;
   uint32 bcnt = 0;
-  uint32 start_pos = *p_offset;
   uint64 byte;
 
   while (true) {
@@ -1187,6 +1186,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       HANDLE_OP (WASM_OP_F32_STORE):
         {
           uint32 offset, flags, addr;
+          GET_OPCODE();
           read_leb_uint32(frame_ip, frame_ip_end, flags);
           read_leb_uint32(frame_ip, frame_ip_end, offset);
           frame_sp--;
@@ -1200,6 +1200,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       HANDLE_OP (WASM_OP_F64_STORE):
         {
           uint32 offset, flags, addr;
+          GET_OPCODE();
           read_leb_uint32(frame_ip, frame_ip_end, flags);
           read_leb_uint32(frame_ip, frame_ip_end, offset);
           frame_sp -= 2;

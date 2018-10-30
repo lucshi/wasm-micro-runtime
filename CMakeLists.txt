@@ -26,7 +26,7 @@ endif ()
 
 set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -ffunction-sections -fdata-sections -Wall -Wextra -pedantic -Wno-unused-parameter -Wno-variadic-macros")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -Wall -pedantic")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -Wall -pedantic -Wno-variadic-macros")
 
 set (MEMORYCHECK_COMMAND_OPTIONS "--suppressions=${CMAKE_SOURCE_DIR}/tools/vimash/valgrind.supp")
 

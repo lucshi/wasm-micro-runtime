@@ -83,9 +83,11 @@ extern "C" {
 
 /* #include <math.h> */
 
+#ifndef __cplusplus
 double fmod(double x, double y);
 float fmodf(float x, float y);
 double exp(double x);
+#endif
 
 extern int memcpy_s(void * s1, unsigned int s1max, const void * s2, unsigned int n);
 extern int strcpy_s(char * s1, size_t s1max, const char * s2);
