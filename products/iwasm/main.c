@@ -139,7 +139,7 @@ split_string(char *str, int *count)
   do {
     p = strtok(str, " ");
     str = NULL;
-    res = realloc(res, sizeof(char*) * (idx + 1));
+    res = (char**)realloc(res, sizeof(char*) * (idx + 1));
     if (res == NULL) {
       return NULL;
     }
