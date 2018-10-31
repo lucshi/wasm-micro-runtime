@@ -67,6 +67,8 @@ wasm_loader_unload(WASMModule *module);
  * @param block_type the type of block, 0/1/2 denotes block/loop/if
  * @param p_else_addr returns the else addr if found
  * @param p_end_addr returns the end addr if found
+ * @param error_buf returns the error log for this function
+ * @param error_buf_size returns the error log string length
  *
  * @return true if success, false otherwise
  */
@@ -76,7 +78,9 @@ wasm_loader_find_block_addr(HashMap *map,
                             const uint8 *code_end_addr,
                             uint8 block_type,
                             uint8 **p_else_addr,
-                            uint8 **p_end_addr);
+                            uint8 **p_end_addr,
+                            char *error_buf,
+                            uint32 error_buf_size);
 
 #ifdef __cplusplus
 }
