@@ -2004,15 +2004,16 @@ pop_type(uint8 type, uint8 **p_frame_ref, uint32 *p_stack_cell_num,
       goto fail;                                                    \
     }                                                               \
     if (frame_csp[-(depth + 1)].block_type != BLOCK_TYPE_LOOP) {    \
-      if ((frame_csp[-1].return_type == VALUE_TYPE_I32              \
+      uint8 tmp_ret_type = frame_csp[-(depth + 1)].return_type;     \
+      if ((tmp_ret_type == VALUE_TYPE_I32                           \
             && (stack_cell_num < 1 || frame_ref[-1] != REF_I32))    \
-          || (frame_csp[-1].return_type == VALUE_TYPE_F32           \
+          || (tmp_ret_type == VALUE_TYPE_F32                        \
               && (stack_cell_num < 1 || frame_ref[-1] != REF_F32))  \
-          || (frame_csp[-1].return_type == VALUE_TYPE_I64           \
+          || (tmp_ret_type == VALUE_TYPE_I64                        \
               && (stack_cell_num < 2                                \
                   || frame_ref[-2] != REF_I64_1                     \
                   || frame_ref[-1] != REF_I64_2))                   \
-          || (frame_csp[-1].return_type == VALUE_TYPE_F64           \
+          || (tmp_ret_type == VALUE_TYPE_F64                        \
               && (stack_cell_num < 2                                \
                   || frame_ref[-2] != REF_F64_1                     \
                   || frame_ref[-1] != REF_F64_2))) {                \
@@ -2041,10 +2042,10 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   uint32 frame_ref_size, frame_csp_size;
   uint8 *param_types, ret_type, *local_types, local_type, global_type;
   uint32 count, i, local_idx, global_idx, block_return_type, depth, u32;
-  int32 i32;
+  int32 i32, i32_const = 0;
   int64 i64;
   uint8 opcode, u8;
-  bool return_value = false;
+  bool return_value = false, is_i32_const = false;
 
   global_count = module->import_global_count + module->global_count;
 
@@ -2109,9 +2110,28 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         break;
 
       case WASM_OP_IF:
+        POP_I32();
         read_leb_uint32(p, p_end, block_return_type);
         PUSH_CSP(BLOCK_TYPE_IF, block_return_type, p);
-        frame_csp[-1].jumped_by_br = true;
+        if (!is_i32_const)
+          frame_csp[-1].jumped_by_br = true;
+        else {
+          if (!i32_const) {
+            if(!wasm_loader_find_block_addr(branch_set,
+                                            frame_csp[-1].start_addr,
+                                            p_end,
+                                            frame_csp[-1].block_type,
+                                            &frame_csp[-1].else_addr,
+                                            &frame_csp[-1].end_addr,
+                                            error_buf, error_buf_size))
+              goto fail;
+
+            if (frame_csp[-1].else_addr)
+              p = frame_csp[-1].else_addr;
+            else
+              p = frame_csp[-1].end_addr;
+          }
+        }
         break;
 
       case WASM_OP_ELSE:
@@ -2129,6 +2149,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
         frame_csp[-1].else_addr = p - 1;
         stack_cell_num = frame_csp[-1].stack_cell_num;
+        frame_ref = frame_ref_bottom + stack_cell_num;
         break;
 
       case WASM_OP_END:
@@ -2194,7 +2215,8 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           frame_csp -= i - 1;
 
           if (frame_csp[-1].block_type == BLOCK_TYPE_IF
-              && p < frame_csp[-1].else_addr)
+              && frame_csp[-1].else_addr != NULL
+              && p <= frame_csp[-1].else_addr)
             p = frame_csp[-1].else_addr;
           else {
             p = frame_csp[-1].end_addr;
@@ -2208,7 +2230,12 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         read_leb_uint32(p, p_end, depth);
         POP_I32();
         CHECK_BR(depth);
-        frame_csp[-(depth + 1)].jumped_by_br = true;
+        if (!is_i32_const)
+          frame_csp[-(depth + 1)].jumped_by_br = true;
+        else {
+          if (i32_const)
+            goto handle_op_br;
+        }
         break;
 
       case WASM_OP_BR_TABLE:
@@ -2216,6 +2243,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           read_leb_uint32(p, p_end, count);
           POP_I32();
 
+          /* TODO: check the const */
           for (i = 0; i <= count; i++) {
             read_leb_uint32(p, p_end, depth);
             CHECK_BR(depth);
@@ -2497,7 +2525,9 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         break;
 
       case WASM_OP_I32_CONST:
-        read_leb_int32(p, p_end, i32);
+        read_leb_int32(p, p_end, i32_const);
+        /* Currently we only track simple I32_CONST opcode. */
+        is_i32_const = true;
         PUSH_I32();
         break;
 
@@ -2774,6 +2804,9 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
                   opcode);
         break;
     }
+
+    if (opcode != WASM_OP_I32_CONST)
+      is_i32_const = false;
   }
 
   func->max_stack_cell_num = max_stack_cell_num;

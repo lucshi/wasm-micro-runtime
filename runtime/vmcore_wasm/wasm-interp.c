@@ -806,9 +806,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           goto got_exception;
         }
 
+        cond = POP_I32();
+
         PUSH_CSP(BLOCK_TYPE_IF, block_ret_type, frame_ip, else_addr, end_addr);
 
-        cond = POP_I32();
         /* condition of the if branch is false, else condition is met */
         if (cond == 0) {
           /* if there is no else branch, go to the end addr */
