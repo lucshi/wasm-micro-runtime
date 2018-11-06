@@ -237,8 +237,8 @@ main(int argc, char *argv[])
     return print_help();
 
   wasm_file = argv[0];
-  app_argc = argc - 1;
-  app_argv = argv + 1;
+  app_argc = argc;
+  app_argv = argv;
 
   /* initialize runtime environment */
   if (!wasm_runtime_init())
