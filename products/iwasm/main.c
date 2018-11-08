@@ -111,13 +111,13 @@ app_instance_main(void *arg)
 
   res = wasm_application_execute_start();
   if ((exception = wasm_runtime_get_exception()))
-    bh_printf("%s", exception);
+    bh_printf("%s\n", exception);
   if (!res)
     return NULL;
 
   wasm_application_execute_main(app_argc, app_argv);
   if ((exception = wasm_runtime_get_exception()))
-    bh_printf("%s", exception);
+    bh_printf("%s\n", exception);
   return NULL;
 }
 
@@ -161,7 +161,7 @@ app_instance_func(void *arg)
 
   res = wasm_application_execute_start();
   if ((exception = wasm_runtime_get_exception()))
-    bh_printf("%s", exception);
+    bh_printf("%s\n", exception);
   if (!res)
     return NULL;
 
