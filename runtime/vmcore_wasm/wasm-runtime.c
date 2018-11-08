@@ -582,7 +582,8 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
     else if (strcmp(import->u.names.module_name, "env") == 0
         && strcmp(import->u.names.field_name, "tableBase") == 0) {
       globals->initial_value.addr =
-        (uintptr_t)module_inst->default_table->base_addr;
+        (uintptr_t)module_inst->tables[0]->base_addr;
+      module_inst->table_base_flag = true;
     }
     else if (strcmp(import->u.names.module_name, "env") == 0
         && strcmp(import->u.names.field_name, "DYNAMICTOP_PTR") == 0) {
@@ -735,29 +736,7 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
     WASMMemoryInstance *memory;
 
     memory = module_inst->default_memory = module_inst->memories[0];
-
-    /* Initialize the memory data with data segment section */
     memory_data = module_inst->default_memory->memory_data;
-    if (module_inst->default_memory->cur_page_count > 0) {
-      for (i = 0; i < module->data_seg_count; i++) {
-        data_seg = module->data_segments[i];
-        bh_assert(data_seg->memory_index == 0);
-        bh_assert(data_seg->base_offset.init_expr_type ==
-                  INIT_EXPR_TYPE_I32_CONST
-                  || data_seg->base_offset.init_expr_type ==
-                     INIT_EXPR_TYPE_GET_GLOBAL);
-        if ((uint32)data_seg->base_offset.u.i32 <
-            NumBytesPerPage * module_inst->default_memory->cur_page_count) {
-          length = data_seg->data_length;
-          if (data_seg->base_offset.u.i32 + length >
-              NumBytesPerPage * module_inst->default_memory->cur_page_count)
-            length = NumBytesPerPage * module_inst->default_memory->cur_page_count -
-                     data_seg->base_offset.u.i32;
-          memcpy(memory_data + data_seg->base_offset.u.i32,
-                 data_seg->data, length);
-        }
-      }
-    }
 
     /* fix import memoryBase */
     globals_instantiate_fix(globals, module, module_inst);
@@ -794,6 +773,39 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
     }
     bh_assert(addr_data == addr_data_end);
     bh_assert(global_data == global_data_end);
+
+    /* Initialize the memory data with data segment section */
+    if (module_inst->default_memory->cur_page_count > 0) {
+      for (i = 0; i < module->data_seg_count; i++) {
+        data_seg = module->data_segments[i];
+        bh_assert(data_seg->memory_index == 0);
+        bh_assert(data_seg->base_offset.init_expr_type ==
+                  INIT_EXPR_TYPE_I32_CONST
+                  || data_seg->base_offset.init_expr_type ==
+                     INIT_EXPR_TYPE_GET_GLOBAL);
+
+        if (data_seg->base_offset.init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL) {
+          bh_assert(data_seg->base_offset.u.global_index < global_count
+                    && globals[data_seg->base_offset.u.global_index].type ==
+                       VALUE_TYPE_I32);
+          data_seg->base_offset.u.i32 =
+            globals[data_seg->base_offset.u.global_index].initial_value.i32;
+          if (module_inst->memory_base_flag)
+            data_seg->base_offset.u.i32 -= (uintptr_t)memory->memory_data;
+        }
+
+        if ((uint32)data_seg->base_offset.u.i32 <
+            NumBytesPerPage * module_inst->default_memory->cur_page_count) {
+          length = data_seg->data_length;
+          if (data_seg->base_offset.u.i32 + length >
+              NumBytesPerPage * module_inst->default_memory->cur_page_count)
+            length = NumBytesPerPage * module_inst->default_memory->cur_page_count -
+                     data_seg->base_offset.u.i32;
+          memcpy(memory_data + data_seg->base_offset.u.i32,
+                 data_seg->data, length);
+        }
+      }
+    }
   }
 
   if (module_inst->table_count) {
@@ -816,6 +828,9 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
                      VALUE_TYPE_I32);
         table_seg->base_offset.u.i32 =
           globals[table_seg->base_offset.u.global_index].initial_value.i32;
+
+        if (module_inst->table_base_flag)
+          table_seg->base_offset.u.i32 -= (uintptr_t)table_data;
       }
       if ((uint32)table_seg->base_offset.u.i32 <
           module_inst->default_table->cur_size) {
@@ -1005,5 +1020,6 @@ wasm_runtime_wait_for_instance(WASMVmInstance *ilr, int mills)
 {
   wasm_thread_wait_for_instance(ilr, mills);
 }
+
 
 

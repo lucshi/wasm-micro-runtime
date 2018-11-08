@@ -897,7 +897,6 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           WASMType *cur_type, *cur_func_type;
           /* TODO: test */
           read_leb_uint32(frame_ip, frame_ip_end, tidx);
-
           if (tidx >= module->module->type_count) {
             wasm_runtime_set_exception("type index is overflow");
             goto got_exception;
@@ -907,6 +906,9 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           /* to skip 0x00 here */
           frame_ip++;
           val = POP_I32();
+
+          if (module->table_base_flag)
+            val -= (uint32)table->base_addr;
 
           if (val < 0 || val >= (int32)table->cur_size) {
             wasm_runtime_set_exception("undefined element");

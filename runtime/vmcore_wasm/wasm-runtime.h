@@ -132,6 +132,7 @@ typedef struct WASMModuleInstance {
   HashMap *branch_set;
   const WASMModule *module;
   bool memory_base_flag;
+  bool table_base_flag;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
@@ -221,3 +222,4 @@ wasm_runtime_get_exception();
 #endif
 
 #endif /* end of _WASM_RUNTIME_H */
+
