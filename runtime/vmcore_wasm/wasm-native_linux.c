@@ -212,30 +212,65 @@ ___syscall140_wrapper(WASMThread *self, uint32 *args)
   *args = ret;
 }
 
+static inline uint32
+saturateToBounds(uint32 value, uint32 maxValue)
+{
+  return (uint32)(value + (((int32)(maxValue - value) >> 31) & (maxValue - value)));
+}
+
+static uint8*
+getValidatedMemoryOffsetRange(uint8* memory_base, uint32 memory_size,
+                              uint32 offset, uint32 numBytes)
+{
+  /* TODO: validate overflow */
+  return memory_base + saturateToBounds(offset, memory_size);
+}
+
+static uint8*
+memoryArrayPtrU8(uint8 *memory_base, uint32 memory_size,
+                 uint32 offset, uint32 numElements)
+{
+  return (uint8*)getValidatedMemoryOffsetRange(memory_base, memory_size,
+                                               offset, numElements);
+}
+
+static uint32*
+memoryArrayPtrU32(uint8 *memory_base, uint32 memory_size,
+                  uint32 offset, uint32 numElements)
+{
+  return (uint32*)getValidatedMemoryOffsetRange(memory_base, memory_size,
+                                    offset, numElements * sizeof(uint32));
+}
+
+static uint32
+memoryRefU32(uint8 *memory_base, uint32 memory_size, uint32 offset)
+{
+  return *(uint32*)getValidatedMemoryOffsetRange(memory_base, memory_size,
+                                                 offset, sizeof(uint32));
+}
+
 static void
 ___syscall146_wrapper(WASMThread *self, uint32 *args)
 {
   /* writev */
-  uint32 i, ptr, len, count;
-  uint8 *memory_base = MEMORY_BASE(self);
-  int32 fileno = args[1];
-  int32 iov = args[2];
-  uint32 iovcnt = args[3];
-  struct iovec *native_iovec;
+  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
+  uint8 *memory_base = memory->memory_data;
+  uint32 memory_size = memory->cur_page_count * NumBytesPerPage;
+  uint32 *argv = memoryArrayPtrU32(memory_base, memory_size, args[1], 3);
+  int32 file = argv[0];
+  int32 iov = argv[1];
+  uint32 iovcnt = argv[2];
+  uint32 i, offset, len, count;
 
-  if(!(native_iovec = bh_malloc(sizeof(struct iovec) * iovcnt))) {
-    LOG_ERROR("alloc iovec failed in native function lookup.\n");
-    abort();
-  }
+  struct iovec *native_iovec = (struct iovec*)(memory_base + args[1]);
 
   for (i = 0; i < iovcnt; i++) {
-    ptr = iov + i * 8;
-    len = iov + i * 8 + 4;
-    native_iovec[i].iov_base = memory_base + ptr;
+    offset = memoryRefU32(memory_base, memory_size, iov + i * 8);
+    len = memoryRefU32(memory_base, memory_size, iov + i * 8 + 4);
+    native_iovec[i].iov_base = memoryArrayPtrU8(memory_base, memory_size, offset, len);
     native_iovec[i].iov_len = len;
   }
-
-  count = writev(fileno, native_iovec, iovcnt);
+  count = writev(file, native_iovec, iovcnt);
   *args = count;
 }
 
@@ -243,10 +278,14 @@ static void
 ___syscall54_wrapper(WASMThread *self, uint32 *args)
 {
   /* ioctl */
-  /* TODO: might need support VA args for ioctl() in the future */
-  int32 fd = args[1];
-  int32 cmd = args[2];
-  int32 ret = ioctl(fd, cmd);
+  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
+  uint8 *memory_base = memory->memory_data;
+  uint32 memory_size = memory->cur_page_count * NumBytesPerPage;
+  uint32 *argv = memoryArrayPtrU32(memory_base, memory_size, args[1], 2);
+  int32 fd = argv[0];
+  int32 cmd = argv[1];
+  int32 arg = (int32)(memory_base + argv[2]); /* TODO: check */
+  int32 ret = ioctl(fd, cmd, arg);
   *args = ret;
 }
 
@@ -410,8 +449,8 @@ typedef struct WASMNativeGlobalDef {
 } WASMNativeGlobalDef;
 
 static WASMNativeGlobalDef native_global_defs[] = {
-  { "env", "STACKTOP", .global_data.u32 = 64 * NumBytesPerPage },
-  { "env", "STACK_MAX", .global_data.u32 = 128 * NumBytesPerPage },
+  { "env", "STACKTOP", .global_data.u32 = NumBytesPerPage / 2 },
+  { "env", "STACK_MAX", .global_data.u32 = NumBytesPerPage },
   { "env", "ABORT", .global_data.u32 = 0 },
   { "env", "memoryBase", .global_data.u32 = 0 },
   { "env", "tableBase", .global_data.u32 = 0 },
@@ -479,5 +518,6 @@ wasm_native_init()
   /* TODO: qsort the function defs and global defs. */
   return true;
 }
+
 
 
