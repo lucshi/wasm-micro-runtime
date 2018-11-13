@@ -305,6 +305,157 @@ ___syscall6_wrapper(WASMThread *self, uint32 *args)
   *args = ret;
 }
 
+#if WASM_ENABLE_WASMCEPTION != 0
+
+#define MEM(self) (self->vm_instance->module->default_memory)
+#define MEM_BASE(self) (MEM(self)->memory_data)
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <fcntl.h>
+
+/* syscall wrappers for wasmception clang compiler */
+
+static void
+__syscall_wrapper(WASMThread *self, uint32 *args)
+{
+  printf("##_syscall called, args[0]: %d\n", args[0]);
+}
+
+static void
+__syscall0_wrapper(WASMThread *self, uint32 *args)
+{
+  switch (args[0]) {
+    case 199: /* getuid */
+      *args = (uint32)getuid();
+      break;
+    default:
+      printf("##_syscall0 called, args[0]: %d\n", args[0]);
+  }
+}
+
+static void
+__syscall1_wrapper(WASMThread *self, uint32 *args)
+{
+  switch (args[0]) {
+    case 6: /* close */
+      {
+        *args = close(args[1]);
+        break;
+      }
+    default:
+      printf("##_syscall1 called, args[0]: %d\n", args[0]);
+  }
+}
+
+static void
+__syscall2_wrapper(WASMThread *self, uint32 *args)
+{
+  switch (args[0]) {
+    case 183: /* getcwd */
+      {
+        char *buf = args[1] > 0
+          ? (char*)(MEM_BASE(self) + args[1]) : NULL;
+        size_t size = args[2];
+        if (getcwd(buf, size))
+          *args = args[1];
+        else
+          *args = 0;
+        break;
+      }
+    default:
+      printf("##_syscall2 called, args[0]: %d\n", args[0]);
+  }
+}
+
+static void
+__syscall3_wrapper(WASMThread *self, uint32 *args)
+{
+  switch (args[0]) {
+    case 3: /* read*/
+      {
+        int fd = args[1];
+        char *buf = args[2] ? (char*)(MEM_BASE(self) + args[2]) : NULL;
+        int count = args[3];
+        *args = read(fd, buf, count);
+        break;
+      }
+
+    case 5: /* open */
+      {
+        char *path = args[1] ? (char*)(MEM_BASE(self) + args[1]) : NULL;
+        int flags = args[2];
+        mode_t mode = args[3];
+        *args = open(path, flags, mode);
+        break;
+      }
+
+    case 54: /* ioctl */
+      {
+        struct winsize *wsz = (struct winsize*)(MEM_BASE(self) + args[3]);
+        *args = ioctl(args[1], args[2], wsz);
+        break;
+      }
+
+    case 146: /* writev */
+      {
+        uint32 iovcnt = args[3], i;
+        struct iovec *vec_begin, *vec;
+        vec_begin = vec = (struct iovec*)(MEM_BASE(self) + args[2]);
+        for (i = 0; i < iovcnt; i++, vec++) {
+          if (vec->iov_len > 0)
+            vec->iov_base = (uint8*)MEM_BASE(self) + (uint32)vec->iov_base;
+        }
+        *args = writev(args[1], vec_begin, args[3]);
+        break;
+      }
+
+    case 221: /* fcntl */
+      {
+        int fd = args[1];
+        int cmd = args[2];
+        char *arg = args[3] ? (char*)(MEM_BASE(self) + args[3]) : NULL;
+        *args = fcntl(fd, cmd, arg);
+        break;
+      }
+
+    default:
+      printf("##_syscall3 called, args[0]: %d\n", args[0]);
+  }
+}
+
+static void
+__syscall4_wrapper(WASMThread *self, uint32 *args)
+{
+  printf("##_syscall4 called, args[0]: %d\n", args[0]);
+}
+
+static void
+__syscall5_wrapper(WASMThread *self, uint32 *args)
+{
+  switch (args[0]) {
+    case 140: /* llseek */
+      {
+        unsigned int fd = args[1];
+        unsigned long offset_high = args[2];
+        unsigned long offset_low = args[3];
+        loff_t *result = args[4] ? (loff_t*)(MEM_BASE(self) + args[4]) : NULL;
+        unsigned int whence = args[5];
+
+        *args = syscall(140, fd, offset_high, offset_low, result, whence);
+        break;
+      }
+
+    default:
+      printf("##_syscall5 called, args[0]: %d\n", args[0]);
+  }
+}
+
+#endif /* end of WASM_ENABLE_WASMCEPTION */
+
 static void
 _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
 {
@@ -420,6 +571,15 @@ static WASMNativeFuncDef native_func_defs[] = {
 #ifdef WASM_ENABLE_REPL
   REG_NATIVE_FUNC(spectest, print_i32),
   REG_NATIVE_FUNC(spectest, print)
+#endif
+#if WASM_ENABLE_WASMCEPTION != 0
+  REG_NATIVE_FUNC(env, __syscall),
+  REG_NATIVE_FUNC(env, __syscall0),
+  REG_NATIVE_FUNC(env, __syscall1),
+  REG_NATIVE_FUNC(env, __syscall2),
+  REG_NATIVE_FUNC(env, __syscall3),
+  REG_NATIVE_FUNC(env, __syscall4),
+  REG_NATIVE_FUNC(env, __syscall5),
 #endif
 };
 

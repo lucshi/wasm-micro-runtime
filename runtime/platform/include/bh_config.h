@@ -28,6 +28,7 @@
 
 #define WASM_ENABLE_LOG 1
 #define WASM_ENABLE_LABELS_AS_VALUES 1
+#define WASM_ENABLE_WASMCEPTION 0
 
 #endif /* end of _BH_CONFIG_H */
 
