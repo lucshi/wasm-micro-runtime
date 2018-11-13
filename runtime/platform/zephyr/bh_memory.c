@@ -30,52 +30,16 @@
 #include "bh_platform.h"
 #include "ems_gc.h"
 
-void* __real_malloc(size_t size)
-{
-  return gc_alloc_vo(size, MMT_SHARED);
-}
-
-void* __real_calloc(size_t nmemb, size_t size)
-{
-  void *ret = gc_alloc_vo(nmemb * size, MMT_SHARED);
-  if (ret)
-    memset(ret, 0, nmemb * size);
-  return ret;
-}
-
-void __real_free(void *ptr)
-{
-  if (ptr)
-    gc_free(ptr);
-}
-
-void *
-__wrap_malloc(size_t size)
-{
-  return __real_malloc(size);
-}
-
-void *
-__wrap_calloc(size_t nmemb, size_t size)
-{
-  return __real_calloc(nmemb, size);
-}
-
-void
-__wrap_free(void *ptr)
-{
-  __real_free(ptr);
-}
 
 void*
 bh_malloc(unsigned int size)
 {
-  return __real_malloc(size);
+  return gc_alloc_vo(size, MMT_SHARED);
 }
 
 void bh_free(void *ptr)
 {
   if (ptr)
-    __real_free(ptr);
+    gc_free(ptr);
 }
 

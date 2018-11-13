@@ -26,37 +26,16 @@
 #include <stdlib.h>
 #include "bh_memory.h"
 
-void* __real_malloc(size_t size);
-void* __real_calloc(size_t nmemb, size_t size);
-void __real_free(void *ptr);
-
-void *
-__wrap_malloc(size_t size)
-{
-  return __real_malloc(size);
-}
-
-void *
-__wrap_calloc(size_t nmemb, size_t size)
-{
-  return __real_calloc(nmemb, size);
-}
-
-void
-__wrap_free(void *ptr)
-{
-  __real_free(ptr);
-}
 
 void*
 bh_malloc(unsigned int size)
 {
-  return __real_malloc(size);
+  return malloc(size);
 }
 
 void bh_free(void *ptr)
 {
   if (ptr)
-    __real_free(ptr);
+    free(ptr);
 }
 

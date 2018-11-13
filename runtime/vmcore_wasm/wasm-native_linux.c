@@ -157,26 +157,33 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
   *args = vsscanf(str, fmt, va_args);
 }
 
-void *__wrap_malloc(size_t size);
-void *__wrap_calloc(size_t nmemb, size_t size);
-void __wrap_free(void *ptr);
-
 static void
 _malloc_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)__wrap_malloc(args[0]);
+  *args = (uint32)bh_malloc(args[0]);
 }
 
 static void
 _calloc_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)__wrap_calloc(args[0], args[1]);
+  char *ptr;
+  uint32 total_size = args[0] * args[1];
+
+  if (total_size < args[0] || total_size < args[1]) {
+    wasm_runtime_set_exception("calloc failed: memory size out of range.");
+    return;
+  }
+
+  if ((ptr = bh_malloc(total_size)))
+    memset(ptr, 0, total_size);
+
+  *args = (uint32)ptr;
 }
 
 static void
 _free_wrapper(WASMThread *self, uint32 *args)
 {
-  __wrap_free((void*)args[0]);
+  bh_free((void*)args[0]);
 }
 
 static void
