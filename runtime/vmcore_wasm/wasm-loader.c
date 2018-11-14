@@ -46,9 +46,7 @@ set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 
 #define CHECK_BUF(buf, buf_end, length) do {                    \
   if (buf + length > buf_end) {                                 \
-    set_error_buf(error_buf, error_buf_size,                    \
-                  "WASM module load failed: "                   \
-                  "invalid file length.");                      \
+    set_error_buf(error_buf, error_buf_size, "unexpected end"); \
     return false;                                               \
   }                                                             \
 } while (0)
@@ -65,6 +63,7 @@ read_leb(const uint8 *buf, const uint8 *buf_end,
   uint64 byte;
 
   while (true) {
+    CHECK_BUF(buf, buf_end, 1);
     byte = buf[*p_offset];
     *p_offset += 1;
     result |= ((byte & 0x7f) << shift);
@@ -74,7 +73,6 @@ read_leb(const uint8 *buf, const uint8 *buf_end,
     }
     bcnt += 1;
   }
-  CHECK_BUF(buf, buf_end, *p_offset);
   if (bcnt > (((maxbits + 8) >> 3) - (maxbits + 8))) {
     set_error_buf(error_buf, error_buf_size,
                   "WASM module load failed: "
@@ -1210,6 +1208,16 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
       case SECTION_TYPE_USER:
         /* unsupported user section, ignore it. */
         read_leb_uint32(p, p_end, section_size);
+
+        if (section_size == 0) {
+          set_error_buf(error_buf, error_buf_size, "unexpected end");
+          return false;
+        }
+        if (p + section_size > p_end) {
+          set_error_buf(error_buf, error_buf_size, "length out of bounds");
+          return false;
+        }
+
         p += section_size;
         break;
       case SECTION_TYPE_TYPE:
@@ -1259,9 +1267,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
           return false;
         break;
       default:
-        set_error_buf(error_buf, error_buf_size,
-                      "WASM module load failed: "
-                      "unknow section type.");
+        set_error_buf(error_buf, error_buf_size, "invalid section id");
         return false;
     }
   }
