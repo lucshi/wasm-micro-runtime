@@ -570,7 +570,7 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, nullFunc_X),
 #ifdef WASM_ENABLE_REPL
   REG_NATIVE_FUNC(spectest, print_i32),
-  REG_NATIVE_FUNC(spectest, print)
+  REG_NATIVE_FUNC(spectest, print),
 #endif
 #if WASM_ENABLE_WASMCEPTION != 0
   REG_NATIVE_FUNC(env, __syscall),
