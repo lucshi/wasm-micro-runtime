@@ -28,6 +28,16 @@
 
 #define WASM_ENABLE_LOG 1
 #define WASM_ENABLE_LABELS_AS_VALUES 1
+
+/* Enable non-syscall mode of emcc compiler (with -s SIDE_MODULE=1),
+   which imports LIBC's functions */
+#define WASM_ENABLE_EMCC_LIBC 1
+
+/* Enable syscall mode of emcc compiler (without -s SIDE_MODULE=1),
+   which imports syscall functions */
+#define WASM_ENABLE_EMCC_SYSCALL 1
+
+/* Enable wasmception clang compiler, which imports syscall functions */
 #define WASM_ENABLE_WASMCEPTION 0
 
 #endif /* end of _BH_CONFIG_H */

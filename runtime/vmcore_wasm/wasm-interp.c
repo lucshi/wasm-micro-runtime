@@ -907,8 +907,12 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           frame_ip++;
           val = POP_I32();
 
-          if (module->table_base_flag)
+#if WASM_ENABLE_EMCC_LIBC
+          if (module->table_base_flag && module->memory_base_flag)
+            /* Both tableBase and memoryBase are imported only in emcc
+               LIBC mode (SIDE_MODULE=1). */
             val -= (uint32)table->base_addr;
+#endif
 
           if (val < 0 || val >= (int32)table->cur_size) {
             wasm_runtime_set_exception("undefined element");

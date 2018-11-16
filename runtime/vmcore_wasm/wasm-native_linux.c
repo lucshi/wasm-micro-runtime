@@ -36,16 +36,16 @@
 #include <sys/uio.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <pwd.h>
+#include <fcntl.h>
 
-#if 0
+
 #define MEMORY(self) (self->vm_instance->module->default_memory)
 #define MEMORY_BASE(self) (MEMORY(self)->memory_data)
-#else
-#define MEMORY_BASE(self) (0)
-#endif
 
-#define DEBUG_PRINT 1
+#define DEBUG_PRINT 0
 
 #if DEBUG_PRINT != 0
 static void
@@ -77,16 +77,7 @@ _print_f64_wrapper(WASMThread *self, uint32 *args)
 }
 #endif
 
-static void
-abort_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 code = args[0];
-  char buf[32];
-
-  snprintf(buf, sizeof(buf), "env.abort(%i)", code);
-  wasm_runtime_set_exception(buf);
-}
-
+#if WASM_ENABLE_EMCC_LIBC != 0
 static inline va_list
 get_va_list(uint32 *args)
 {
@@ -187,138 +178,67 @@ _free_wrapper(WASMThread *self, uint32 *args)
 }
 
 static void
-___syscall140_wrapper(WASMThread *self, uint32 *args)
+nullFunc_X_wrapper(WASMThread *self, uint32 *args)
 {
-  /* llseek */
-  /* could not call _llseek since it's not exposed in glibc, and syscall is also impossible to be called, so use lseek64 instead. */
-  /*
-  int64 *p = (int64*)args + sizeof(int32);
-  int32 fd = p[0];
-  int64 off_high = p[1];
-  int64 off_low = p[2];
-  int64 *result = &p[3];
-  int32 whence = p[4];
-  int32 ret = syscall(SYS_llseek, fd, off_high, off_low, result, whence);
+  int32 code = args[0];
+  char buf[32];
 
-  *(int64*)args = *result;
-
-  if (ret != 0) {
-    LOG_ERROR("___syscall140_wrapper execute failed.\n");
-    abort();
-  }
-  */
-
-  int64 *p = (int64*)args + sizeof(int32);
-  int32 fd = p[0];
-  int64 off_high = p[1];
-  int64 off_low = p[2];
-  int32 whence = p[4];
-  int64 off = ((off_high << 32) & (0xffffffff00000000)) | off_low;
-  int32 ret = lseek64(fd, off, whence);
-
-  *args = ret;
+  snprintf(buf, sizeof(buf), "env.nullFunc_X(%i)", code);
+  wasm_runtime_set_exception(buf);
 }
 
-static inline uint32
-saturateToBounds(uint32 value, uint32 maxValue)
-{
-  return (uint32)(value + (((int32)(maxValue - value) >> 31) & (maxValue - value)));
-}
+void*
+vmci_get_std_cout();
 
-static uint8*
-getValidatedMemoryOffsetRange(uint8* memory_base, uint32 memory_size,
-                              uint32 offset, uint32 numBytes)
+static void
+_cout_wrapper(WASMThread *self, uint32 *args)
 {
-  /* TODO: validate overflow */
-  return memory_base + saturateToBounds(offset, memory_size);
-}
-
-static uint8*
-memoryArrayPtrU8(uint8 *memory_base, uint32 memory_size,
-                 uint32 offset, uint32 numElements)
-{
-  return (uint8*)getValidatedMemoryOffsetRange(memory_base, memory_size,
-                                               offset, numElements);
-}
-
-static uint32*
-memoryArrayPtrU32(uint8 *memory_base, uint32 memory_size,
-                  uint32 offset, uint32 numElements)
-{
-  return (uint32*)getValidatedMemoryOffsetRange(memory_base, memory_size,
-                                    offset, numElements * sizeof(uint32));
-}
-
-static uint32
-memoryRefU32(uint8 *memory_base, uint32 memory_size, uint32 offset)
-{
-  return *(uint32*)getValidatedMemoryOffsetRange(memory_base, memory_size,
-                                                 offset, sizeof(uint32));
+  *args = (uint32)vmci_get_std_cout();
 }
 
 static void
-___syscall146_wrapper(WASMThread *self, uint32 *args)
+_stdout_wrapper(WASMThread *self, uint32 *args)
 {
-  /* writev */
-  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
-  uint8 *memory_base = memory->memory_data;
-  uint32 memory_size = memory->cur_page_count * NumBytesPerPage;
-  uint32 *argv = memoryArrayPtrU32(memory_base, memory_size, args[1], 3);
-  int32 file = argv[0];
-  int32 iov = argv[1];
-  uint32 iovcnt = argv[2];
-  uint32 i, offset, len, count;
-
-  struct iovec *native_iovec = (struct iovec*)(memory_base + args[1]);
-
-  for (i = 0; i < iovcnt; i++) {
-    offset = memoryRefU32(memory_base, memory_size, iov + i * 8);
-    len = memoryRefU32(memory_base, memory_size, iov + i * 8 + 4);
-    native_iovec[i].iov_base = memoryArrayPtrU8(memory_base, memory_size, offset, len);
-    native_iovec[i].iov_len = len;
-  }
-  count = writev(file, native_iovec, iovcnt);
-  *args = count;
+  *args = (uint32)stdout;
 }
 
 static void
-___syscall54_wrapper(WASMThread *self, uint32 *args)
+_stderr_wrapper(WASMThread *self, uint32 *args)
 {
-  /* ioctl */
-  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
-  uint8 *memory_base = memory->memory_data;
-  uint32 memory_size = memory->cur_page_count * NumBytesPerPage;
-  uint32 *argv = memoryArrayPtrU32(memory_base, memory_size, args[1], 2);
-  int32 fd = argv[0];
-  int32 cmd = argv[1];
-  int32 arg = (int32)(memory_base + argv[2]); /* TODO: check */
-  int32 ret = ioctl(fd, cmd, arg);
-  *args = ret;
+  *args = (uint32)stderr;
 }
 
 static void
-___syscall6_wrapper(WASMThread *self, uint32 *args)
+_atexit_wrapper(WASMThread *self, uint32 *args)
 {
-  /* close */
-  int32 fd = args[1];
-  int32 ret = close(fd);
-  *args = ret;
+  /* TODO: implement callback for atexit */
+  wasm_runtime_set_exception("atexit unsupported");
+}
+#endif
+
+#if WASM_ENABLE_EMCC_LIBC != 0 || WASM_ENABLE_EMCC_SYSCALL != 0
+static void
+abort_wrapper(WASMThread *self, uint32 *args)
+{
+  int32 code = args[0];
+  char buf[32];
+
+  snprintf(buf, sizeof(buf), "env.abort(%i)", code);
+  wasm_runtime_set_exception(buf);
 }
 
-#if WASM_ENABLE_WASMCEPTION != 0
+static void
+abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
+{
+  int32 code = args[0];
+  char buf[32];
 
-#define MEM(self) (self->vm_instance->module->default_memory)
-#define MEM_BASE(self) (MEM(self)->memory_data)
+  snprintf(buf, sizeof(buf), "env.abortStackOverflow(%i)", code);
+  wasm_runtime_set_exception(buf);
+}
+#endif
 
-#include <unistd.h>
-#include <sys/types.h>
-#include <pwd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <fcntl.h>
-
-/* syscall wrappers for wasmception clang compiler */
-
+#if WASM_ENABLE_WASMCEPTION != 0 || WASM_ENABLE_EMCC_SYSCALL != 0
 static void
 __syscall_wrapper(WASMThread *self, uint32 *args)
 {
@@ -358,7 +278,7 @@ __syscall2_wrapper(WASMThread *self, uint32 *args)
     case 183: /* getcwd */
       {
         char *buf = args[1] > 0
-          ? (char*)(MEM_BASE(self) + args[1]) : NULL;
+          ? (char*)(MEMORY_BASE(self) + args[1]) : NULL;
         size_t size = args[2];
         if (getcwd(buf, size))
           *args = args[1];
@@ -378,7 +298,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
     case 3: /* read*/
       {
         int fd = args[1];
-        char *buf = args[2] ? (char*)(MEM_BASE(self) + args[2]) : NULL;
+        char *buf = args[2] ? (char*)(MEMORY_BASE(self) + args[2]) : NULL;
         int count = args[3];
         *args = read(fd, buf, count);
         break;
@@ -386,7 +306,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
 
     case 5: /* open */
       {
-        char *path = args[1] ? (char*)(MEM_BASE(self) + args[1]) : NULL;
+        char *path = args[1] ? (char*)(MEMORY_BASE(self) + args[1]) : NULL;
         int flags = args[2];
         mode_t mode = args[3];
         *args = open(path, flags, mode);
@@ -395,21 +315,25 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
 
     case 54: /* ioctl */
       {
-        struct winsize *wsz = (struct winsize*)(MEM_BASE(self) + args[3]);
+        struct winsize *wsz = (struct winsize*)(MEMORY_BASE(self) + args[3]);
         *args = ioctl(args[1], args[2], wsz);
         break;
       }
 
+    case 145: /* readv */
     case 146: /* writev */
       {
         uint32 iovcnt = args[3], i;
         struct iovec *vec_begin, *vec;
-        vec_begin = vec = (struct iovec*)(MEM_BASE(self) + args[2]);
+        vec_begin = vec = (struct iovec*)(MEMORY_BASE(self) + args[2]);
         for (i = 0; i < iovcnt; i++, vec++) {
           if (vec->iov_len > 0)
-            vec->iov_base = (uint8*)MEM_BASE(self) + (uint32)vec->iov_base;
+            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint32)vec->iov_base;
         }
-        *args = writev(args[1], vec_begin, args[3]);
+        if (args[0] == 145)
+          *args = readv(args[1], vec_begin, args[3]);
+        else
+          *args = writev(args[1], vec_begin, args[3]);
         break;
       }
 
@@ -417,7 +341,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
       {
         int fd = args[1];
         int cmd = args[2];
-        char *arg = args[3] ? (char*)(MEM_BASE(self) + args[3]) : NULL;
+        char *arg = args[3] ? (char*)(MEMORY_BASE(self) + args[3]) : NULL;
         *args = fcntl(fd, cmd, arg);
         break;
       }
@@ -442,7 +366,7 @@ __syscall5_wrapper(WASMThread *self, uint32 *args)
         unsigned int fd = args[1];
         unsigned long offset_high = args[2];
         unsigned long offset_low = args[3];
-        loff_t *result = args[4] ? (loff_t*)(MEM_BASE(self) + args[4]) : NULL;
+        loff_t *result = args[4] ? (loff_t*)(MEMORY_BASE(self) + args[4]) : NULL;
         unsigned int whence = args[5];
 
         *args = syscall(140, fd, offset_high, offset_low, result, whence);
@@ -453,8 +377,87 @@ __syscall5_wrapper(WASMThread *self, uint32 *args)
       printf("##_syscall5 called, args[0]: %d\n", args[0]);
   }
 }
+#endif /* end of WASM_ENABLE_WASMCEPTION || WASM_ENABLE_EMCC_SYSCALL */
 
-#endif /* end of WASM_ENABLE_WASMCEPTION */
+#if WASM_ENABLE_EMCC_SYSCALL != 0
+
+#define EMCC_SYSCALL_WRAPPER(id, argc)                      \
+static void                                                 \
+___syscall##id##_wrapper(WASMThread *self, uint32 *args) {  \
+    uint32 argv[argc + 1] = { id }, *ptr;                   \
+    ptr = (uint32*)(MEMORY_BASE(self) + args[1]);           \
+    memcpy(argv + 1, ptr, sizeof(uint32) * argc);           \
+    __syscall##argc##_wrapper(self, argv);                  \
+    *args = *argv;                                          \
+}
+
+#define EMCC_SYSCALL_WRAPPER0(id) EMCC_SYSCALL_WRAPPER(id, 0)
+#define EMCC_SYSCALL_WRAPPER1(id) EMCC_SYSCALL_WRAPPER(id, 1)
+#define EMCC_SYSCALL_WRAPPER2(id) EMCC_SYSCALL_WRAPPER(id, 2)
+#define EMCC_SYSCALL_WRAPPER3(id) EMCC_SYSCALL_WRAPPER(id, 3)
+#define EMCC_SYSCALL_WRAPPER4(id) EMCC_SYSCALL_WRAPPER(id, 4)
+#define EMCC_SYSCALL_WRAPPER5(id) EMCC_SYSCALL_WRAPPER(id, 5)
+
+EMCC_SYSCALL_WRAPPER0(199)
+
+EMCC_SYSCALL_WRAPPER1(6)
+
+EMCC_SYSCALL_WRAPPER2(183)
+
+EMCC_SYSCALL_WRAPPER3(3)
+EMCC_SYSCALL_WRAPPER3(5)
+EMCC_SYSCALL_WRAPPER3(54)
+EMCC_SYSCALL_WRAPPER3(145)
+EMCC_SYSCALL_WRAPPER3(146)
+EMCC_SYSCALL_WRAPPER3(221)
+
+EMCC_SYSCALL_WRAPPER5(140)
+
+static void
+_abort_wrapper(WASMThread *self, uint32 *args)
+{
+  int32 code = args[0];
+  char buf[32];
+
+  snprintf(buf, sizeof(buf), "env.abort(%i)", code);
+  wasm_runtime_set_exception(buf);
+}
+
+static void
+___lock_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
+
+static void
+___unlock_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
+
+static void
+getTotalMemory_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
+
+static void
+enlargeMemory_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
+
+static void
+abortOnCannotGrowMemory_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
+
+static void
+___setErrNo_wrapper(WASMThread *self, uint32 *args)
+{
+  /* TODO */
+}
 
 static void
 _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
@@ -466,26 +469,7 @@ _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
   memcpy(memory_base + off_dest, memory_base + off_src, len);
   *args = off_dest;
 }
-
-static void
-abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 code = args[0];
-  char buf[32];
-
-  snprintf(buf, sizeof(buf), "env.abortStackOverflow(%i)", code);
-  wasm_runtime_set_exception(buf);
-}
-
-static void
-nullFunc_X_wrapper(WASMThread *self, uint32 *args)
-{
-  int32 code = args[0];
-  char buf[32];
-
-  snprintf(buf, sizeof(buf), "env.nullFunc_X(%i)", code);
-  wasm_runtime_set_exception(buf);
-}
+#endif
 
 #ifdef WASM_ENABLE_REPL
 static void
@@ -500,34 +484,6 @@ print_wrapper(WASMThread *self, uint32 *args)
   bh_printf("%d\n", *args);
 }
 #endif
-
-void*
-vmci_get_std_cout();
-
-static void
-_cout_wrapper(WASMThread *self, uint32 *args)
-{
-  *args = (uint32)vmci_get_std_cout();
-}
-
-static void
-_stdout_wrapper(WASMThread *self, uint32 *args)
-{
-  *args = (uint32)stdout;
-}
-
-static void
-_stderr_wrapper(WASMThread *self, uint32 *args)
-{
-  *args = (uint32)stderr;
-}
-
-static void
-_atexit_wrapper(WASMThread *self, uint32 *args)
-{
-  /* TODO: implement callback for atexit */
-  wasm_runtime_set_exception("atexit unsupported");
-}
 
 /* TODO: add function parameter/result types check */
 #define REG_NATIVE_FUNC(module_name, func_name) \
@@ -546,8 +502,13 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _print_f32),
   REG_NATIVE_FUNC(env, _print_f64),
 #endif
-  REG_NATIVE_FUNC(env, _atexit),
+#if WASM_ENABLE_EMCC_LIBC != 0 || WASM_ENABLE_EMCC_SYSCALL != 0
   REG_NATIVE_FUNC(env, abort),
+  REG_NATIVE_FUNC(env, abortStackOverflow),
+#endif
+#if WASM_ENABLE_EMCC_LIBC != 0
+  REG_NATIVE_FUNC(env, nullFunc_X),
+  REG_NATIVE_FUNC(env, _atexit),
   REG_NATIVE_FUNC(env, _printf),
   REG_NATIVE_FUNC(env, _sprintf),
   REG_NATIVE_FUNC(env, _snprintf),
@@ -561,16 +522,26 @@ static WASMNativeFuncDef native_func_defs[] = {
   { "env", "g$__ZSt4cout", _cout_wrapper },
   { "env", "g$_stdout", _stdout_wrapper },
   { "env", "g$_stderr", _stderr_wrapper },
-  REG_NATIVE_FUNC(env, ___syscall140),
-  REG_NATIVE_FUNC(env, ___syscall146),
-  REG_NATIVE_FUNC(env, ___syscall54),
+#endif
+#if WASM_ENABLE_EMCC_SYSCALL != 0
+  REG_NATIVE_FUNC(env, ___syscall3),
+  REG_NATIVE_FUNC(env, ___syscall5),
   REG_NATIVE_FUNC(env, ___syscall6),
+  REG_NATIVE_FUNC(env, ___syscall54),
+  REG_NATIVE_FUNC(env, ___syscall140),
+  REG_NATIVE_FUNC(env, ___syscall145),
+  REG_NATIVE_FUNC(env, ___syscall146),
+  REG_NATIVE_FUNC(env, ___syscall183),
+  REG_NATIVE_FUNC(env, ___syscall199),
+  REG_NATIVE_FUNC(env, ___syscall221),
+  REG_NATIVE_FUNC(env, _abort),
+  REG_NATIVE_FUNC(env, abortOnCannotGrowMemory),
+  REG_NATIVE_FUNC(env, enlargeMemory),
+  REG_NATIVE_FUNC(env, getTotalMemory),
+  REG_NATIVE_FUNC(env, ___lock),
+  REG_NATIVE_FUNC(env, ___unlock),
   REG_NATIVE_FUNC(env, _emscripten_memcpy_big),
-  REG_NATIVE_FUNC(env, abortStackOverflow),
-  REG_NATIVE_FUNC(env, nullFunc_X),
-#ifdef WASM_ENABLE_REPL
-  REG_NATIVE_FUNC(spectest, print_i32),
-  REG_NATIVE_FUNC(spectest, print),
+  REG_NATIVE_FUNC(env, ___setErrNo),
 #endif
 #if WASM_ENABLE_WASMCEPTION != 0
   REG_NATIVE_FUNC(env, __syscall),
@@ -580,6 +551,10 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, __syscall3),
   REG_NATIVE_FUNC(env, __syscall4),
   REG_NATIVE_FUNC(env, __syscall5),
+#endif
+#ifdef WASM_ENABLE_REPL
+  REG_NATIVE_FUNC(spectest, print_i32),
+  REG_NATIVE_FUNC(spectest, print),
 #endif
 };
 
@@ -685,6 +660,4 @@ wasm_native_init()
   /* TODO: qsort the function defs and global defs. */
   return true;
 }
-
-
 
