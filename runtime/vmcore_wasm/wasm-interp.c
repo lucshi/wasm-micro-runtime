@@ -2060,6 +2060,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         cur_func = frame->function;
         UPDATE_ALL_FROM_FRAME();
 
+        memory = module->default_memory;
         if (wasm_runtime_get_exception())
           goto got_exception;
       }

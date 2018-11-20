@@ -52,11 +52,6 @@ typedef struct WASMMemoryInstance {
   uint8 *global_data;
   uint32 global_data_size;
 
-  /* global env.DYNAMICTOP_PTR */
-  uint32 DYNAMICTOP;
-  /* global env.tempDoublePtr */
-  float64 tempDouble;
-
   /* Base address, the layout is:
      addr_data + memory data + global data
      memory data init size is: NumBytesPerPage * cur_page_count
@@ -131,6 +126,8 @@ typedef struct WASMModuleInstance {
 
   HashMap *branch_set;
   const WASMModule *module;
+
+  uint32 DYNAMICTOP_PTR_offset;
   bool memory_base_flag;
   bool table_base_flag;
 } WASMModuleInstance;

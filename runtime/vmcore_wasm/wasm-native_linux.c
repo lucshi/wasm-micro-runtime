@@ -40,6 +40,7 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 
 #define MEMORY(self) (self->vm_instance->module->default_memory)
@@ -438,25 +439,74 @@ ___unlock_wrapper(WASMThread *self, uint32 *args)
 static void
 getTotalMemory_wrapper(WASMThread *self, uint32 *args)
 {
-  /* TODO */
+  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
+  *args = NumBytesPerPage * memory->cur_page_count;
 }
 
 static void
 enlargeMemory_wrapper(WASMThread *self, uint32 *args)
 {
-  /* TODO */
+  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
+  uint32 DYNAMICTOP_PTR_offset = self->vm_instance->module->DYNAMICTOP_PTR_offset;
+  uint32 addr_data_offset = *(uint32*)(memory->global_data + DYNAMICTOP_PTR_offset);
+  uint32 *DYNAMICTOP_PTR = (uint32*)(memory->memory_data + addr_data_offset);
+  uint32 memory_size_expected = *DYNAMICTOP_PTR;
+  uint32 total_page_count = (memory_size_expected + NumBytesPerPage - 1) / NumBytesPerPage;
+
+  if (total_page_count < memory->cur_page_count) {
+    *args = 1;
+    return;
+  }
+  else {
+    WASMMemoryInstance *new_memory;
+    uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
+                        (memory->memory_data - memory->base_addr) +
+                        NumBytesPerPage * total_page_count +
+                        memory->global_data_size;
+
+    if (!(new_memory = bh_malloc(total_size))) {
+      wasm_runtime_set_exception("WASM interp failed, "
+          "alloc memory for grow memory failed.");
+      *args = 0;
+      return;
+    }
+
+    new_memory->cur_page_count = total_page_count;
+    new_memory->max_page_count = memory->max_page_count > total_page_count ?
+                                 memory->max_page_count : total_page_count;
+    new_memory->addr_data = new_memory->base_addr;
+    new_memory->memory_data = new_memory->addr_data +
+                              (memory->memory_data - memory->base_addr);
+    new_memory->global_data = new_memory->memory_data +
+                              NumBytesPerPage * new_memory->cur_page_count;
+    new_memory->global_data_size = memory->global_data_size;
+    memcpy(new_memory->addr_data, memory->addr_data,
+           memory->memory_data - memory->base_addr +
+           NumBytesPerPage * memory->cur_page_count);
+    memcpy(new_memory->global_data, memory->global_data, memory->global_data_size);
+    memset(new_memory->memory_data + NumBytesPerPage * memory->cur_page_count,
+           0, NumBytesPerPage * (total_page_count - memory->cur_page_count));
+    bh_free(memory);
+    self->vm_instance->module->memories[0] =
+      self->vm_instance->module->default_memory = new_memory;
+    *args = 1;
+    return;
+  }
+
+  /* Failed, should be unreachable */
+  *args = 0;
 }
 
 static void
 abortOnCannotGrowMemory_wrapper(WASMThread *self, uint32 *args)
 {
-  /* TODO */
+  wasm_runtime_set_exception("abort on cannot grow memory");
 }
 
 static void
 ___setErrNo_wrapper(WASMThread *self, uint32 *args)
 {
-  /* TODO */
+  errno = *args;
 }
 
 static void
@@ -582,27 +632,29 @@ wasm_native_func_lookup(const char *module_name, const char *func_name)
  * Global Variables                  *
  *************************************/
 
-extern char **environ;
-
 typedef struct WASMNativeGlobalDef {
   const char *module_name;
   const char *global_name;
+  bool is_addr;
   WASMValue global_data;
 } WASMNativeGlobalDef;
 
 static WASMNativeGlobalDef native_global_defs[] = {
-  { "env", "STACKTOP", .global_data.u32 = NumBytesPerPage / 2 },
-  { "env", "STACK_MAX", .global_data.u32 = NumBytesPerPage },
-  { "env", "ABORT", .global_data.u32 = 0 },
-  { "env", "memoryBase", .global_data.u32 = 0 },
-  { "env", "tableBase", .global_data.u32 = 0 },
-  { "env", "DYNAMICTOP_PTR", .global_data.addr = 0 },
-  { "env", "tempDoublePtr", .global_data.addr = 0 },
-  { "global", "NaN", .global_data.u64 = 0x7FF8000000000000LL },
-  { "global", "Infinity", .global_data.u64 = 0x7FF0000000000000LL },
+#if WASM_ENABLE_EMCC_SYSCALL != 0 || WASM_ENABLE_EMCC_LIBC != 0
+  { "env", "memoryBase", false, .global_data.i32 = 0 },
+  { "env", "__memory_base", false, .global_data.i32 = 0 },
+  { "env", "tableBase", false, .global_data.i32 = 0 },
+  { "env", "__table_base", false, .global_data.i32 = 0 },
+  { "env", "STACKTOP", false, .global_data.i32 = 0 },
+  { "env", "STACK_MAX", false, .global_data.i32 = 0 },
+  { "env", "DYNAMICTOP_PTR", true, .global_data.addr = 0 },
+  { "env", "tempDoublePtr", true, .global_data.addr = 0 },
+  { "global", "NaN", false, .global_data.u64 = 0x7FF8000000000000LL },
+  { "global", "Infinity", false, .global_data.u64 = 0x7FF0000000000000LL },
+#endif
 
 #ifdef WASM_ENABLE_REPL
-  { "spectest", "global_i32", .global_data.u32 = 666}
+  { "spectest", "global_i32", false, .global_data.u32 = 666}
 #endif
 };
 
@@ -621,34 +673,11 @@ wasm_native_global_lookup(const char *module_name, const char *global_name,
   while (global_def < global_def_end) {
     if (!strcmp(global_def->module_name, module_name)
         && !strcmp(global_def->global_name, global_name)) {
+      global->is_addr = global_def->is_addr;
       global->global_data_linked = global_def->global_data;
       return true;
     }
     global_def++;
-  }
-
-  /* Lookup non-constant globals which cannot be defined by table */
-  if (!strcmp(module_name, "env")) {
-    if (!strcmp(global_name, "_stdin")) {
-      global->global_data_linked.addr = (uintptr_t)stdin;
-      global->is_addr = true;
-      return true;
-    }
-    else if (!strcmp(global_name, "_stdout")) {
-      global->global_data_linked.addr = (uintptr_t)stdout;
-      global->is_addr = true;
-      return true;
-    }
-    else if (!strcmp(global_name, "_stderr")) {
-      global->global_data_linked.addr = (uintptr_t)stderr;
-      global->is_addr = true;
-      return true;
-    }
-    else if (!strcmp(global_name, "_environ")) {
-      global->global_data_linked.addr = (uintptr_t)environ;
-      global->is_addr = true;
-      return true;
-    }
   }
 
   return false;

@@ -533,19 +533,9 @@ globals_instantiate(const WASMModule *module,
 
   /* instantiate globals from global section */
   for (i = 0; i < module->global_count; i++) {
-    InitializerExpression *init_expr = &module->globals[i].init_expr;
-
     global->type = module->globals[i].type;
     global->is_mutable = module->globals[i].is_mutable;
     global->is_addr = module->globals[i].is_addr;
-
-    if (init_expr->init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL) {
-      bh_assert(init_expr->u.global_index < module->import_global_count);
-      global->initial_value = globals[init_expr->u.global_index].initial_value;
-    }
-    else {
-      memcpy(&global->initial_value, &init_expr->u, sizeof(int64));
-    }
 
     global->data_offset = global_data_offset;
     global_data_offset += wasm_value_type_size(global->type);
@@ -567,35 +557,52 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
                         const WASMModule *module,
                         WASMModuleInstance *module_inst)
 {
+  WASMGlobalInstance *global = globals;
   WASMImport *import = module->import_globals;
   WASMMemoryInstance *memory = module_inst->default_memory;
   uint32 i;
 
   /* Fix globals from import section */
-  for (i = 0; i < module->import_global_count; i++, import++, globals++) {
-    if (strcmp(import->u.names.module_name, "env") == 0
-        && strcmp(import->u.names.field_name, "memoryBase") == 0) {
-      globals->initial_value.addr =
-        (uintptr_t)memory->memory_data;
-      module_inst->memory_base_flag = true;
+  for (i = 0; i < module->import_global_count; i++, import++, global++) {
+    if (!strcmp(import->u.names.module_name, "env")) {
+      if (!strcmp(import->u.names.field_name, "memoryBase")
+          || !strcmp(import->u.names.field_name, "__memory_base")) {
+        global->initial_value.addr =
+          (uintptr_t)memory->memory_data;
+        module_inst->memory_base_flag = true;
+      }
+      else if (!strcmp(import->u.names.field_name, "tableBase")
+               || !strcmp(import->u.names.field_name, "__table_base")) {
+        global->initial_value.addr =
+          (uintptr_t)module_inst->tables[0]->base_addr;
+        module_inst->table_base_flag = true;
+      }
+      else if (!strcmp(import->u.names.field_name, "DYNAMICTOP_PTR")) {
+        global->initial_value.i32 =
+          NumBytesPerPage * module_inst->default_memory->cur_page_count;
+        module_inst->DYNAMICTOP_PTR_offset = global->data_offset;
+      }
+      else if (!strcmp(import->u.names.field_name, "STACKTOP")) {
+        global->initial_value.i32 = 0;
+      }
+      else if (!strcmp(import->u.names.field_name, "STACK_MAX")) {
+        /* Unused in emcc wasm bin actually. */
+        global->initial_value.i32 = 0;
+      }
     }
-    else if (strcmp(import->u.names.module_name, "env") == 0
-        && strcmp(import->u.names.field_name, "tableBase") == 0) {
-      globals->initial_value.addr =
-        (uintptr_t)module_inst->tables[0]->base_addr;
-      module_inst->table_base_flag = true;
+  }
+
+  for (i = 0; i < module->global_count; i++) {
+    InitializerExpression *init_expr = &module->globals[i].init_expr;
+
+    if (init_expr->init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL) {
+      bh_assert(init_expr->u.global_index < module->import_global_count);
+      global->initial_value = globals[init_expr->u.global_index].initial_value;
     }
-    else if (strcmp(import->u.names.module_name, "env") == 0
-        && strcmp(import->u.names.field_name, "DYNAMICTOP_PTR") == 0) {
-      memory->DYNAMICTOP = (uint32)(uintptr_t)
-        (module_inst->default_memory->memory_data +
-         NumBytesPerPage * module_inst->default_memory->cur_page_count);
-      globals->initial_value.addr = (uintptr_t)&memory->DYNAMICTOP;
+    else {
+      memcpy(&global->initial_value, &init_expr->u, sizeof(int64));
     }
-    else if (strcmp(import->u.names.module_name, "env") == 0
-        && strcmp(import->u.names.field_name, "tempDoublePtr") == 0) {
-      globals->initial_value.addr = (uintptr_t)&memory->tempDouble;
-    }
+    global++;
   }
 }
 
@@ -773,6 +780,19 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
     }
     bh_assert(addr_data == addr_data_end);
     bh_assert(global_data == global_data_end);
+
+    global = globals + module->import_global_count;
+    for (i = 0; i < module->global_count; i++, global++) {
+      InitializerExpression *init_expr = &module->globals[i].init_expr;
+
+      if (init_expr->init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL
+          && globals[init_expr->u.global_index].is_addr) {
+        uint8 *global_data_dst = memory->global_data + global->data_offset;
+        uint8 *global_data_src =
+          memory->global_data + globals[init_expr->u.global_index].data_offset;
+        *(uintptr_t*)global_data_dst = *(uintptr_t*)global_data_src;
+      }
+    }
 
     /* Initialize the memory data with data segment section */
     if (module_inst->default_memory->cur_page_count > 0) {
