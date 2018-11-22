@@ -94,8 +94,6 @@ GET_F64_FROM_ADDR (uint32 *addr)
       maddr = (uint8*)NULL + (offset + addr);                                   \
     else                                                                        \
       maddr = memory->memory_data + (offset + addr);                            \
-printf("zjz0 %p\n", maddr);\
-printf("zjz1 %p\n", memory->addr_data);\
     if (!module->memory_base_flag) {                                            \
       if (maddr < memory->addr_data) {                                          \
         wasm_runtime_set_exception("out of bounds memory access");              \
