@@ -1041,5 +1041,38 @@ wasm_runtime_wait_for_instance(WASMVmInstance *ilr, int mills)
   wasm_thread_wait_for_instance(ilr, mills);
 }
 
+bool
+wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
+{
+  WASMMemoryInstance *memory = module->default_memory;
+  WASMMemoryInstance *new_memory;
+  uint32 total_page_count = inc_page_count + memory->cur_page_count;
+  uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
+                      (memory->memory_data - memory->base_addr) +
+                      NumBytesPerPage * total_page_count +
+                      memory->global_data_size;
 
+  if (!(new_memory = bh_malloc(total_size))) {
+    wasm_runtime_set_exception("alloc memory for enlarge memory failed.");
+    return false;
+  }
 
+  new_memory->cur_page_count = total_page_count;
+  new_memory->max_page_count = memory->max_page_count > total_page_count ?
+                               memory->max_page_count : total_page_count;
+  new_memory->addr_data = new_memory->base_addr;
+  new_memory->memory_data = new_memory->addr_data +
+                            (memory->memory_data - memory->base_addr);
+  new_memory->global_data = new_memory->memory_data +
+                            NumBytesPerPage * new_memory->cur_page_count;
+  new_memory->global_data_size = memory->global_data_size;
+  memcpy(new_memory->addr_data, memory->addr_data,
+         memory->memory_data - memory->base_addr +
+         NumBytesPerPage * memory->cur_page_count);
+  memcpy(new_memory->global_data, memory->global_data, memory->global_data_size);
+  memset(new_memory->memory_data + NumBytesPerPage * memory->cur_page_count,
+         0, NumBytesPerPage * (total_page_count - memory->cur_page_count));
+  bh_free(memory);
+  module->memories[0] = module->default_memory = memory = new_memory;
+  return true;
+}

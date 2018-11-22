@@ -94,6 +94,8 @@ GET_F64_FROM_ADDR (uint32 *addr)
       maddr = (uint8*)NULL + (offset + addr);                                   \
     else                                                                        \
       maddr = memory->memory_data + (offset + addr);                            \
+printf("zjz0 %p\n", maddr);\
+printf("zjz1 %p\n", memory->addr_data);\
     if (!module->memory_base_flag) {                                            \
       if (maddr < memory->addr_data) {                                          \
         wasm_runtime_set_exception("out of bounds memory access");              \
@@ -1270,32 +1272,10 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           (void)tmp;
           HANDLE_OP_END ();
         }
-        memory->cur_page_count += delta;
-        total_size = offsetof(WASMMemoryInstance, base_addr) +
-                     (memory->memory_data - memory->base_addr) +
-                     NumBytesPerPage * memory->cur_page_count +
-                     memory->global_data_size;
-        if (!(new_memory = bh_malloc(total_size))) {
-          wasm_runtime_set_exception("WASM interp failed, "
-                                     "alloc memory for grow memory failed.");
+
+        if (!wasm_runtime_enlarge_memory(module, delta))
           goto got_exception;
-        }
-        new_memory->cur_page_count = memory->cur_page_count;
-        new_memory->max_page_count = memory->max_page_count;
-        new_memory->addr_data = new_memory->base_addr;
-        new_memory->memory_data = new_memory->addr_data + (memory->memory_data -
-                                  memory->base_addr);
-        new_memory->global_data = new_memory->memory_data + NumBytesPerPage *
-                                  new_memory->cur_page_count;
-        new_memory->global_data_size = memory->global_data_size;
-        memcpy(new_memory->addr_data, memory->addr_data, memory->memory_data -
-               memory->base_addr + NumBytesPerPage * prev_page_count);
-        memcpy(new_memory->global_data, memory->global_data,
-               memory->global_data_size);
-        memset(new_memory->memory_data + NumBytesPerPage * prev_page_count,
-               0, NumBytesPerPage * delta);
-        bh_free(memory);
-        module->memories[0] = module->default_memory = memory = new_memory;
+
         (void)reserved;
         HANDLE_OP_END ();
       }

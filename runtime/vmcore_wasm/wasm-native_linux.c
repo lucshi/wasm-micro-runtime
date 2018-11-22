@@ -446,6 +446,7 @@ getTotalMemory_wrapper(WASMThread *self, uint32 *args)
 static void
 enlargeMemory_wrapper(WASMThread *self, uint32 *args)
 {
+  bool ret;
   WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
   uint32 DYNAMICTOP_PTR_offset = self->vm_instance->module->DYNAMICTOP_PTR_offset;
   uint32 addr_data_offset = *(uint32*)(memory->global_data + DYNAMICTOP_PTR_offset);
@@ -458,43 +459,11 @@ enlargeMemory_wrapper(WASMThread *self, uint32 *args)
     return;
   }
   else {
-    WASMMemoryInstance *new_memory;
-    uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
-                        (memory->memory_data - memory->base_addr) +
-                        NumBytesPerPage * total_page_count +
-                        memory->global_data_size;
-
-    if (!(new_memory = bh_malloc(total_size))) {
-      wasm_runtime_set_exception("WASM interp failed, "
-          "alloc memory for grow memory failed.");
-      *args = 0;
-      return;
-    }
-
-    new_memory->cur_page_count = total_page_count;
-    new_memory->max_page_count = memory->max_page_count > total_page_count ?
-                                 memory->max_page_count : total_page_count;
-    new_memory->addr_data = new_memory->base_addr;
-    new_memory->memory_data = new_memory->addr_data +
-                              (memory->memory_data - memory->base_addr);
-    new_memory->global_data = new_memory->memory_data +
-                              NumBytesPerPage * new_memory->cur_page_count;
-    new_memory->global_data_size = memory->global_data_size;
-    memcpy(new_memory->addr_data, memory->addr_data,
-           memory->memory_data - memory->base_addr +
-           NumBytesPerPage * memory->cur_page_count);
-    memcpy(new_memory->global_data, memory->global_data, memory->global_data_size);
-    memset(new_memory->memory_data + NumBytesPerPage * memory->cur_page_count,
-           0, NumBytesPerPage * (total_page_count - memory->cur_page_count));
-    bh_free(memory);
-    self->vm_instance->module->memories[0] =
-      self->vm_instance->module->default_memory = new_memory;
-    *args = 1;
+    ret = wasm_runtime_enlarge_memory(self->vm_instance->module, total_page_count -
+                                      memory->cur_page_count);
+    *args = ret ? 1 : 0;
     return;
   }
-
-  /* Failed, should be unreachable */
-  *args = 0;
 }
 
 static void

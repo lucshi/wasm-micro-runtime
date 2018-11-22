@@ -214,6 +214,16 @@ wasm_runtime_set_exception(const char *exception);
 const char*
 wasm_runtime_get_exception();
 
+/**
+ * Enlarge wasm memory data space.
+ *
+ * @param module the wasm module instance
+ * @param inc_page_count denote the page number to increase
+ * @return return true if enlarge successfully, false otherwise
+ */
+bool
+wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count);
+
 #ifdef __cplusplus
 }
 #endif
