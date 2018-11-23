@@ -247,7 +247,7 @@ abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
 #endif
 
 #if WASM_ENABLE_WASMCEPTION != 0 || WASM_ENABLE_EMCC_SYSCALL != 0
-#if 0
+#if WASM_ENABLE_WASMCEPTION != 0
 static void
 __syscall_wrapper(WASMThread *self, uint32 *args)
 {
@@ -366,7 +366,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
   }
 }
 
-#if 0
+#if WASM_ENABLE_WASMCEPTION != 0
 static void
 __syscall4_wrapper(WASMThread *self, uint32 *args)
 {
