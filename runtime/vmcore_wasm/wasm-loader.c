@@ -2009,25 +2009,25 @@ pop_type(uint8 type, uint8 **p_frame_ref, uint32 *p_stack_cell_num,
                     "expected data but block stack was empty");     \
       goto fail;                                                    \
     }                                                               \
-    if (frame_csp[-(depth + 1)].block_type != BLOCK_TYPE_LOOP) {    \
-      uint8 tmp_ret_type = frame_csp[-(depth + 1)].return_type;     \
+    if ((frame_csp - (depth + 1))->block_type != BLOCK_TYPE_LOOP) { \
+      uint8 tmp_ret_type = (frame_csp - (depth + 1))->return_type;  \
       if ((tmp_ret_type == VALUE_TYPE_I32                           \
-            && (stack_cell_num < 1 || frame_ref[-1] != REF_I32))    \
+            && (stack_cell_num < 1 || *(frame_ref - 1) != REF_I32)) \
           || (tmp_ret_type == VALUE_TYPE_F32                        \
-              && (stack_cell_num < 1 || frame_ref[-1] != REF_F32))  \
+              && (stack_cell_num < 1 || *(frame_ref - 1) != REF_F32))\
           || (tmp_ret_type == VALUE_TYPE_I64                        \
               && (stack_cell_num < 2                                \
-                  || frame_ref[-2] != REF_I64_1                     \
-                  || frame_ref[-1] != REF_I64_2))                   \
+                  || *(frame_ref - 2) != REF_I64_1                  \
+                  || *(frame_ref - 1) != REF_I64_2))                \
           || (tmp_ret_type == VALUE_TYPE_F64                        \
               && (stack_cell_num < 2                                \
-                  || frame_ref[-2] != REF_F64_1                     \
-                  || frame_ref[-1] != REF_F64_2))) {                \
+                  || *(frame_ref - 2) != REF_F64_1                  \
+                  || *(frame_ref - 1) != REF_F64_2))) {             \
         set_error_buf(error_buf, error_buf_size, "type mismatch: "  \
               "expected data but stack was empty or other type");   \
         goto fail;                                                  \
       }                                                             \
-      frame_csp[-(depth + 1)].jumped_by_br = true;                  \
+      (frame_csp - (depth + 1))->jumped_by_br = true;               \
     }                                                               \
   } while (0)
 
@@ -2093,7 +2093,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   frame_csp_boundary = frame_csp_bottom + 8;
 
   PUSH_CSP(BLOCK_TYPE_FUNCTION, ret_type, p);
-  frame_csp[-1].jumped_by_br = true;
+  (frame_csp - 1)->jumped_by_br = true;
 
   while (p < p_end) {
     opcode = *p++;
@@ -2120,22 +2120,22 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         read_leb_uint32(p, p_end, block_return_type);
         PUSH_CSP(BLOCK_TYPE_IF, block_return_type, p);
         if (!is_i32_const)
-          frame_csp[-1].jumped_by_br = true;
+          (frame_csp - 1)->jumped_by_br = true;
         else {
           if (!i32_const) {
             if(!wasm_loader_find_block_addr(branch_set,
-                                            frame_csp[-1].start_addr,
+                                            (frame_csp - 1)->start_addr,
                                             p_end,
-                                            frame_csp[-1].block_type,
-                                            &frame_csp[-1].else_addr,
-                                            &frame_csp[-1].end_addr,
+                                            (frame_csp - 1)->block_type,
+                                            &(frame_csp - 1)->else_addr,
+                                            &(frame_csp - 1)->end_addr,
                                             error_buf, error_buf_size))
               goto fail;
 
-            if (frame_csp[-1].else_addr)
-              p = frame_csp[-1].else_addr;
+            if ((frame_csp - 1)->else_addr)
+              p = (frame_csp - 1)->else_addr;
             else
-              p = frame_csp[-1].end_addr;
+              p = (frame_csp - 1)->end_addr;
           }
         }
         break;
@@ -2147,14 +2147,14 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           goto fail;
         }
 
-        if (frame_csp[-1].block_type != BLOCK_TYPE_IF) {
+        if ((frame_csp - 1)->block_type != BLOCK_TYPE_IF) {
           set_error_buf(error_buf, error_buf_size,
                         "invalid else");
           goto fail;
         }
 
-        frame_csp[-1].else_addr = p - 1;
-        stack_cell_num = frame_csp[-1].stack_cell_num;
+        (frame_csp - 1)->else_addr = p - 1;
+        stack_cell_num = (frame_csp - 1)->stack_cell_num;
         frame_ref = frame_ref_bottom + stack_cell_num;
         break;
 
@@ -2201,31 +2201,31 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
       handle_op_br:
           for (i = 1; i <= csp_num; i++)
-            if (frame_csp[-i].jumped_by_br)
+            if ((frame_csp - i)->jumped_by_br)
               break;
 
-          block_return_type = frame_csp[-i].return_type;
+          block_return_type = (frame_csp - i)->return_type;
 
           if(!wasm_loader_find_block_addr(branch_set,
-                                          frame_csp[-i].start_addr,
+                                          (frame_csp - i)->start_addr,
                                           p_end,
-                                          frame_csp[-i].block_type,
-                                          &frame_csp[-i].else_addr,
-                                          &frame_csp[-i].end_addr,
+                                          (frame_csp - i)->block_type,
+                                          &(frame_csp - i)->else_addr,
+                                          &(frame_csp - i)->end_addr,
                                           error_buf, error_buf_size))
             goto fail;
 
-          stack_cell_num = frame_csp[-i].stack_cell_num;
+          stack_cell_num = (frame_csp - i)->stack_cell_num;
           frame_ref = frame_ref_bottom + stack_cell_num;
           csp_num -= i - 1;
           frame_csp -= i - 1;
 
-          if (frame_csp[-1].block_type == BLOCK_TYPE_IF
-              && frame_csp[-1].else_addr != NULL
-              && p <= frame_csp[-1].else_addr)
-            p = frame_csp[-1].else_addr;
+          if ((frame_csp - 1)->block_type == BLOCK_TYPE_IF
+              && (frame_csp - 1)->else_addr != NULL
+              && p <= (frame_csp - 1)->else_addr)
+            p = (frame_csp - 1)->else_addr;
           else {
-            p = frame_csp[-1].end_addr;
+            p = (frame_csp - 1)->end_addr;
             PUSH_TYPE(block_return_type);
           }
 
@@ -2237,7 +2237,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
         POP_I32();
         CHECK_BR(depth);
         if (!is_i32_const)
-          frame_csp[-(depth + 1)].jumped_by_br = true;
+          (frame_csp - (depth + 1))->jumped_by_br = true;
         else {
           if (i32_const)
             goto handle_op_br;
@@ -2263,23 +2263,23 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           PUSH_TYPE(ret_type);
 
           if(!wasm_loader_find_block_addr(branch_set,
-                                          frame_csp[-1].start_addr,
+                                          (frame_csp - 1)->start_addr,
                                           p_end,
-                                          frame_csp[-1].block_type,
-                                          &frame_csp[-1].else_addr,
-                                          &frame_csp[-1].end_addr,
+                                          (frame_csp - 1)->block_type,
+                                          &(frame_csp - 1)->else_addr,
+                                          &(frame_csp - 1)->end_addr,
                                           error_buf, error_buf_size))
             goto fail;
 
-          stack_cell_num = frame_csp[-1].stack_cell_num;
+          stack_cell_num = (frame_csp - 1)->stack_cell_num;
           frame_ref = frame_ref_bottom + stack_cell_num;
-          if (frame_csp[-1].block_type == BLOCK_TYPE_IF
-              && p < frame_csp[-1].else_addr) {
-            p = frame_csp[-1].else_addr;
+          if ((frame_csp - 1)->block_type == BLOCK_TYPE_IF
+              && p < (frame_csp - 1)->else_addr) {
+            p = (frame_csp - 1)->else_addr;
           }
           else {
-            p = frame_csp[-1].end_addr;
-            PUSH_TYPE(frame_csp[-1].return_type);
+            p = (frame_csp - 1)->end_addr;
+            PUSH_TYPE((frame_csp - 1)->return_type);
           }
           break;
         }

@@ -324,16 +324,16 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
     uint32 *frame_sp_old = frame_sp;                            \
     POP_CSP_CHECK_OVERFLOW(n + 1);                              \
     frame_csp -= n;                                             \
-    if (frame_csp[-1].block_type != BLOCK_TYPE_LOOP)            \
+    if ((frame_csp - 1)->block_type != BLOCK_TYPE_LOOP)         \
       /* block block/if/function, jump to end of block */       \
-      frame_ip = frame_csp[-1].end_addr;                        \
+      frame_ip = (frame_csp - 1)->end_addr;                     \
     else /* loop block, jump to start of block */               \
-      frame_ip = frame_csp[-1].start_addr;                      \
+      frame_ip = (frame_csp - 1)->start_addr;                   \
     /* copy return value of block */                            \
-    frame_sp = frame_csp[-1].frame_sp;                          \
-    switch (frame_csp[-1].return_type) {                        \
+    frame_sp = (frame_csp - 1)->frame_sp;                       \
+    switch ((frame_csp - 1)->return_type) {                     \
       case VALUE_TYPE_I32:                                      \
-        PUSH_I32(frame_sp_old[-1]);                             \
+        PUSH_I32(*(frame_sp_old - 1));                          \
         break;                                                  \
       case VALUE_TYPE_I64:                                      \
         PUSH_I64(GET_I64_FROM_ADDR(frame_sp_old - 2));          \
@@ -825,7 +825,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_ELSE):
         /* comes from the if branch in WASM_OP_IF */
-        frame_ip = frame_csp[-1].end_addr;
+        frame_ip = (frame_csp - 1)->end_addr;
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_END):
@@ -2161,7 +2161,7 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
   /* Output the return value to the caller */
   if (!wasm_runtime_get_exception()) {
     for (i = 0; i < function->ret_cell_num; i++)
-      argv[i] = frame->sp[i - function->ret_cell_num];
+      argv[i] = *(frame->sp + i - function->ret_cell_num);
   }
 
   wasm_thread_set_cur_frame(self, prev_frame);
