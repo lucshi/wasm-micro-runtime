@@ -65,7 +65,7 @@ typedef struct {
 static void *vm_thread_wrapper(void *arg)
 {
   thread_wrapper_arg * targ = arg;
-  targ->stack = (void *)((unsigned int)(&arg) & ~0xfff);
+  targ->stack = (void *)((uintptr_t)(&arg) & ~0xfff);
   vm_tls_put(1, targ);
   targ->start(targ->arg);
   bh_free(targ);

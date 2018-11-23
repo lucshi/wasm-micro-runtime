@@ -911,7 +911,12 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           if (module->table_base_flag && module->memory_base_flag)
             /* Both tableBase and memoryBase are imported only in emcc
                LIBC mode (SIDE_MODULE=1). */
+#ifdef __i386__
             val -= (uint32)table->base_addr;
+#elif __x86_64__
+            wasm_runtime_set_exception("unsupported side module mode in 64 bit");
+            goto got_exception;
+#endif
 #endif
 
           if (val < 0 || val >= (int32)table->cur_size) {
@@ -1008,6 +1013,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               wasm_runtime_set_exception("get local type is invalid");
               goto got_exception;
           }
+          (void)local_count;
           HANDLE_OP_END ();
         }
 
@@ -1035,6 +1041,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               wasm_runtime_set_exception("set local type is invalid");
               goto got_exception;
           }
+          (void)local_count;
           HANDLE_OP_END ();
         }
 
@@ -1062,6 +1069,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               wasm_runtime_set_exception("tee local type is invalid");
               goto got_exception;
           }
+          (void)local_count;
           HANDLE_OP_END ();
         }
 
@@ -1254,8 +1262,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_MEMORY_GROW):
       {
-        uint32 reserved, prev_page_count, delta, total_size, tmp;
-        WASMMemoryInstance *new_memory;
+        uint32 reserved, prev_page_count, delta, tmp;
 
         read_leb_uint32(frame_ip, frame_ip_end, reserved);
         prev_page_count = memory->cur_page_count;

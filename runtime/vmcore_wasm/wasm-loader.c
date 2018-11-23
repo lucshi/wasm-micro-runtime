@@ -1285,7 +1285,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
 static uint32
 branch_set_hash(const void *key)
 {
-  return ((uint32)key >> 4) ^ ((uint32)key >> 14);
+  return ((uintptr_t)key >> 4) ^ ((uintptr_t)key >> 14);
 }
 
 static bool

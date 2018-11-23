@@ -79,6 +79,7 @@ _print_f64_wrapper(WASMThread *self, uint32 *args)
 #endif
 
 #if WASM_ENABLE_EMCC_LIBC != 0
+#ifdef __i386__
 static inline va_list
 get_va_list(uint32 *args)
 {
@@ -148,11 +149,12 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
   va_list va_args = get_va_list(args + 2);
   *args = vsscanf(str, fmt, va_args);
 }
+#endif
 
 static void
 _malloc_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)bh_malloc(args[0]);
+  *(uintptr_t*)args = (uintptr_t)bh_malloc(args[0]);
 }
 
 static void
@@ -168,14 +170,19 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
 
   if ((ptr = bh_malloc(total_size)))
     memset(ptr, 0, total_size);
-
-  *args = (uint32)ptr;
+  *(uintptr_t*)args = (uintptr_t)ptr;
 }
 
 static void
 _free_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_free((void*)args[0]);
+  void *ptr;
+  #ifdef __i386__
+    ptr = (void*)args[0];
+  #elif __x86_64__
+    memcpy(&ptr, args, 8);
+  #endif
+  bh_free(ptr);
 }
 
 static void
@@ -194,19 +201,19 @@ vmci_get_std_cout();
 static void
 _cout_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)vmci_get_std_cout();
+  *(uintptr_t*)args = (uintptr_t)vmci_get_std_cout();
 }
 
 static void
 _stdout_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)stdout;
+  *(uintptr_t*)args = (uintptr_t)stdout;
 }
 
 static void
 _stderr_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)stderr;
+  *(uintptr_t*)args = (uintptr_t)stderr;
 }
 
 static void
@@ -240,11 +247,13 @@ abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
 #endif
 
 #if WASM_ENABLE_WASMCEPTION != 0 || WASM_ENABLE_EMCC_SYSCALL != 0
+#if 0
 static void
 __syscall_wrapper(WASMThread *self, uint32 *args)
 {
   printf("##_syscall called, args[0]: %d\n", args[0]);
 }
+#endif
 
 static void
 __syscall0_wrapper(WASMThread *self, uint32 *args)
@@ -328,8 +337,13 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
         struct iovec *vec_begin, *vec;
         vec_begin = vec = (struct iovec*)(MEMORY_BASE(self) + args[2]);
         for (i = 0; i < iovcnt; i++, vec++) {
-          if (vec->iov_len > 0)
+          if (vec->iov_len > 0) {
+#ifdef __i386__
             vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint32)vec->iov_base;
+#elif __x86_x64__
+            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint64)vec->iov_base;
+#endif
+          }
         }
         if (args[0] == 145)
           *args = readv(args[1], vec_begin, args[3]);
@@ -352,11 +366,13 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
   }
 }
 
+#if 0
 static void
 __syscall4_wrapper(WASMThread *self, uint32 *args)
 {
   printf("##_syscall4 called, args[0]: %d\n", args[0]);
 }
+#endif
 
 static void
 __syscall5_wrapper(WASMThread *self, uint32 *args)
@@ -528,6 +544,7 @@ static WASMNativeFuncDef native_func_defs[] = {
 #if WASM_ENABLE_EMCC_LIBC != 0
   REG_NATIVE_FUNC(env, nullFunc_X),
   REG_NATIVE_FUNC(env, _atexit),
+#ifdef __i386__
   REG_NATIVE_FUNC(env, _printf),
   REG_NATIVE_FUNC(env, _sprintf),
   REG_NATIVE_FUNC(env, _snprintf),
@@ -535,6 +552,7 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _scanf),
   REG_NATIVE_FUNC(env, _fscanf),
   REG_NATIVE_FUNC(env, _sscanf),
+#endif
   REG_NATIVE_FUNC(env, _malloc),
   REG_NATIVE_FUNC(env, _calloc),
   REG_NATIVE_FUNC(env, _free),

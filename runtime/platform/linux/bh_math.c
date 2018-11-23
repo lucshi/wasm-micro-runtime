@@ -52,6 +52,7 @@ static const double huge = 1.0e300;
 static double huge = 1.0e300;
 #endif
 
+#if 0
 #ifdef __FDLIBM__STDC__
 static const double
 #else
@@ -70,7 +71,7 @@ Lg6 = 1.531383769920937332e-01,  /* 3FC39A09 D078C69F */
 Lg7 = 1.479819860511658591e-01;  /* 3FC2F112 DF3E5244 */
 
 static double zero   =  0.0;
-
+#endif
 #ifdef __STDC__
 static const double
 #else
