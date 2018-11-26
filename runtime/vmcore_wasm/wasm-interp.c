@@ -95,11 +95,11 @@ GET_F64_FROM_ADDR (uint32 *addr)
     else                                                                        \
       maddr = memory->memory_data + (offset + addr);                            \
     if (!module->memory_base_flag) {                                            \
-      if (maddr < memory->addr_data) {                                          \
+      if (maddr < memory->base_addr) {                                          \
         wasm_runtime_set_exception("out of bounds memory access");              \
         goto got_exception;                                                     \
       }                                                                         \
-      if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->global_data) { \
+      if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->end_addr) {    \
         wasm_runtime_set_exception("out of bounds memory access");              \
         goto got_exception;                                                     \
       }                                                                         \

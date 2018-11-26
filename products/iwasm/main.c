@@ -260,6 +260,7 @@ main(int argc, char *argv[])
 
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
+                                                    argc, argv,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
     bh_printf("%s\n", error_buf);

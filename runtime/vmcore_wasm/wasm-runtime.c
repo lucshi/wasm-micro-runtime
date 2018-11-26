@@ -188,15 +188,29 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
   }
 }
 
+static uint32
+get_thunk_argv_data_size(uint32 argc, const char **argv)
+{
+  uint32 total_size = 0, i;
+  for (i = 0; i < argc; i++)
+    total_size += strlen(argv[i]) + 1;
+  return align_uint(total_size, 4);
+}
+
 static WASMMemoryInstance*
 memory_instantiate(uint32 init_page_count, uint32 max_page_count,
                    uint32 addr_data_size, uint32 global_data_size,
+                   uint32 argc, const char **argv,
                    char *error_buf, uint32 error_buf_size)
 {
+  uint8 *p;
+  uint32 *p_argv;
   WASMMemoryInstance *memory;
+  uint32 thunk_argv_data_size = get_thunk_argv_data_size(argc, argv), i;
   uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
                       NumBytesPerPage * init_page_count +
-                      addr_data_size + global_data_size;
+                      addr_data_size + global_data_size +
+                      thunk_argv_data_size + sizeof(uint32) * argc;
 
   if (!(memory = bh_malloc(total_size))) {
     set_error_buf(error_buf, error_buf_size,
@@ -210,10 +224,31 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
   memory->max_page_count = max_page_count;
   memory->addr_data = memory->base_addr;
   memory->addr_data_size = addr_data_size;
-  memory->memory_data = memory->base_addr + addr_data_size;
-  memory->global_data = memory->base_addr + addr_data_size +
+
+  memory->thunk_argv_data = memory->addr_data + addr_data_size;
+  memory->thunk_argv_data_size = thunk_argv_data_size;
+
+  memory->thunk_argc = argc;
+  memory->thunk_argv_offsets = memory->thunk_argv_data + thunk_argv_data_size;
+
+  memory->memory_data = memory->thunk_argv_offsets + sizeof(uint32) * argc;
+  memory->global_data = memory->memory_data +
                         NumBytesPerPage * memory->cur_page_count;
   memory->global_data_size = global_data_size;
+
+  memory->end_addr = memory->global_data + global_data_size;
+
+  /* Initialize thunk argv data and argv offsets */
+  p = memory->thunk_argv_data;
+  p_argv = (uint32*)memory->thunk_argv_offsets;
+
+  for (i = 0; i < argc; i++) {
+    /* Copy each argv string */
+    memcpy(p, argv[i], strlen(argv[i]) + 1);
+    /* Set offset of the argv */
+    p_argv[i] = p - memory->memory_data;
+    p += strlen(argv[i]) + 1;
+  }
 
   return memory;
 }
@@ -224,6 +259,7 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
 static WASMMemoryInstance**
 memories_instantiate(const WASMModule *module, uint32 addr_data_size,
                      uint32 global_data_size,
+                     uint32 argc, const char **argv,
                      char *error_buf, uint32 error_buf_size)
 {
   WASMImport *import;
@@ -254,6 +290,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
           memory_instantiate(import->u.memory.init_page_count,
                              import->u.memory. max_page_count,
                              addr_data_size, global_data_size,
+                             argc, argv,
                              error_buf, error_buf_size))) {
       set_error_buf(error_buf, error_buf_size,
                     "Instantiate memory failed: "
@@ -269,6 +306,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
           memory_instantiate(module->memories[i].init_page_count,
                              module->memories[i].max_page_count,
                              addr_data_size, global_data_size,
+                             argc, argv,
                              error_buf, error_buf_size))) {
       set_error_buf(error_buf, error_buf_size,
                     "Instantiate memory failed: "
@@ -282,6 +320,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
     /* no import memory and define memory, but has global variables */
     if (!(memory = memories[mem_index++] =
           memory_instantiate(0, 0, addr_data_size, global_data_size,
+                             argc, argv,
                              error_buf, error_buf_size))) {
       set_error_buf(error_buf, error_buf_size,
                     "Instantiate memory failed: "
@@ -675,7 +714,9 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
  * Instantiate module
  */
 WASMModuleInstance*
-wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error_buf_size)
+wasm_runtime_instantiate(const WASMModule *module,
+                         int argc, const char **argv,
+                         char *error_buf, uint32 error_buf_size)
 {
   WASMModuleInstance *module_inst;
   WASMTableSeg *table_seg;
@@ -722,6 +763,7 @@ wasm_runtime_instantiate(const WASMModule *module, char *error_buf, uint32 error
   if (((module_inst->memory_count > 0 || global_count > 0)
        && !(module_inst->memories =
             memories_instantiate(module, addr_data_size, global_data_size,
+                                 argc, argv,
                                  error_buf, error_buf_size)))
       || (module_inst->table_count > 0
           && !(module_inst->tables = tables_instantiate(module,
@@ -1048,9 +1090,11 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
   WASMMemoryInstance *new_memory;
   uint32 total_page_count = inc_page_count + memory->cur_page_count;
   uint32 total_size = offsetof(WASMMemoryInstance, base_addr) +
-                      (memory->memory_data - memory->base_addr) +
+                      memory->addr_data_size +
                       NumBytesPerPage * total_page_count +
-                      memory->global_data_size;
+                      memory->global_data_size +
+                      memory->thunk_argv_data_size +
+                      sizeof(uint32) * memory->thunk_argc;
 
   if (!(new_memory = bh_malloc(total_size))) {
     wasm_runtime_set_exception("alloc memory for enlarge memory failed.");
@@ -1061,18 +1105,33 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
   new_memory->max_page_count = memory->max_page_count > total_page_count ?
                                memory->max_page_count : total_page_count;
   new_memory->addr_data = new_memory->base_addr;
-  new_memory->memory_data = new_memory->addr_data +
-                            (memory->memory_data - memory->base_addr);
+  new_memory->addr_data_size = memory->addr_data_size;
+
+  new_memory->thunk_argv_data = new_memory->addr_data + memory->addr_data_size;
+  new_memory->thunk_argv_data_size = memory->thunk_argv_data_size;
+  new_memory->thunk_argc = memory->thunk_argc;
+  new_memory->thunk_argv_offsets = new_memory->thunk_argv_data +
+                                   memory->thunk_argv_data_size;
+
+  new_memory->memory_data = new_memory->thunk_argv_offsets +
+                            sizeof(uint32) * memory->thunk_argc;
   new_memory->global_data = new_memory->memory_data +
                             NumBytesPerPage * new_memory->cur_page_count;
   new_memory->global_data_size = memory->global_data_size;
+
+  new_memory->end_addr = new_memory->global_data + memory->global_data_size;
+
+  /* Copy addr data, thunk argv data, thunk argv offsets and memory data */
   memcpy(new_memory->addr_data, memory->addr_data,
-         memory->memory_data - memory->base_addr +
-         NumBytesPerPage * memory->cur_page_count);
-  memcpy(new_memory->global_data, memory->global_data, memory->global_data_size);
+         memory->global_data - memory->addr_data);
+  /* Copy global data */
+  memcpy(new_memory->global_data, memory->global_data,
+         memory->end_addr - memory->global_data);
+  /* Init free space of new memory */
   memset(new_memory->memory_data + NumBytesPerPage * memory->cur_page_count,
          0, NumBytesPerPage * (total_page_count - memory->cur_page_count));
+
   bh_free(memory);
-  module->memories[0] = module->default_memory = memory = new_memory;
+  module->memories[0] = module->default_memory = new_memory;
   return true;
 }

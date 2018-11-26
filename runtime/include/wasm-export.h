@@ -67,6 +67,8 @@ wasm_runtime_unload(wasm_module_t module);
  * Instantiate a WASM module
  *
  * @param module the WASM module to instantiate
+ * @param argc the number of arguments
+ * @param argv the arguments array
  * @param error_buf output of the exception info
  * @param error_buf_size the size of the exception string
  *
@@ -74,6 +76,7 @@ wasm_runtime_unload(wasm_module_t module);
  */
 wasm_module_inst_t
 wasm_runtime_instantiate(const wasm_module_t module,
+                         int argc, char ** argv,
                          char *error_buf, uint32 error_buf_size);
 
 /**

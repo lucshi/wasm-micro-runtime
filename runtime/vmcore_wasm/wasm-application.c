@@ -124,7 +124,7 @@ wasm_application_execute_main(int argc, char *argv[])
   WASMFunctionInstance *func_post_instantiate =
     resolve_post_instantiate_function(module_inst);
   WASMFunctionInstance *func = resolve_main_function(module_inst);
-  uint32 argc1 = 0, argv1[3] = { 0 };
+  uint32 argc1 = 0, argv1[2] = { 0 };
 
   if (func_post_instantiate &&
       !check_post_instantiate_func_type(func_post_instantiate->u.func->func_type))
@@ -137,13 +137,22 @@ wasm_application_execute_main(int argc, char *argv[])
     return false;
 
   if (func->u.func->func_type->param_count) {
-    argc1 = 2;
-    argv1[0] = argc;
+    if (module_inst->memory_base_flag) { /* EMCC LIBC mode */
 #ifdef __i386__
-    argv1[1] = (uint32)argv;
+      argc1 = 2;
+      argv1[0] = argc;
+      argv1[1] = (uint32)argv;
 #elif __x86_64__
-    memcpy(argv1 + 1, &argv, 8);
+      wasm_runtime_set_exception("unsupported side module mode in 64 bit");
+      return false;
 #endif
+    }
+    else { /* EMCC/WASMCEPTION SYSCALL mode */
+      WASMMemoryInstance *memory = module_inst->default_memory;
+      argc1 = 2;
+      argv1[0] = memory->thunk_argc;
+      argv1[1] = memory->thunk_argv_offsets - memory->memory_data;
+    }
   }
 
   if (func_post_instantiate) {
