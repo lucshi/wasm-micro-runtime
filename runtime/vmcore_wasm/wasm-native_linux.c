@@ -335,20 +335,31 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
       {
         uint32 iovcnt = args[3], i;
         struct iovec *vec_begin, *vec;
+#ifdef __i386__
         vec_begin = vec = (struct iovec*)(MEMORY_BASE(self) + args[2]);
         for (i = 0; i < iovcnt; i++, vec++) {
           if (vec->iov_len > 0) {
-#ifdef __i386__
             vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint32)vec->iov_base;
-#elif __x86_x64__
-            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint64)vec->iov_base;
-#endif
           }
         }
+#elif __x86_64__
+        vec_begin = vec = (struct iovec*)bh_malloc(sizeof(struct iovec) * iovcnt);
+        memset(vec, 0, sizeof(struct iovec) * iovcnt);
+        for (i = 0; i < iovcnt; i++, vec++) {
+          *(uint64*)&vec->iov_base = *(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i);
+          *(uint64*)&vec->iov_len = *(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i + 4);
+          if (vec->iov_len > 0) {
+            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint64)vec->iov_base;
+          }
+        }
+#endif
         if (args[0] == 145)
           *args = readv(args[1], vec_begin, args[3]);
         else
           *args = writev(args[1], vec_begin, args[3]);
+#ifdef __x86_64__
+        bh_free(vec_begin);
+#endif
         break;
       }
 

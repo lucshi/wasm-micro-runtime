@@ -258,6 +258,11 @@ main(int argc, char *argv[])
     goto fail2;
   }
 
+#ifdef WASM_ENABLE_REPL
+  argc = 0;
+  argv = NULL;
+#endif
+
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
                                                     argc, argv,
