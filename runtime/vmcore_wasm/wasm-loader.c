@@ -1180,6 +1180,22 @@ static bool
 wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
                              char *error_buf, uint32 error_buf_size);
 
+static char*
+strnstr(const char *str, const char *substr, size_t len)
+{
+  int i;
+  size_t substr_len;
+
+  substr_len = strlen(substr);
+  for (i = 0; i <= (int)(len-substr_len); i++) {
+    if ((str[0] == substr[0]) &&
+        (0 == strncmp(str, substr, substr_len)))
+      return (char*)str;
+    str++;
+  }
+  return NULL;
+}
+
 static bool
 load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 error_buf_size)
 {
@@ -1217,6 +1233,9 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
           set_error_buf(error_buf, error_buf_size, "length out of bounds");
           return false;
         }
+
+      if (!module->dylink_flag && strnstr(p, "dylink", section_size))
+        module->dylink_flag = true;
 
         p += section_size;
         break;

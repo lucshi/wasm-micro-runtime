@@ -90,11 +90,11 @@ GET_F64_FROM_ADDR (uint32 *addr)
       wasm_runtime_set_exception("out of bounds memory access");                \
       goto got_exception;                                                       \
     }                                                                           \
-    if (module->memory_base_flag)                                               \
+    if (module->dylink_flag)                                                    \
       maddr = (uint8*)NULL + (offset + addr);                                   \
     else                                                                        \
       maddr = memory->memory_data + (offset + addr);                            \
-    if (!module->memory_base_flag) {                                            \
+    if (!module->dylink_flag) {                                                 \
       if (maddr < memory->base_addr) {                                          \
         wasm_runtime_set_exception("out of bounds memory access");              \
         goto got_exception;                                                     \
@@ -907,10 +907,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           frame_ip++;
           val = POP_I32();
 
-#if WASM_ENABLE_EMCC_LIBC
-          if (module->table_base_flag && module->memory_base_flag) {
-            /* Both tableBase and memoryBase are imported only in emcc
-               LIBC mode (SIDE_MODULE=1). */
+          /* EMCC dylink mode (SIDE_MODULE=1). */
+          if (module->dylink_flag && module->table_base_flag) {
 #ifdef __i386__
             val -= (uint32)table->base_addr;
 #elif __x86_64__
@@ -918,7 +916,6 @@ wasm_interp_call_func_bytecode(WASMThread *self,
             goto got_exception;
 #endif
           }
-#endif
 
           if (val < 0 || val >= (int32)table->cur_size) {
             wasm_runtime_set_exception("undefined element");

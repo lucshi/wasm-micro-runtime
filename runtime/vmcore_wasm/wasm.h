@@ -263,6 +263,8 @@ typedef struct WASMModule {
 
   HashMap *const_str_set;
   HashMap *branch_set;
+
+  bool dylink_flag;
 } WASMModule;
 
 typedef struct WASMBranchBlock {

@@ -339,17 +339,17 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
         vec_begin = vec = (struct iovec*)(MEMORY_BASE(self) + args[2]);
         for (i = 0; i < iovcnt; i++, vec++) {
           if (vec->iov_len > 0) {
-            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint32)vec->iov_base;
+            vec->iov_base = MEMORY_BASE(self) + (uint32)vec->iov_base;
           }
         }
 #elif __x86_64__
         vec_begin = vec = (struct iovec*)bh_malloc(sizeof(struct iovec) * iovcnt);
         memset(vec, 0, sizeof(struct iovec) * iovcnt);
         for (i = 0; i < iovcnt; i++, vec++) {
-          *(uint64*)&vec->iov_base = *(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i);
-          *(uint64*)&vec->iov_len = *(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i + 4);
+          vec->iov_base = (void*)(uintptr_t)(*(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i));
+          vec->iov_len = *(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i + 4);
           if (vec->iov_len > 0) {
-            vec->iov_base = (uint8*)MEMORY_BASE(self) + (uint64)vec->iov_base;
+            vec->iov_base = MEMORY_BASE(self) + (uint64)vec->iov_base;
           }
         }
 #endif

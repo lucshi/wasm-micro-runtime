@@ -137,7 +137,7 @@ wasm_application_execute_main(int argc, char *argv[])
     return false;
 
   if (func->u.func->func_type->param_count) {
-    if (module_inst->memory_base_flag) { /* EMCC LIBC mode */
+    if (module_inst->dylink_flag) { /* EMCC dylink mode (SIDE_MODULE=1). */
 #ifdef __i386__
       argc1 = 2;
       argv1[0] = argc;

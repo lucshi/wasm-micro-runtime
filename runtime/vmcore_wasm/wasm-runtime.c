@@ -915,6 +915,7 @@ wasm_runtime_instantiate(const WASMModule *module,
 
   module_inst->branch_set = module->branch_set;
   module_inst->module = module;
+  module_inst->dylink_flag = module->dylink_flag;
 
   (void)addr_data_end;
   (void)global_data_end;

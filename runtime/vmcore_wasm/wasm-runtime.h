@@ -142,6 +142,7 @@ typedef struct WASMModuleInstance {
   uint32 DYNAMICTOP_PTR_offset;
   bool memory_base_flag;
   bool table_base_flag;
+  bool dylink_flag;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
