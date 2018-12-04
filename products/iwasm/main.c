@@ -358,6 +358,7 @@ void iwasm_main(void *arg1, void *arg2, void *arg3)
 
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
+                                                    0, NULL,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
     bh_printf("%s\n", error_buf);

@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef void (*symbol_func)(void);
 
-struct NativeSymbol {
+typedef struct NativeSymbol {
   const char *symbol;
-  symbol_func func_ptr;
+  void *func_ptr;
+  char *signature;
 } NativeSymbol;
 
-#define REG_SYMBOL(symbol) {#symbol, (symbol_func)symbol}
+#define REG_SYMBOL(symbol) {#symbol, symbol, NULL }
 
 static int
 putchar(int c)
@@ -40,11 +40,11 @@ gpio_pin_write_wrapper(struct device *port, u32_t pin, u32_t value)
   return gpio_pin_write(port, pin, value);
 }
 
-static const struct NativeSymbol native_symbol_defs[] = {
+static const NativeSymbol native_symbol_defs[] = {
   REG_SYMBOL(device_get_binding),
-  { "gpio_pin_configure", (symbol_func)gpio_pin_configure_wrapper },
-  { "gpio_pin_read", (symbol_func)gpio_pin_read_wrapper },
-  { "gpio_pin_write", (symbol_func)gpio_pin_write_wrapper },
+  { "gpio_pin_configure", gpio_pin_configure_wrapper },
+  { "gpio_pin_read", gpio_pin_read_wrapper },
+  { "gpio_pin_write", gpio_pin_write_wrapper },
   REG_SYMBOL(memcmp),
   REG_SYMBOL(memcpy),
   REG_SYMBOL(memmove),
