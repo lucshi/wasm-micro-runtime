@@ -1279,6 +1279,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (!wasm_runtime_enlarge_memory(module, delta))
           goto got_exception;
 
+        memory = module->default_memory;
+
         (void)reserved;
         HANDLE_OP_END ();
       }
