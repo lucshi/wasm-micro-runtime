@@ -35,7 +35,7 @@
 #include "bh_thread.h"
 #include "wasm-export.h"
 #include "bh_memory.h"
-#ifdef __ZEPHYR__
+#if defined(__ZEPHYR__) || defined(__ALIOS__)
 #include "test_wasm.h"
 #include "ems_gc.h"
 #endif
@@ -75,7 +75,7 @@ vmci_get_std_cout()
 }
 #endif
 
-#ifndef __ZEPHYR__
+#if !defined(__ZEPHYR__) && !defined(__ALIOS__)
 static int
 print_help()
 {
@@ -93,7 +93,7 @@ print_help()
 
   return 1;
 }
-#endif /* end of __ZEPHYR__ */
+#endif /* end of !defined(__ZEPHYR__) && !defined(__ALIOS__) */
 
 static void
 app_instance_cleanup(void)
@@ -188,7 +188,7 @@ app_instance_func(void *arg)
 }
 #endif /* WASM_ENABLE_REPL */
 
-#ifndef __ZEPHYR__
+#if !defined(__ZEPHYR__) && !defined(__ALIOS__)
 int
 main(int argc, char *argv[])
 {
@@ -319,9 +319,13 @@ fail1:
   return 0;
 }
 
-#else /* end of __ZEPHYR__ */
+#else /* else of !defined(__ZEPHYR__) && !defined(__ALIOS__) */
 
+#ifdef __ZEPHYR__
 void iwasm_main(void *arg1, void *arg2, void *arg3)
+#elif __ALIOS__
+void iwasm_main(void *arg1)
+#endif
 {
   uint8 *wasm_file_buf = NULL;
   int wasm_file_size;
@@ -333,9 +337,13 @@ void iwasm_main(void *arg1, void *arg2, void *arg3)
   int log_verbose_level = 1;
 #endif
 
+#ifdef __ZEPHYR__
   (void)arg1;
   (void)arg2;
   (void)arg3;
+#elif __ALIOS__
+  (void)arg1;
+#endif
 
   /* initialize runtime environment */
   if (!wasm_runtime_init())
@@ -399,6 +407,8 @@ fail1:
 #endif
 }
 
+#ifdef __ZEPHYR__
+
 #define DEFAULT_THREAD_STACKSIZE (6 * 1024)
 #define DEFAULT_THREAD_PRIORITY 5
 
@@ -415,4 +425,21 @@ iwasm_init(void)
                                 DEFAULT_THREAD_PRIORITY, 0, K_NO_WAIT);
   return tid ? true : false;
 }
-#endif /* end of __ZEPHYR__ */
+
+#elif __ALIOS__ /* else of __ZEPHYR__ */
+
+#define DEFAULT_THREAD_STACKSIZE (6 * 1024)
+#define DEFAULT_THREAD_PRIORITY 50
+
+bool
+iwasm_init(void)
+{
+  int ret = aos_task_new("wasm-main", iwasm_main, NULL,
+                         DEFAULT_THREAD_STACKSIZE);
+  return ret == 0 ? true : false;
+}
+
+#endif /* end of __ALIOS__ */
+
+#endif /* end of !defined(__ZEPHYR__) && !defined(__ALIOS__) */
+

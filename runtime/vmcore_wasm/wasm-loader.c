@@ -1234,7 +1234,7 @@ load(const uint8 *buf, uint32 size, WASMModule *module, char *error_buf, uint32 
           return false;
         }
 
-      if (!module->dylink_flag && strnstr(p, "dylink", section_size))
+      if (!module->dylink_flag && strnstr((char*)p, "dylink", section_size))
         module->dylink_flag = true;
 
         p += section_size;

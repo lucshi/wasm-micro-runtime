@@ -31,7 +31,7 @@
 #include "wasm-interp.h"
 #include "bh_log.h"
 #include "bh_memory.h"
-#ifdef __ZEPHYR__
+#if defined(__ZEPHYR__) || defined(__ALIOS__)
 #include "ems_gc.h"
 #endif
 
@@ -89,7 +89,9 @@ wasm_runtime_init()
 #ifdef __ZEPHYR__
   /* Enable printf() in Zephyr */
   __stdout_hook_install(_stdout_hook_iwasm);
+#endif
 
+#if defined(__ZEPHYR__) || defined(__ALIOS__)
   if (!gc_init(16 * 1024 * 1024))
     return false;
 #endif
@@ -975,6 +977,31 @@ app_instance_cleanup(WASMVmInstance *ilr)
     (*cleanup_routine)();
 }
 
+/* Insert the new VM instance to the VM instance list. */
+static void
+insert_ilr_to_list(WASMVmInstance *ilr)
+{
+  WASMVmInstance *p;
+
+  vmci_thread_mutex_lock(&instance_list_lock);
+
+  /* Check if inserted already */
+  p = supervisor_instance->next;
+  while (p != supervisor_instance) {
+    if (p == ilr) {
+      vmci_thread_mutex_unlock(&instance_list_lock);
+      return;
+    }
+    p = p->next;
+  }
+
+  supervisor_instance->next->prev = ilr;
+  ilr->next = supervisor_instance->next;
+  ilr->prev = supervisor_instance;
+  supervisor_instance->next = ilr;
+  vmci_thread_mutex_unlock(&instance_list_lock);
+}
+
 /**
  * Entry point of the main thread of VM instance.
  *
@@ -990,6 +1017,8 @@ app_instance_start (void *arg)
   WASMVmInstance *ilr = (WASMVmInstance*)arg;
   WASMThread *self = &ilr->main_tlr;
   vmci_thread_t handle = self->handle;
+
+  insert_ilr_to_list(ilr);
 
   /* This must be a new thread that has not been initialized. */
   bh_assert(!wasm_runtime_get_self());
@@ -1055,14 +1084,7 @@ wasm_runtime_create_instance(WASMModuleInstance *module_inst,
     return NULL;
   }
 
-  /* Insert the new VM instance to the VM instance list. */
-  vmci_thread_mutex_lock(&instance_list_lock);
-  supervisor_instance->next->prev = ilr;
-  ilr->next = supervisor_instance->next;
-  ilr->prev = supervisor_instance;
-  supervisor_instance->next = ilr;
-  vmci_thread_mutex_unlock(&instance_list_lock);
-
+  insert_ilr_to_list(ilr);
   return ilr;
 }
 

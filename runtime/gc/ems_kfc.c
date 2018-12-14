@@ -28,8 +28,10 @@ gc_heap_t shared_heap;
 static char shared_heap_buf[110 * 1024 + GC_HEAD_PADDING] = { 0 };
 #else
 static char shared_heap_buf[512 * 1024 + GC_HEAD_PADDING] = { 0 };
-#endif
-#endif
+#endif /* end of CONFIG_BOARD_NUCLEO_F446RE */
+#elif defined(__ALIOS__) /* else of __ZEPHYR__ */
+static char shared_heap_buf[512 * 1024 + GC_HEAD_PADDING] = { 0 };
+#endif /* end of __ZEPHYR__ */
 
 
 #define HEAP_INC_FACTOR 1
@@ -91,7 +93,7 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 		return GC_ERROR;
 	}
 		
-#ifdef __ZEPHYR__
+#if defined(__ZEPHYR__) || defined(__ALIOS__)
 	if (heap == &shared_heap) {
 		heap_max_size = sizeof(shared_heap_buf) - GC_HEAD_PADDING;
 		base_addr = shared_heap_buf + GC_HEAD_PADDING;
@@ -112,7 +114,7 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 
 	base_addr = (char*) base_addr + GC_HEAD_PADDING;
 
-#ifdef __ZEPHYR__
+#if defined(__ZEPHYR__) || defined(__ALIOS__)
 	}
 #endif
 
@@ -209,7 +211,7 @@ int gc_destroy(gc_handle_t heap)
 	if ((gc_heap_t*)heap != &shared_heap)
 		return GC_ERROR;
 
-#ifndef __ZEPHYR__
+#if !defined(__ZEPHYR__) && !defined(__ALIOS__)
 	bh_free ((gc_uint8*)shared_heap.base_addr - GC_HEAD_PADDING);
 #else
     memset (&shared_heap_buf, 0, sizeof(shared_heap_buf));
