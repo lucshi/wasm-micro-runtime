@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static bool sort_flag = false;
 
 typedef struct NativeSymbol {
   const char *symbol;
   void *func_ptr;
-  char *signature;
 } NativeSymbol;
 
-#define REG_SYMBOL(symbol) {#symbol, symbol, NULL }
+#define REG_SYMBOL(symbol) {#symbol, symbol}
 
 static int
 putchar(int c)
@@ -22,29 +22,7 @@ putchar(int c)
   return 1;
 }
 
-static int
-gpio_pin_configure_wrapper(struct device *port, u32_t pin, int flags)
-{
-  return gpio_pin_configure(port, pin, flags);
-}
-
-static int
-gpio_pin_read_wrapper(struct device *port, u32_t pin, u32_t *value)
-{
-  return gpio_pin_read(port, pin, value);
-}
-
-static int
-gpio_pin_write_wrapper(struct device *port, u32_t pin, u32_t value)
-{
-  return gpio_pin_write(port, pin, value);
-}
-
-static const NativeSymbol native_symbol_defs[] = {
-  REG_SYMBOL(device_get_binding),
-  { "gpio_pin_configure", gpio_pin_configure_wrapper },
-  { "gpio_pin_read", gpio_pin_read_wrapper },
-  { "gpio_pin_write", gpio_pin_write_wrapper },
+static NativeSymbol native_symbol_defs[] = {
   REG_SYMBOL(memcmp),
   REG_SYMBOL(memcpy),
   REG_SYMBOL(memmove),
@@ -60,22 +38,40 @@ static const NativeSymbol native_symbol_defs[] = {
   REG_SYMBOL(strncpy),
 };
 
-void *
-bh_dlsym(void *handle, const char *symbol)
-{
-  int low = 0;
-  int high = sizeof(native_symbol_defs) / sizeof(NativeSymbol) - 1;
-  int mid, ret;
+extern int get_extended_symbol_count();
+extern void *get_extended_symbol_ptr();
 
-  if (!symbol)
-    return NULL;
+static bool
+sort_symbol_ptr(NativeSymbol *ptr, int len)
+{
+  int i, j;
+  NativeSymbol temp;
+
+  for (i = 0; i < len - 1; ++i) {
+    for (j = i + 1; j < len; ++j) {
+      if (strcmp((ptr+i)->symbol, (ptr+j)->symbol) > 0) {
+        temp = ptr[i];
+        ptr[i] = ptr[j];
+        ptr[j] = temp;
+      }
+    }
+  }
+
+  return true;
+}
+
+static void *
+lookup_symbol(NativeSymbol *ptr, int len, const char *symbol)
+{
+  int low = 0, mid, ret;
+  int high = len - 1;
 
   while (low <= high) {
     mid = (low + high) / 2;
-    ret = strcmp(symbol, native_symbol_defs[mid].symbol);
+    ret = strcmp(symbol, ptr[mid].symbol);
 
     if (ret == 0)
-      return native_symbol_defs[mid].func_ptr;
+      return ptr[mid].func_ptr;
     else if (ret < 0)
       high = mid - 1;
     else
@@ -85,3 +81,28 @@ bh_dlsym(void *handle, const char *symbol)
   return NULL;
 }
 
+void *
+bh_dlsym(void *handle, const char *symbol)
+{
+  NativeSymbol *ext_native_symbol_defs = get_extended_symbol_ptr();
+  int len = get_extended_symbol_count();
+  void *ret;
+
+  if (!sort_flag) {
+    sort_symbol_ptr(native_symbol_defs, sizeof(native_symbol_defs) / sizeof(NativeSymbol));
+    sort_symbol_ptr(ext_native_symbol_defs, len);
+    sort_flag = true;
+  }
+
+  if (!symbol)
+    return NULL;
+
+  ret = lookup_symbol(native_symbol_defs, sizeof(native_symbol_defs) / sizeof(NativeSymbol), symbol);
+  if (ret)
+    return ret;
+  ret = lookup_symbol(ext_native_symbol_defs, len, symbol);
+  if (ret)
+    return ret;
+
+  return NULL;
+}
