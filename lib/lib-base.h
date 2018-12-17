@@ -1,5 +1,5 @@
-#ifndef _ZEPHYR_COMMON_H_
-#define _ZEPHYR_COMMON_H_
+#ifndef _LIB_BASE_H_
+#define _LIB_BASE_H_
 
 #ifdef __cplusplus
 extern "C" {

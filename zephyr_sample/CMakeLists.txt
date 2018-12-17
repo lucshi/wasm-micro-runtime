@@ -37,6 +37,6 @@ set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/bh_hashmap.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-thread.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/invokeNative_general.c
                 ${IWASM_ROOT}/products/iwasm/main.c
-                ${IWASM_ROOT}/lib/lib-extended.c)
+                ${IWASM_ROOT}/lib/lib-export.c)
 
 target_sources(app PRIVATE src/main.c ${IWASM_SRCS})

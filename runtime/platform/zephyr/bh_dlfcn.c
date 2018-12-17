@@ -38,8 +38,7 @@ static NativeSymbol native_symbol_defs[] = {
   REG_SYMBOL(strncpy),
 };
 
-extern int get_extended_symbol_count();
-extern void *get_extended_symbol_ptr();
+extern void *get_extended_symbol_ptr(int *p_size);
 
 static bool
 sort_symbol_ptr(NativeSymbol *ptr, int len)
@@ -84,8 +83,8 @@ lookup_symbol(NativeSymbol *ptr, int len, const char *symbol)
 void *
 bh_dlsym(void *handle, const char *symbol)
 {
-  NativeSymbol *ext_native_symbol_defs = get_extended_symbol_ptr();
-  int len = get_extended_symbol_count();
+  int len;
+  NativeSymbol *ext_native_symbol_defs = get_extended_symbol_ptr(&len);
   void *ret;
 
   if (!sort_flag) {
