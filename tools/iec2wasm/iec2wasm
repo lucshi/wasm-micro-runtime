@@ -1,0 +1,107 @@
+#!/usr/bin/python -O
+# vim: set fileencoding=utf-8 :
+
+"""\
+IEC 61131-3 Structured Text to XML compiler 1.4
+Copyleft (c), 2009-2011 X-Pie Software GmbH
+
+"""
+
+import sys
+import fileinput
+from optparse import OptionParser
+from pyPEG import parse
+from iec_grammar import *
+import re
+r = re.compile
+
+def printInfo(option, opt_str, value, parser):
+    sys.stdout.write(__doc__)
+    sys.exit(0)
+
+optParser = OptionParser()
+optParser.add_option("-E", "--EPAS-pragmas", action="store_true", dest="epaspragmas",
+        help="read and process EPAS pragmas at top of file", default=False)
+optParser.add_option("-o", "--output", dest="outputFile", metavar="FILE",
+        help="place output in file FILE")
+optParser.add_option("-p", "--parse-only", action="store_true", dest="parseonly",
+        help="parse only, then output pyAST as text to stdout", default=False)
+optParser.add_option("--version", action="callback", callback=printInfo, help="show version info")
+(options, args) = optParser.parse_args()
+
+comment = r(r"(\(\*.*?\*\))|({.*?})", re.S)
+def iec(): return iec_source,
+
+pragma = r(r"\s*\(\*\s*\@(\w+)\s*:=\s*'(.*?)'\s*\*\)\s*")
+empty = r(r"^\s*$")
+
+def consumeEPAS(files):
+    global comment
+    for l in files:
+        m = empty.match(l)
+        if m:
+            continue
+        m = pragma.match(l)
+        if m:
+            if m.group(1) == "NESTEDCOMMENTS" and m.group(2) == "Yes":
+                comment = [ r("{.*?}"), ( "(*", -1, [ r(r"(?m)[^*()]+"), comment, r(r"(?m)(\((?!\*))+"), r(r"(?m)\)+"), r(r"(?m)(\*(?!\)))+") ], "*)" ) ]
+        else:
+            break
+
+# global hash maps
+datatype_map = {}
+function_map = {}
+program_map = {}
+function_block_map = {}
+configuration_map = {}
+var_maps = {}
+global_maps = {}
+resource_maps = {}
+task_maps = {}
+
+def parseHashmaps(ast_iec_source):
+  global datatype_map
+  global function_map
+  global function_block_map
+  global program_map
+  global configuration_map
+
+  ast_len = len(ast_iec_source)
+  for i in range(0, ast_len):
+    if ast_iec_source[i][0]=="data_type_declaration":
+      ast_node = ast_iec_source[i][1]
+      type_name = ast_node[0][1][0][1][0]
+      datatype_map[type_name] = ast_node;
+    elif ast_iec_source[i][0]=="function_declaration":
+      print "function_declaration"
+    elif ast_iec_source[i][0]=="function_block_declaration":
+      print "function_block_declaration"
+    elif ast_iec_source[i][0]=="program_declaration":
+      print "program_declaration"
+    elif ast_iec_source[i][0]=="configuration_declaration":
+      print "configuration_declaration"
+    else:
+      print "Unknown declaration type: " + ast_iec_source[i][0]
+
+try:
+    files = fileinput.input(args)
+    if options.epaspragmas:
+        consumeEPAS(files)
+        files.close()
+        files = fileinput.input(args)
+
+    ast = parse(iec, files, True, comment)
+    ast_iec_source = ast[0][1]
+    parseHashmaps(ast_iec_source)
+
+    for (key) in datatype_map:
+      print "\ndatatype " + key + ":"
+      print datatype_map[key]
+
+except KeyboardInterrupt:
+    sys.stderr.write("\n")
+    sys.exit(1)
+except:
+    me, parm, tb = sys.exc_info()
+    sys.stderr.write(str(parm) + "\n")
+    sys.exit(5)
