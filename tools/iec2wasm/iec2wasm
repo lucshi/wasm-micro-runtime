@@ -12,6 +12,9 @@ import fileinput
 from optparse import OptionParser
 from pyPEG import parse
 from iec_grammar import *
+from global_vars import *
+from datatype import *
+from pou import *
 import re
 r = re.compile
 
@@ -49,15 +52,6 @@ def consumeEPAS(files):
             break
 
 # global hash maps
-datatype_map = {}
-function_map = {}
-program_map = {}
-function_block_map = {}
-configuration_map = {}
-var_maps = {}
-global_maps = {}
-resource_maps = {}
-task_maps = {}
 
 def parseHashmaps(ast_iec_source):
   global datatype_map
