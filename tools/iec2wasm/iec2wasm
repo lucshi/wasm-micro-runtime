@@ -59,6 +59,7 @@ def parseHashmaps(ast_iec_source):
   global function_block_map
   global program_map
   global configuration_map
+  global var_map
 
   ast_len = len(ast_iec_source)
   for i in range(0, ast_len):
@@ -68,14 +69,43 @@ def parseHashmaps(ast_iec_source):
       datatype_map[type_name] = ast_node;
     elif ast_iec_source[i][0]=="function_declaration":
       print "function_declaration"
-    elif ast_iec_source[i][0]=="function_block_declaration":
-      print "function_block_declaration"
-    elif ast_iec_source[i][0]=="program_declaration":
-      print "program_declaration"
-    elif ast_iec_source[i][0]=="configuration_declaration":
-      print "configuration_declaration"
-    else:
-      print "Unknown declaration type: " + ast_iec_source[i][0]
+      ast_node = ast_iec_source[i][1]
+      function_name = ast_node[0][1][0]
+      function_map[function_name] = ast_node
+
+      var_map_var_input = {}
+      var_map_var_inout = {}
+      var_map_var_output = {}
+      var_map_var = {}
+      var_map_var_temp = {}
+      var_map_var_external = {}
+
+      func_var_map = { "var_input" : var_map_var_input,
+                       "var_inout" : var_map_var_inout,
+                       "var_output" : var_map_var_output,
+                       "var" : var_map_var,
+                       "var_temp" : var_map_var_temp,
+                       "var_external" : var_map_var_external
+                     }
+
+      var_map[function_name] = func_var_map
+
+      for i in range(0, len(ast_node)):
+        if ast_node[i][0] == "input_declarations":
+          for j in range(0, len(ast_node[i][1])):
+            var_name = ast_node[i][1][j][1][0][1][0]
+            var_ast_node = ast_node[i][1][j][1][1]
+            var_map_var_input[var_name] = var_ast_node
+        elif ast_node[i][0] == "inout_declarations":
+          for j in range(0, len(ast_node[i][1])):
+            var_name = ast_node[i][1][j][1][0][1][0]
+            var_ast_node = ast_node[i][1][j][1][1]
+            var_map_var_inout[var_name] = var_ast_node
+        elif ast_node[i][0] == "output_declarations":
+          for j in range(0, len(ast_node[i][1])):
+            var_name = ast_node[i][1][j][1][0][1][0]
+            var_ast_node = ast_node[i][1][j][1][1]
+            var_map_var_output[var_name] = var_ast_node
 
 try:
     files = fileinput.input(args)
@@ -88,9 +118,6 @@ try:
     ast_iec_source = ast[0][1]
     parseHashmaps(ast_iec_source)
 
-    for (key) in datatype_map:
-      print "\ndatatype " + key + ":"
-      print datatype_map[key]
 
 except KeyboardInterrupt:
     sys.stderr.write("\n")
