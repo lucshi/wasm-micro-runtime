@@ -145,6 +145,8 @@ try:
     ast_iec_source = ast[0][1]
     parseHashmaps(ast_iec_source)
 
+    translate()
+
 except KeyboardInterrupt:
     sys.stderr.write("\n")
     sys.exit(1)
