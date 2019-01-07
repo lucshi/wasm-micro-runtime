@@ -1,6 +1,16 @@
 import ctypes
 from ctypes import *
 from global_vars import *
+from operand import *
+from trans_const import *
+from trans_variable import *
+from trans_if import *
+from trans_for import *
+from trans_func_call import *
+from trans_arithmetic import *
+from trans_logical import *
+from trans_comparison import *
+from trans_conversion import *
 
 # return the POU type, e.g. "function", "function block", "program"
 def getPOUType(pou_name):
@@ -275,22 +285,6 @@ def BinaryenLiteralInt32(x):
   literal.u.i32 = c_int(x)
   return literal
 
-basic_types = { "type_bool" "type_int", "type_dint", "type_real", "type_lreal" }
-wasm_type_map = {}
-
-const_exprs = ["integer_literal", "real_literal"]
-arithmetic_operators = ["adding", "subtracting", "multiply_with", "divide_by", "modulo"]
-logical_operators = ["logical_and", "logical_or", "logical_xor", "logical_not"]
-comparison_operators = ["equals", "equals_not", "greater_than", "greater_or_equal",
-                        "less_than", "less_or_equal"]
-
-operator_priorities = { "logical_or" : 1, "logical_xor" : 2, "logical_and" : 3,
-                        "equals_not" : 4, "equals" : 5,
-                        "greater_than" : 6, "greater_or_equal" : 6,
-                        "less_than" :    6, "less_or_equal"    : 6,
-                        "subtracting" : 7, "adding" : 8, "modulo" : 9,
-                        "divide_by" : 10, "multiply_with" : 11, "logical_not" : 12 }
-
 def isBasicType(type_name):
   global basic_types
   return type_name in basic_types
@@ -306,49 +300,6 @@ def initWasmtypeMap():
 
 def basictype2Wasmtype(type_name):
   return wasm_types_map[type_name];
-
-
-class Operand:
-  def __init__(self, bny_ref, iec_type, bny_type):
-    self.bny_ref = bny_ref
-    self.iec_type = iec_type
-    self.bny_type = bny_type
-
-# Const, return Operand
-def translateConst(module, pou_name, ast_node_const):
-  if (ast_node_const[0] == "integer_literal"):
-    bny_literal = lib_bny.BinaryenLiteralInt32(c_int(int(ast_node_const[1][0])))
-    return Operand(lib_bny.BinaryenConst(module, bny_literal), "type_int", "i32")
-  elif (ast_node_const[0] == "real_literal"):
-    bny_literal = lib_bny.BinaryenLiteralFloat32(c_float(float(ast_node_const[1][0])))
-    return Operand(lib_bny.BinaryenConst(module, bny_literal), "type_real", "f32")
-  else:
-    print "TODO: unknown const type: " + ast_node_const[0]
-
-# Get variable, return Operand
-def translateGetVariable(module, pou_name, ast_node_var):
-  # TODO, just generate get_local for a test
-  if (ast_node_var[1][0] in ["x", "y", "z"]):
-    i = ["x", "y", "z"].index(ast_node_var[1][0])
-    bny_ref = lib_bny.BinaryenGetLocal(module, c_int(i), lib_bny.BinaryenTypeInt32())
-    return Operand(bny_ref, "type_int", "i32")
-  else:
-    bny_ref = lib_bny.BinaryenGetLocal(module, c_int(20), lib_bny.BinaryenTypeInt32())
-    return Operand(bny_ref, "type_int", "i32")
-
-# Set variable, return bny_ref
-def translateSetVariable(module, pou_name, ast_node_var, operand):
-  # TODO, generate set_local $0 just for a test
-  bny_ref = lib_bny.BinaryenSetLocal(module, c_int(0), operand.bny_ref)
-  return bny_ref
-
-# Get structure field, return Operand
-def translateGetMultiElemVariable(module, pou_name, ast_node_var):
-  return None
-
-# Set structure field, return bny_ref
-def translateSetMultiElemVariable(module, pou_name, ast_node_var, operand):
-  return None
 
 def translateAssignment(module, pou_name, ast_node):
   ast_node_var = ast_node[0]
@@ -473,14 +424,6 @@ def translateExpression(module, pou_name, ast_node):
 def translateAction(module, pou_name, ast_node):
   return None
 
-# translate if statements, return binaryen_ref
-def translateIfThen(module, pou_name, ast_node):
-  return None
-
-# translate for statements, return binaryen_ref
-def translateForLoop(module, pou_name, ast_node):
-  return None
-
 # translate case..of statements, return binaryen_ref
 def translateCaseOf(module, pou_name, ast_node):
   return None
@@ -493,89 +436,9 @@ def translateWhileDo(module, pou_name, ast_node):
 def translateRepeatUntil(module, pou_name, ast_node):
   return None
 
-# translate function call statements, return Operand
-def translateFunctionCall(module, pou_name, ast_node):
-  # TODO: handle function paramenters, and check data types
-  func_name = ast_node[1][0][1][0]
-  bny_ref = lib_bny.BinaryenCall(module, func_name, None, c_int(0),
-                                 lib_bny.BinaryenTypeInt32())
-  return Operand(bny_ref, "type_int", "i32")
-
-# translate data conversion statement, return Operand
-def translateDataConversion(module, pou_name, ast_node):
-  return None
-
-# translate data conversion to dest iec type, return Operand
-def translateConvertTo(module, pou_name, dst_iec_type, operand):
-  return None
-
-# translate arithmetic statement, return Operand
-def translateArithmetic(module, pou_name, operator, operand1, operand2):
-  # TODO: check data type and handle implict data type conversion
-  bny_ref = None
-  bny_op = None
-  if (operator == "adding"):
-    bny_op = lib_bny.BinaryenAddInt32()
-  elif (operator == "subtracting"):
-    bny_op = lib_bny.BinaryenSubInt32()
-  elif (operator == "multiply_with"):
-    bny_op = lib_bny.BinaryenMulInt32()
-  elif (operator == "divide_by"):
-    bny_op = lib_bny.BinaryenDivSInt32()
-  elif (operator == "modulo"):
-    bny_op = lib_bny.BinaryenRemSInt32()
-
-  bny_ref = lib_bny.BinaryenBinary(module, bny_op, operand1.bny_ref, operand2.bny_ref)
-  return Operand(bny_ref, operand1.iec_type, operand1.bny_type)
-
-# translate logical statement, return Operand
-def translateLogical(module, pou_name, operator, operand1, operand2):
-  # TODO: check data type and handle implict data type conversion
-  bny_ref = None
-  bny_op = None
-  if (operator == "logical_and"):
-    bny_op = lib_bny.BinaryenAndInt32()
-  elif (operator == "logical_or"):
-    bny_op = lib_bny.BinaryenOrInt32()
-  elif (operator == "logical_xor"):
-    bny_op = lib_bny.BinaryenXorInt32()
-  elif (operator == "logical_not"):
-    bny_op = lib_bny.BinaryenXorInt32()
-    bny_ref1 = lib_bny.BinaryenConst(module, lib_bny.BinaryenLiteralInt32(c_int(-1)))
-    operand2 = Operand(bny_ref1, "type_int", "i32")
-
-  bny_ref = lib_bny.BinaryenBinary(module, bny_op, operand1.bny_ref, operand2.bny_ref)
-  return Operand(bny_ref, operand1.iec_type, operand2.bny_type)
-
 # translate shift statement, return Operand
 def translateShift(module, pou_name, operator, operand1, operand2):
   return None
-
-
-# translate comparison statement, return Operand
-def translateComparison(module, pou_name, operator, operand1, operand2):
-  # TODO: check data type and handle implict data type conversion
-  bny_ref = None
-  bny_op = None
-  if (operator == "equals"):
-    bny_op = lib_bny.BinaryenEqInt32()
-    bny_ref = lib_bny.BinaryenUnary(module, bny_op, operand1.bny_ref)
-    return Operand(bny_ref, "type_int", "i32")
-  elif (operator == "equals_not"):
-    bny_op = lib_bny.BinaryenNeInt32()
-    bny_ref = lib_bny.BinaryenUnary(module, bny_op, operand1.bny_ref)
-    return Operand(bny_ref, "type_int", "i32")
-  elif (operator == "greater_than"):
-    bny_op = lib_bny.BinaryenGtSInt32()
-  elif (operator == "greater_or_equal"):
-    bny_op = lib_bny.BinaryenGeSInt32()
-  elif (operator == "less_than"):
-    bny_op = lib_bny.BinaryenLtSInt32()
-  elif (operator == "less_or_equal"):
-    bny_op = lib_bny.BinaryenLeSInt32()
-
-  bny_ref = lib_bny.BinaryenBinary(module, bny_op, operand1.bny_ref, operand2.bny_ref)
-  return Operand(bny_ref, "type_int", "i32")
 
 # translate statements, return binaryen_ref
 def translateStatements(module, pou_name, ast_node):
@@ -692,9 +555,6 @@ def translateInit():
   global lib_bny
   global datatype_map
 
-  # Load Binaryen Library
-  ll = ctypes.cdll.LoadLibrary
-  lib_bny = ll("./libbinaryen.so")
   #lib_bny.BinaryenSetAPITracing(c_int(0));
 
   lib_bny.BinaryenLiteralInt32.restype = BinaryenLiteral
