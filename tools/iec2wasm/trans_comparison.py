@@ -2,6 +2,7 @@ import ctypes
 from ctypes import *
 from global_vars import *
 from pou import *
+from operand import *
 
 # translate comparison statement, return Operand
 def translateComparison(module, pou_name, operator, operand1, operand2):

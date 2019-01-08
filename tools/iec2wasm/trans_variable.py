@@ -2,6 +2,7 @@ import ctypes
 from ctypes import *
 from global_vars import *
 from pou import *
+from operand import *
 
 # Get variable, return Operand
 def translateGetVariable(module, pou_name, ast_node_var):

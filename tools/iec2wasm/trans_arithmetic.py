@@ -2,6 +2,7 @@ import ctypes
 from ctypes import *
 from global_vars import *
 from pou import *
+from operand import *
 
 # translate arithmetic statement, return Operand
 def translateArithmetic(module, pou_name, operator, operand1, operand2):

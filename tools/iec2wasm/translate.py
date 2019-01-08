@@ -34,15 +34,6 @@ def isBasicType(type_name):
   global basic_types
   return type_name in basic_types
 
-def initWasmtypeMap():
-  global wasm_type_map
-  global lib_bny
-  wasm_type_map["type_bool"] = lib_bny.BinaryenTypeInt32()
-  wasm_type_map["type_int"] = lib_bny.BinaryenTypeInt32()
-  wasm_type_map["type_dint"] = lib_bny.BinaryenTypeInt32()
-  wasm_type_map["type_real"] = lib_bny.BinaryenTypeFloat32()
-  wasm_type_map["type_lreal"] = lib_bny.BinaryenTypeFloat64()
-
 def basictype2Wasmtype(type_name):
   return wasm_types_map[type_name];
 
@@ -309,9 +300,6 @@ def translateInit():
   lib_bny.BinaryenLiteralVec128.restype = BinaryenLiteral
   lib_bny.BinaryenLiteralFloat32Bits.restype = BinaryenLiteral
   lib_bny.BinaryenLiteralFloat64Bits.restype = BinaryenLiteral
-
-  initWasmtypeMap()
-
 
 def translate():
   global lib_bny

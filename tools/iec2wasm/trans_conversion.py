@@ -2,6 +2,7 @@ import ctypes
 from ctypes import *
 from global_vars import *
 from pou import *
+from operand import *
 
 # translate data conversion statement, return Operand
 def translateDataConversion(module, pou_name, ast_node):
