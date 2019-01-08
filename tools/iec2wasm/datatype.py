@@ -83,7 +83,7 @@ def getStructDatatypeFieldNum(struct_name):
 
 # return the field name of field index
 def getStructDatatypeFieldName(struct_name, field_index):
-  return datatype_map[struct_namename][0][1][field_index + 1][1][0][1][0]
+  return datatype_map[struct_name][0][1][field_index + 1][1][0][1][0]
 
 # return the field type of field index, e.g. "type_real"
 def getStructDatatypeFieldType(struct_name, field_index):
