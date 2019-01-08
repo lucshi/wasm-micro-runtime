@@ -56,26 +56,16 @@ def getEnumDatatypeIntValueOf(enum_name, enum_value):
       return node[j]
 
 # return the type of the directly data type, e.g. "type_int", "type_real"
-def getDirectlyDatatypeType(pou_name, in_out, var_name):
-  return var_map[pou_name][in_out][var_name][1][0][1][0][0]
+def getDirectlyDatatypeType(directly_name):
+  return datatype_map[directly_name][0][1][1][1][0][1][0][0]
 
 # return the initial value of the directly data type
-def getDirectlyDatatypeInitValue(pou_name, in_out, var_name):
-  if (len(var_map[pou_name][in_out][var_name][1]) > 1) and (var_map[pou_name][in_out][var_name][1][1][0] == "expression"):
-    return var_map[pou_name][in_out][var_name][1][1][1][0][1][0]
+def getDirectlyDatatypeInitValue(directly_name):
+  if (len(datatype_map[directly_name][0][1][1][1]) > 1):
+   return datatype_map[directly_name][0][1][1][1][1][1][0][1][0]
   else:
-    if var_map[pou_name][in_out][var_name][1][0][1][0][0] == "type_int":
-      return 0
-    elif var_map[pou_name][in_out][var_name][1][0][1][0][0] == "type_dint":
-      return 0
-    elif var_map[pou_name][in_out][var_name][1][0][1][0][0] == "type_real":
-      return 0.0
-    elif var_map[pou_name][in_out][var_name][1][0][1][0][0] == "type_bool":
-      return FALSE
-    elif var_map[pou_name][in_out][var_name][1][0][1][0][0] == "type_datetime":
-      return "DT#1970-01-01-00:00:00"
-    else:
-      print("unsupported type")
+   directly_type = getDirectlyDatatypeType(directly_name)
+   return basic_types_init_value_map[directly_type]
 
 # return the number of the structure fields
 def getStructDatatypeFieldNum(struct_name):
@@ -85,43 +75,61 @@ def getStructDatatypeFieldNum(struct_name):
 def getStructDatatypeFieldName(struct_name, field_index):
   return datatype_map[struct_name][0][1][field_index + 1][1][0][1][0]
 
+def getStructDatatypeFieldIndex(struct_name, field_name):
+  field_num = getStructDatatypeFieldNum(struct_name)
+  for i in range(0, field_num):
+    if (getStructDatatypeFieldName(struct_name, i) == field_name):
+      return i
+  return -1
+
+def getStructDatatypeFieldTypeInfo(struct_name, field_index):
+  return datatype_map[struct_name][0][1][field_index + 1][1][1][1][0]
+
 # return the field type of field index, e.g. "type_real"
 def getStructDatatypeFieldType(struct_name, field_index):
-  return datatype_map[struct_name][0][1][field_index + 1][1][1][1][0][1][0][0]
+  field_type_info = getStructDatatypeFieldTypeInfo(struct_name, field_index)
+  if (field_type_info[0] != "simple_type_name"):
+    return field_type_info[1][0][0]
+  else:
+   return field_type_info[1][0]
 
 # return the field offset of field index
 def getStructDatatypeFieldOffset(struct_name, field_index):
   offset = 0
   for i in range (0, field_index):
-    field_type = datatype_map[struct_name][0][1][field_index + 1][1][1][1][0][1][0][0]
-    if field_type == "type_int":
-      field_size = 16
+    field_size = 0
+    field_type = getStructDatatypeFieldType(struct_name, i)
+    if field_type in basic_types:
+      field_size = basic_types_size_map[field_type]
+    else:
+      field_type_dec_type = getDatatypeDeclarationType(field_type)
+      if (field_type_dec_type == "enumerated_type_declaration"):
+        field_size = basic_types_size_map["type_int"]
+      elif (field_type_dec_type == "simple_type_declaration"):
+        directly_type = getDirectlyDatatypeType(field_type)
+        field_size = basic_types_size_map[directly_type]
+      elif (field_type_dec_type == "structure_type_declaration"):
+        field_size = getStructDatatypeTotalSize(field_type)
+      else:
+        print "TODO: unknown field declaration type " + field_type_dec_type
     offset = offset + field_size
   return offset
 
 # return the field type of field name
 def getStructDatatypeFieldType_byName(struct_name, field_name):
-  for i in range (0, len(datatype_map[struct_name][0][1]) - 1):
-    if datatype_map[struct_name][0][1][i + 1][1][0][1][0] == field_name:
-      return datatype_map[struct_name][0][1][i + 1][1][1][1][0][1][0][0]
+  field_index = getStructDatatypeFieldIndex(struct_name, field_name)
+  if (field_index >= 0):
+    return getStructDatatypeFieldType(struct_name, field_index);
+  return ""
 
 # return the field offset of field name
 def getStructDatatypeFieldOffset_byName(struct_name, field_name):
-  offset = 0
-  for i in range (0, len(datatype_map[struct_name][0][1]) - 1):
-    if datatype_map[struct_name][0][1][i + 1][1][0][1][0] == field_name:
-      return offset
-    field_type = datatype_map[struct_name][0][1][i + 1][1][1][1][0][1][0][0]
-    if field_type == "type_int":
-      field_size = 16
-    offset = offset + field_size
+  field_index = getStructDatatypeFieldIndex(struct_name, field_name)
+  if (field_index >= 0):
+    return getStructDatatypeFieldOffset(struct_name, field_index);
+  return -1
 
 # return the total size of the structure
 def getStructDatatypeTotalSize(struct_name):
-  total_size = 0
-  for i in range (0, len(datatype_map[struct_name][0][1]) - 1):
-    field_type = datatype_map[struct_name][0][1][i + 1][1][1][1][0][1][0][0]
-    if field_type == "type_int":
-      field_size = 16
-    total_size = total_size + field_size
-  return total_size
+  field_num = getStructDatatypeFieldNum(struct_name);
+  return getStructDatatypeFieldOffset(struct_name, field_num)

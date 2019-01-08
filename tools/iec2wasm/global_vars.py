@@ -17,19 +17,30 @@ lib_bny = ctypes.cdll.LoadLibrary("./libbinaryen.so")
 
 basic_types = { "type_bool", "type_int", "type_dint", "type_real", "type_lreal" }
 
-basic_types_size_map = { "type_bool" : 4,
-                         "type_int" : 4,
-                         "type_dint" : 4,
-                         "type_real" : 4,
-                         "type_lreal" : 8
-                       }
+basic_types_size_map = {
+  "type_bool" : 4,
+  "type_int" : 4,
+  "type_dint" : 4,
+  "type_real" : 4,
+  "type_lreal" : 8
+}
 
-wasm_type_map = { "type_bool" : lib_bny.BinaryenTypeInt32(),
-                  "type_int" : lib_bny.BinaryenTypeInt32(),
-                  "type_dint" : lib_bny.BinaryenTypeInt32(),
-                  "type_real" : lib_bny.BinaryenTypeFloat32(),
-                  "type_lreal" : lib_bny.BinaryenTypeFloat64(),
-                }
+basic_types_init_value_map = {
+  "type_bool" : "0",
+  "type_int" : "0",
+  "type_dint" : "0",
+  "type_real" : "0.0",
+  "type_lreal" : "0.0",
+  "type_datetime" : "DT#1970-01-01-00:00:00"
+}
+
+wasm_type_map = {
+  "type_bool" : lib_bny.BinaryenTypeInt32(),
+  "type_int" : lib_bny.BinaryenTypeInt32(),
+  "type_dint" : lib_bny.BinaryenTypeInt32(),
+  "type_real" : lib_bny.BinaryenTypeFloat32(),
+  "type_lreal" : lib_bny.BinaryenTypeFloat64(),
+}
 
 const_exprs = ["integer_literal", "real_literal"]
 arithmetic_operators = ["adding", "subtracting", "multiply_with", "divide_by", "modulo"]
