@@ -237,11 +237,11 @@ def translateFuncs(module):
       var_class = getPOUVarClass(func_name, var_name)
       var_type = getPOUVarType(func_name, var_name)
       if var_class == "var_input" and isBasicType(var_type):
-        param_types.append(wasm_type_map[var_type])
+        param_types.append(basic_types_bny_type_map[var_type])
       elif (var_class != "var" and var_class != "var_temp"):
         param_types.append(lib_bny.BinaryenTypeInt32())
       else:
-        local_types.append(wasm_type_map[var_type])
+        local_types.append(basic_types_bny_type_map[var_type])
 
     if (func_ret_type != ""):
       param_types.append(lib_bny.BinaryenTypeInt32())
@@ -273,7 +273,7 @@ def translateFuncBlocks(module):
     for var_name in func_var_temps:
       var_class = getPOUVarClass(func_block_name, var_name)
       var_type = getPOUVarType(func_block_name, var_name)
-      local_types.append(wasm_type_map[var_type])
+      local_types.append(basic_types_bny_type_map[var_type])
 
     bny_param_types = (c_int * 1)(lib_bny.BinaryenTypeInt32())
     bny_local_types = (c_int * len(local_types))()

@@ -31,10 +31,17 @@ basic_types_init_value_map = {
   "type_dint" : "0",
   "type_real" : "0.0",
   "type_lreal" : "0.0",
-  "type_datetime" : "DT#1970-01-01-00:00:00"
 }
 
-wasm_type_map = {
+basic_types_wasm_type_map = {
+  "type_bool" : "i32",
+  "type_int" : "i32",
+  "type_dint" : "i32",
+  "type_real" : "f32",
+  "type_lreal" : "f64",
+}
+
+basic_types_bny_type_map = {
   "type_bool" : lib_bny.BinaryenTypeInt32(),
   "type_int" : lib_bny.BinaryenTypeInt32(),
   "type_dint" : lib_bny.BinaryenTypeInt32(),

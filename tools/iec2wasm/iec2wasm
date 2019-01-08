@@ -51,6 +51,14 @@ def consumeEPAS(files):
         else:
             break
 
+def parse_pou_var_map(ast_node, pou_var_map, var_map_tmp):
+  for j in range(0, len(ast_node)):
+    for k in range(0, len(ast_node[j][1]) - 1):
+      var_name = ast_node[j][1][k][1][0]
+      var_ast_node = ast_node[j][1][len(ast_node[j][1]) - 1]
+      var_map_tmp[var_name] = var_ast_node
+      pou_var_map["var name list"].append(var_name)
+
 def gen_pou_var_map(ast_node, pou_name):
   var_map_var_input = {}
   var_map_var_inout = {}
@@ -66,47 +74,26 @@ def gen_pou_var_map(ast_node, pou_name):
                   "var" : var_map_var,
                   "var_temp" : var_map_var_temp,
                   "var_external" : var_map_var_external,
-                  "var_constant" : var_map_var_constant
+                  "var_constant" : var_map_var_constant,
+                  "var name list" : []
                 }
 
   var_map[pou_name] = pou_var_map
 
   for i in range(0, len(ast_node)):
     if ast_node[i][0] == "input_declarations":
-      for j in range(0, len(ast_node[i][1])):
-        for k in range(0, len(ast_node[i][1][j][1]) - 1):
-          var_name = ast_node[i][1][j][1][k][1][0]
-          var_ast_node = ast_node[i][1][j][1][len(ast_node[i][1][j][1]) - 1]
-          var_map_var_input[var_name] = var_ast_node
+      parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_var_input)
     elif ast_node[i][0] == "inout_declarations":
-      for j in range(0, len(ast_node[i][1])):
-        for k in range(0, len(ast_node[i][1][j][1]) - 1):
-          var_name = ast_node[i][1][j][1][k][1][0]
-          var_ast_node = ast_node[i][1][j][1][len(ast_node[i][1][j][1]) - 1]
-          var_map_var_inout[var_name] = var_ast_node
+      parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_var_inout)
     elif ast_node[i][0] == "output_declarations":
-      for j in range(0, len(ast_node[i][1])):
-        for k in range(0, len(ast_node[i][1][j][1]) - 1):
-          var_name = ast_node[i][1][j][1][k][1][0]
-          var_ast_node = ast_node[i][1][j][1][len(ast_node[i][1][j][1]) - 1]
-          var_map_var_output[var_name] = var_ast_node
+      parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_var_output)
     elif ast_node[i][0] == "var_declarations":
-      for j in range(0, len(ast_node[i][1])):
-        for k in range(0, len(ast_node[i][1][j][1]) - 1):
-          var_name = ast_node[i][1][j][1][k][1][0]
-          var_ast_node = ast_node[i][1][j][1][len(ast_node[i][1][j][1]) - 1]
-          var_map_var[var_name] = var_ast_node
+      parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_var)
     elif ast_node[i][0] == "function_var_decls":
       if ast_node[i][1][0][0] == "constant":
-        for j in range(1, len(ast_node[i][1])):
-          var_name = ast_node[i][1][j][1][0][1][0]
-          var_ast_node = ast_node[i][1][j][1][1]
-          var_map_var_constant[var_name] = var_ast_node
+        parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_const)
       elif ast_node[i][1][0][0] == "var_init_decl":
-        for j in range(0, len(ast_node[i][1])):
-          var_name = ast_node[i][1][j][1][0][1][0]
-          var_ast_node = ast_node[i][1][j][1][1]
-          var_map_var[var_name] = var_ast_node
+        parse_pou_var_map(ast_node[i][1], pou_var_map, var_map_var)
 
 # global hash maps
 def parseHashmaps(ast_iec_source):
@@ -150,6 +137,27 @@ def parseHashmaps(ast_iec_source):
     else:
       print "Unknown declaration type: " + ast_iec_source[i][0]
 
+# datatype api test
+def testDataType():
+  #node = getDatatypeDeclarationType("AI_Signal")
+  #node = getEnumDatatypeEnumValues("AI_Signal")
+  #node = getEnumDatatypeIntValues("AI_Signal")
+  # node = getEnumDatatypeInitEnumValue("AI_Signal")
+  #node = getEnumDatatypeInitIntValue("AI_Signal")
+  #node = getEnumDatatypeIntValueOf("AI_Signal", "Differential")
+  #node = getDirectlyDatatypeType("program0", "var_output", "LocalVar0")
+  #node = getDirectlyDatatypeType("function0", "var_input", "LocalVar2")
+  #node = getDirectlyDatatypeInitValue("function0", "var_input", "LocalVar2")
+  #node = getStructDatatypeFieldNum("AI_Board")
+  #node = getStructDatatypeFieldName("AI_Board", 0)
+  #node = getStructDatatypeFieldType("AI_Board", 0)
+  #node = getStructDatatypeFieldOffset("AI_Board", 1)
+  #node = getStructDatatypeFieldType_byName("AI_Board", "MIN")
+  #node = getStructDatatypeFieldOffset_byName("AI_Board", "MAX")
+  #node = getStructDatatypeTotalSize("AI_Board")
+  print(node)
+
+
 try:
     files = fileinput.input(args)
     if options.epaspragmas:
@@ -160,26 +168,8 @@ try:
     ast = parse(iec, files, True, comment)
     ast_iec_source = ast[0][1]
     parseHashmaps(ast_iec_source)
-### datatype api test
-    #node = getDatatypeDeclarationType("AI_Signal")
-    #node = getEnumDatatypeEnumValues("AI_Signal")
-    #node = getEnumDatatypeIntValues("AI_Signal")
-    #node = getEnumDatatypeInitEnumValue("AI_Signal")
-    #node = getEnumDatatypeInitIntValue("AI_Signal")
-    #node = getEnumDatatypeIntValueOf("AI_Signal", "Differential")
-    #node = getDirectlyDatatypeType("program0", "var_output", "LocalVar0")
-    #node = getDirectlyDatatypeType("function0", "var_input", "LocalVar2")
-    #node = getDirectlyDatatypeInitValue("function0", "var_input", "LocalVar2")
-    #node = getStructDatatypeFieldNum("AI_Board")
-    #node = getStructDatatypeFieldName("AI_Board", 0)
-    #node = getStructDatatypeFieldType("AI_Board", 0)
-    #node = getStructDatatypeFieldOffset("AI_Board", 1)
-    #node = getStructDatatypeFieldType_byName("AI_Board", "MIN")
-    #node = getStructDatatypeFieldOffset_byName("AI_Board", "MAX")
-    #node = getStructDatatypeTotalSize("AI_Board")
-    #print(node)
-###
     translate()
+
 except KeyboardInterrupt:
     sys.stderr.write("\n")
     sys.exit(1)
@@ -187,3 +177,4 @@ except:
     me, parm, tb = sys.exc_info()
     sys.stderr.write(str(parm) + "\n")
     sys.exit(5)
+
