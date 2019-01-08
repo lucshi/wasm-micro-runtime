@@ -14,7 +14,7 @@ from pyPEG import parse
 from iec_grammar import *
 from global_vars import *
 from datatype import *
-from pou import *
+from translate import *
 import re
 r = re.compile
 
