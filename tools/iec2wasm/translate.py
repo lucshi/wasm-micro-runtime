@@ -226,6 +226,10 @@ def translateFuncBlock(module, func_block_name):
 def translateFuncs(module):
   global lib_bny
   global function_map
+  type_map = { "i32" : lib_bny.BinaryenTypeInt32(),
+               "i64" : lib_bny.BinaryenTypeInt64(),
+               "f32" : lib_bny.BinaryenTypeFloat32(),
+               "f64" : lib_bny.BinaryenTypeFloat64() }
   for func_name in function_map:
     # Parse function propotype
     func_vars = getPOUVarsAll(func_name)
@@ -234,16 +238,15 @@ def translateFuncs(module):
     param_types = []
     local_types = []
     for var_name in func_vars:
-      var_class = getPOUVarClass(func_name, var_name)
-      var_type = getPOUVarType(func_name, var_name)
-      if var_class == "var_input" and isBasicType(var_type):
-        param_types.append(basic_types_bny_type_map[var_type])
-      elif (var_class != "var" and var_class != "var_temp"):
-        param_types.append(lib_bny.BinaryenTypeInt32())
-      else:
-        local_types.append(basic_types_bny_type_map[var_type])
+      if isFuncParam(func_name, var_name):
+        param_type = getFuncParamType(func_name, var_name);
+        param_types.append(type_map[param_type])
+      elif isFuncLocal(func_name, var_name):
+        # i32 pointer
+        local_types.append(lib_bny.BinaryenTypeInt32())
 
     if (func_ret_type != ""):
+      # i32 pointer
       param_types.append(lib_bny.BinaryenTypeInt32())
 
     # Convert to Binaryen function type
@@ -256,8 +259,11 @@ def translateFuncs(module):
       bny_local_types[i] = local_types[i]
 
     # Add function type and function
-    func_type = lib_bny.BinaryenAddFunctionType(module, None, None,
-        bny_param_types, c_int(len(bny_param_types)))
+    func_type = lib_bny.BinaryenGetFunctionTypeBySignature(module,
+        lib_bny.BinaryenTypeNone(), bny_param_types, c_int(len(bny_param_types)));
+    if (func_type == 0):
+      func_type = lib_bny.BinaryenAddFunctionType(module, None,
+          lib_bny.BinaryenTypeNone(), bny_param_types, c_int(len(bny_param_types)));
     func_body = translateFunc(module, func_name)
     func = lib_bny.BinaryenAddFunction(module, c_char_p(func_name), func_type,
         bny_local_types, len(local_types), func_body)
@@ -268,21 +274,23 @@ def translateFuncBlocks(module):
   global function_block_map
   for func_block_name in function_block_map:
     func_var_temps = getPOUVarTemps(func_block_name)
-
     local_types = []
     for var_name in func_var_temps:
-      var_class = getPOUVarClass(func_block_name, var_name)
-      var_type = getPOUVarType(func_block_name, var_name)
-      local_types.append(basic_types_bny_type_map[var_type])
+      # i32 pointer
+      local_types.append(lib_bny.BinaryenTypeInt32())
 
+    # i32 self pointer
     bny_param_types = (c_int * 1)(lib_bny.BinaryenTypeInt32())
     bny_local_types = (c_int * len(local_types))()
     for i in range (0, len(local_types)):
       bny_local_types[i] = local_types[i]
 
     # Add function type and function
-    func_type = lib_bny.BinaryenAddFunctionType(module, None, None,
-        bny_param_types, c_int(len(bny_param_types)))
+    func_type = lib_bny.BinaryenGetFunctionTypeBySignature(module,
+        lib_bny.BinaryenTypeNone(), bny_param_types, c_int(len(bny_param_types)));
+    if (func_type == 0):
+      func_type = lib_bny.BinaryenAddFunctionType(module, None,
+          lib_bny.BinaryenTypeNone(), bny_param_types, c_int(len(bny_param_types)));
     func_body = translateFuncBlock(module, func_block_name)
     func = lib_bny.BinaryenAddFunction(module, c_char_p(func_block_name), func_type,
         bny_local_types, len(local_types), func_body)

@@ -244,22 +244,20 @@ def getPOUVarInitValue(pou_name, var_name):
   return var_init_node
 
 
-# check whether a variable is converted to function param or local variable
+# check whether a variable is converted to function parameter
 def isFuncParam(func_name, var_name):
   var_class = getPOUVarClass(func_name, var_name);
-  return var_class != "var" and var_class != "var_temp"
+  return var_class in ["var_input", "var_inout", "var_output"]
 
 # return the function param num
 def getFuncParamNum(func_name):
   func_vars = getPOUVarsAll(func_name)
-  func_ret_type = getPOURetType(func_name)
   param_num = 0
-
   for var_name in func_vars:
-    var_class = getPOUVarClass(func_name, var_name)
-    if var_class in ["var_input", "var_output", "var_inout"]:
+    if isFuncParam(func_name, var_name):
       param_num = param_num + 1
 
+  func_ret_type = getPOURetType(func_name)
   if (func_ret_type != ""):
     param_num = param_num + 1
   return param_num
@@ -269,8 +267,7 @@ def getFuncParamIndex(func_name, var_name):
   func_vars = getPOUVarsAll(func_name)
   param_index = 0
   for var_name1 in func_vars:
-    var_class = getPOUVarClass(func_name, var_name1)
-    if var_class in ["var_input", "var_output", "var_inout"]:
+    if isFuncParam(func_name, var_name1):
       if (var_name1 == var_name):
         return param_index
       param_index = param_index + 1
@@ -319,13 +316,17 @@ def isFuncParamAPointer(func_name, var_name):
       else:
         print "TODO: unknown var declaration type " + dec_type
 
+# check whether a variable is converted to function local variable
+def isFuncLocal(func_name, var_name):
+  var_class = getPOUVarClass(func_name, var_name);
+  return var_class in ["var", "var_temp"]
+
 # get the function local variable num
 def getFuncLocalNum(func_name):
   func_vars = getPOUVarsAll(func_name)
   local_num = 0
   for var_name in func_vars:
-    var_class = getPOUVarClass(func_name, var_name)
-    if var_class in ["var", "var_temp"]:
+    if isFuncLocal(func_name, var_name):
       local_num = local_num + 1
   return local_num
 
@@ -334,8 +335,7 @@ def getFuncLocalIndex(func_name, var_name):
   func_vars = getPOUVarsAll(func_name)
   local_index = 0
   for var_name1 in func_vars:
-    var_class = getPOUVarClass(func_name, var_name1)
-    if var_class in ["var", "var_temp"]:
+    if isFuncLocal(func_name, var_name1):
       if var_name1 == var_name:
         return local_index
       local_index = local_index + 1
@@ -344,31 +344,115 @@ def getFuncLocalIndex(func_name, var_name):
 
 # check whether a variable is converted to field or local variable
 def isFuncBlockField(fb_name, var_name):
-  return
+  var_class = getPOUVarClass(fb_name, var_name);
+  return var_class in ["var_input", "var_inout", "var_output", "var"]
 
 # return the Function Block field number
 def getFuncBlockFieldNum(fb_name):
-  return
+  fb_vars = getPOUVarsAll(fb_name)
+  field_num = 0
+  for var_name in fb_vars:
+    if isFuncBlockField(fb_name, var_name):
+      field_num = field_num + 1
+  return field_num
 
 # return the Function Block field index of a variable
 def getFuncBlockFieldIndex(fb_name, var_name):
-  return
+  fb_vars = getPOUVarsAll(fb_name)
+  field_index = 0
+  for var_name1 in fb_vars:
+    if isFuncBlockField(fb_name, var_name1):
+      if (var_name1 == var_name):
+        return field_index
+      field_index = field_index + 1
+
+  return -1
 
 # return the Function Block field offset of a variable
 def getFuncBlockFieldOffset(fb_name, var_name):
-  return
+  fb_vars = getPOUVarsAll(fb_name)
+  field_offset = 0
+  for var_name1 in fb_vars:
+    if isFuncBlockField(fb_name, var_name1):
+      if (var_name1 == var_name):
+        return field_offset
+
+      var_type = getPOUVarType(fb_name, var_name1)
+      if (var_type in basic_types):
+        field_offset += basic_types_size_map[var_type]
+      else:
+        dec_type = getDatatypeDeclarationType(var_type)
+        if (dec_type == "enumerated_type_declaration"):
+          field_offset = field_offset + basic_types_size_map["type_int"]
+        elif (dec_type == "simple_type_declaration"):
+          directly_type = getDirectlyDatatypeType(var_type)
+          if directly_type in basic_types:
+            field_offset = field_offset + basic_types_size_map[directly_type]
+          else:
+            print "Error: unknown directly type " + directly_type
+        elif (dec_type == "structure_type_declaration"):
+          field_offset = field_offset + getStructDatatypeTotalSize(var_type)
+        else:
+          print "Error: unknown declaration type " + dec_type
+
+  return -1
 
 # return the Function Block instance total size
 def getFuncBlockTotalSize(fb_name):
-  return
+  fb_vars = getPOUVarsAll(fb_name)
+  total_size = 0
+  for var_name in fb_vars:
+    if isFuncBlockField(fb_name, var_name):
+      var_type = getPOUVarType(fb_name, var_name)
+      if (var_type in basic_types):
+        total_size += basic_types_size_map[var_type]
+      else:
+        dec_type = getDatatypeDeclarationType(var_type)
+        if (dec_type == "enumerated_type_declaration"):
+          total_size = total_size + basic_types_size_map["type_int"]
+        elif (dec_type == "simple_type_declaration"):
+          directly_type = getDirectlyDatatypeType(var_type)
+          if directly_type in basic_types:
+            total_size = total_size + basic_types_size_map[directly_type]
+          else:
+            print "Error: unknown directly type " + directly_type
+        elif (dec_type == "structure_type_declaration"):
+          total_size = total_size + getStructDatatypeTotalSize(var_type)
+        else:
+          print "Error: unknown declaration type " + dec_type
+
+  return total_size
+
+def isFuncBlockLocal(fb_name, var_name):
+  var_class = getPOUVarClass(fb_name, var_name);
+  return var_class == "var_temp"
 
 # return the local variable number of function block
-def getFuncBlockLocalVarNum(fb_name):
-  return
+def getFuncBlockLocalNum(fb_name):
+  fb_vars = getPOUVarsAll(fb_name)
+  local_num = 0
+  for var_name in fb_vars:
+    if isFuncBlockLocal(fb_name, var_name):
+      local_num = local_num + 1
+  return local_num
 
 # return the local variable index of the var
-def getFuncBlockLocalVarIndex(fb_name, var_name):
-  return
+def getFuncBlockLocalIndex(fb_name, var_name):
+  fb_vars = getPOUVarsAll(fb_name)
+  local_index = 0
+  for var_name1 in fb_vars:
+    if isFuncBlockLocal(fb_name, var_name1):
+      if (var_name1 == var_name):
+        return local_index
+      local_index = local_index + 1
+
+  return -1
+
+def getFuncBlockLocalType(fb_name, var_name):
+  return "i32"
+
+def isFuncBlockLocalAPointer(fb_name, var_name):
+  return True
 
 def dumpFuncVarTranslateInfo(func_name):
   print getPOUType(func_name) + " " + func_name + ":"
@@ -380,6 +464,36 @@ def dumpFuncVarTranslateInfo(func_name):
     if isFuncParam(func_name, var):
       print "  " + var + ": param " + str(getFuncParamIndex(func_name, var)) \
             + ", type: " + getFuncParamType(func_name, var) + is_ptr
-    else:
+    elif isFuncLocal(func_name, var):
       print "  " + var + ": local " + str(getFuncLocalIndex(func_name, var)) \
             + ", type: " + getFuncParamType(func_name, var) + is_ptr
+    else:
+      print "  " + var + ": unhandled yet"
+
+  print ""
+  print "  total param num: " + str(getFuncParamNum(func_name))
+  print "  total local num: " + str(getFuncLocalNum(func_name))
+
+def dumpFuncBlockVarTranslateInfo(fb_name):
+  print getPOUType(fb_name) + " " + fb_name + ":"
+  vars = getPOUVarsAll(fb_name)
+  for var in vars:
+    if isFuncBlockField(fb_name, var):
+      field_index = getFuncBlockFieldIndex(fb_name, var)
+      field_offset = getFuncBlockFieldOffset(fb_name, var)
+      print "  " + var + ": field " + str(field_index) + ", offset: " + str(field_offset)
+    elif isFuncBlockLocal(fb_name, var):
+      local_index = getFuncBlockLocalIndex(fb_name, var)
+      local_type = getFuncBlockLocalType(fb_name, var)
+      is_ptr = ""
+      if isFuncBlockLocalAPointer(fb_name, var):
+        is_ptr = " ptr"
+      print "  " + var + ": local " + str(local_index) + ", type: " + str(local_type) + is_ptr
+    else:
+      print "  " + var + ": unhandled yet"
+
+  print ""
+  print "  total field num: " + str(getFuncBlockFieldNum(fb_name))
+  print "  instance size: " + str(getFuncBlockTotalSize(fb_name))
+  print "  total local num: " + str(getFuncBlockLocalNum(fb_name))
+
