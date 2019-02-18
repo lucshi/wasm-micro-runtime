@@ -461,7 +461,7 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
           if (flags & 1)
             read_leb_uint32(p, p_end, u32);
           module->import_memory_count++;
-          if (module->import_table_count > 1) {
+          if (module->import_memory_count > 1) {
             set_error_buf(error_buf, error_buf_size, "multiple memories");
             return false;
           }
