@@ -319,3 +319,77 @@ fail:
   return false;
 }
 #endif /* WASM_ENABLE_REPL */
+
+static bool
+check_type(uint8 type, const char *p)
+{
+  const char *str = "i32";
+
+  if (strlen(p) < 3)
+    return false;
+
+  switch (type) {
+    case VALUE_TYPE_I32:
+      str = "i32";
+      break;
+    case VALUE_TYPE_I64:
+      str = "i64";
+      break;
+    case VALUE_TYPE_F32:
+      str = "f32";
+      break;
+    case VALUE_TYPE_F64:
+      str = "f64";
+      break;
+  }
+  if (strncmp(p, str, 3))
+    return false;
+
+  return true;
+}
+
+static bool
+check_function_type(const WASMType *type,
+                    const char *signature)
+{
+  uint32 i;
+  const char *p = signature;
+
+  if (!p || *p++ != '(')
+    return false;
+
+  for (i = 0; i < type->param_count; i++) {
+    if (!check_type(type->types[i], p))
+      return false;
+    p += 3;
+  }
+
+  if (*p++ != ')')
+    return false;
+
+  if (type->result_count) {
+    if (!check_type(type->types[type->param_count], p))
+      return false;
+    p += 3;
+  }
+
+  if (*p != '\0')
+    return false;
+
+  return true;
+}
+
+WASMFunctionInstance*
+wasm_runtime_lookup_function(const WASMModuleInstance *module_inst,
+                             const char *name,
+                             const char *signature)
+{
+  uint32 i;
+  for (i = 0; i < module_inst->export_func_count; i++)
+    if (!strcmp(module_inst->export_functions[i].name, name)
+        && check_function_type(
+                module_inst->export_functions[i].function->u.func->func_type,
+                signature))
+      return module_inst->export_functions[i].function;
+  return NULL;
+}

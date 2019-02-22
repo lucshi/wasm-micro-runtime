@@ -41,8 +41,10 @@
 #endif
 
 
+#if !defined(BUILD_SHARED_LIBRARY)
 static int app_argc;
 static char **app_argv;
+#endif
 
 #ifdef __cplusplus
 #include <iostream>
@@ -61,6 +63,7 @@ vmci_set_tl_root(void *tlr)
   vm_tls_put(0, tlr);
 }
 
+#if !defined(BUILD_SHARED_LIBRARY)
 void*
 vmci_get_std_cout()
 {
@@ -70,11 +73,13 @@ vmci_get_std_cout()
   return NULL;
 #endif
 }
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if !defined(BUILD_SHARED_LIBRARY)
 #if !defined(__ZEPHYR__) && !defined(__ALIOS__)
 static int
 print_help()
@@ -120,6 +125,7 @@ app_instance_main(void *arg)
     bh_printf("%s\n", exception);
   return NULL;
 }
+#endif /* end of !defined(BUILD_SHARED_LIBRARY) */
 
 #ifdef WASM_ENABLE_REPL
 /**
@@ -189,6 +195,7 @@ app_instance_func(void *arg)
 #endif /* WASM_ENABLE_REPL */
 
 #if !defined(__ZEPHYR__) && !defined(__ALIOS__)
+#if !defined(BUILD_SHARED_LIBRARY)
 int
 main(int argc, char *argv[])
 {
@@ -318,6 +325,7 @@ fail1:
   (void)func_name;
   return 0;
 }
+#endif /* end of !defined(BUILD_SHARED_LIBRARY) */
 
 #else /* else of !defined(__ZEPHYR__) && !defined(__ALIOS__) */
 

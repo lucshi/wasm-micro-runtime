@@ -41,6 +41,9 @@ typedef struct WASMModuleInstance *wasm_module_inst_t;
 struct WASMVmInstance;
 typedef struct WASMVmInstance *wasm_vm_instance_t;
 
+struct WASMFunctionInstance;
+typedef struct WASMFunctionInstance *wasm_function_inst_t;
+
 /**
  * Load a WASM module from a specified byte buffer.
  *
@@ -183,6 +186,19 @@ wasm_runtime_get_exception();
 bool
 wasm_application_execute_func(int argc, char *argv[]);
 #endif
+
+/**
+ * Lookup a export function in the WASM module instance
+ *
+ * @param module_inst the module instance
+ * @param name the name of the function
+ * @param signature the signature of the function, use "i32"/"i64"/"f32"/"f64"
+ *        to represent the type of i32/i64/f32/f64, e.g. "(i32i64)" "(i32)f32"
+ */
+wasm_function_inst_t
+wasm_runtime_lookup_function(const wasm_module_inst_t module_inst,
+                             const char *name,
+                             const char *signature);
 
 #ifdef __cplusplus
 }
