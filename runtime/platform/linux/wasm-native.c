@@ -195,15 +195,6 @@ nullFunc_X_wrapper(WASMThread *self, uint32 *args)
   wasm_runtime_set_exception(buf);
 }
 
-void*
-vmci_get_std_cout();
-
-static void
-_cout_wrapper(WASMThread *self, uint32 *args)
-{
-  *(uintptr_t*)args = (uintptr_t)vmci_get_std_cout();
-}
-
 static void
 _stdout_wrapper(WASMThread *self, uint32 *args)
 {
@@ -567,7 +558,6 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, _malloc),
   REG_NATIVE_FUNC(env, _calloc),
   REG_NATIVE_FUNC(env, _free),
-  { "env", "g$__ZSt4cout", _cout_wrapper },
   { "env", "g$_stdout", _stdout_wrapper },
   { "env", "g$_stderr", _stderr_wrapper },
 #endif

@@ -7,12 +7,12 @@ enable_language (ASM)
 
 add_definitions (-DNVALGRIND)
 
-set (IWASM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../)
+set (IWASM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/iwasm)
 
 include_directories (${IWASM_ROOT}/runtime/include
                      ${IWASM_ROOT}/runtime/platform/include
                      ${IWASM_ROOT}/runtime/platform/zephyr
-                     ${IWASM_ROOT}/runtime/vmcore)
+                     ${IWASM_ROOT}/runtime/vmcore_wasm)
 
 set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/bh_hashmap.c
                 ${IWASM_ROOT}/runtime/utils/bh_log.c
@@ -27,16 +27,15 @@ set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/bh_hashmap.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/bh_platform_log.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/bh_time.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/bh_thread.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm-native.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-application.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-import.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-interp.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-loader.c
-                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-native_zephyr.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-runtime.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-thread.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/invokeNative_general.c
-                ${IWASM_ROOT}/products/iwasm/main.c
                 ${IWASM_ROOT}/lib/lib-export.c)
 
-target_sources(app PRIVATE src/main.c ${IWASM_SRCS})
+target_sources(app PRIVATE ${IWASM_SRCS} src/main.c)
