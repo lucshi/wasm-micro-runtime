@@ -39,7 +39,7 @@
   (2) copy iwasm products/alios-things directory to AliOS-Things/middleware,
       and rename it as iwasm
 
-    cp -a <iwasm_root_dir>/products/alios-things middleware/
+    cp -a <iwasm_root_dir>/products/alios-things middleware/iwasm
 
   (3) create a link to iwasm root directory and rename it to iwasm
 
@@ -58,9 +58,9 @@
     to
       $(NAME)_COMPONENTS := yloop cli iwasm
 
-  (4) build source code
+  (5) build source code
 
     aos make helloworld@linuxhost
 
-  (5) run source code
+  (6) run source code
     ./out/helloworld@linuxhost/binary/helloworld@linuxhost.elf
