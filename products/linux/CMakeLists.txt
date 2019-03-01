@@ -35,9 +35,7 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections -Wall -
 
 include_directories (.
                      ../../runtime/include
-                     ../../runtime/platform/include
-                     ../../runtime/platform/${PLATFORM}
-                     ../../runtime/vmcore_wasm)
+                     ../../runtime/platform/include)
 
 enable_language (ASM)
 

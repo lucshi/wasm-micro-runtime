@@ -1,5 +1,8 @@
 set (VMCORE_LIB_DIR ${CMAKE_CURRENT_LIST_DIR})
 
+include_directories(${VMCORE_LIB_DIR})
+
+
 if (${BUILD_AS_64BIT_SUPPORT} STREQUAL "YES")
 file (GLOB_RECURSE source_all ${VMCORE_LIB_DIR}/*.c)
 else ()
