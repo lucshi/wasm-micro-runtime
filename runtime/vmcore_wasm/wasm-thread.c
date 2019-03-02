@@ -25,8 +25,8 @@
 
 #include "wasm-thread.h"
 #include "wasm-runtime.h"
-#include "bh_log.h"
-#include "bh_memory.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
 
 
 /**
@@ -65,7 +65,7 @@ wasm_thread_create_ilr(struct WASMModuleInstance *module_inst,
 
   total_size = offsetof(WASMVmInstance, main_tlr.wasm_stack.s.bottom)
                + wasm_stack_size;
-  if (!(ilr = bh_malloc(total_size))) {
+  if (!(ilr = wasm_malloc(total_size))) {
     LOG_ERROR("Initialize VM instance failed: allocate memory failed.\n");
     return NULL;
   }
@@ -79,7 +79,7 @@ wasm_thread_create_ilr(struct WASMModuleInstance *module_inst,
   ilr->cleanup_routine = cleanup_routine;
 
   if (!wasm_thread_tlr_init(&ilr->main_tlr, ilr)) {
-    bh_free(ilr);
+    wasm_free(ilr);
     return NULL;
   }
 
@@ -90,7 +90,7 @@ void
 wasm_thread_destroy_ilr(WASMVmInstance *ilr)
 {
   wasm_thread_tlr_destroy(&ilr->main_tlr);
-  bh_free(ilr);
+  wasm_free(ilr);
 }
 
 WASMThread*
@@ -109,7 +109,7 @@ static void
 unlink_from_thread_list(WASMThread *tlr)
 {
   /* The main thread cannot be unlinked. */
-  bh_assert (tlr->prev);
+  wasm_assert (tlr->prev);
 
   tlr->prev->next = tlr->next;
   if (tlr->next)
@@ -120,7 +120,7 @@ void
 wasm_thread_detach()
 {
   WASMThread *self = wasm_runtime_get_self();
-  vmci_thread_t handle;
+  wsci_thread_t handle;
 
   /* TODO: lock thread list */
 
@@ -135,17 +135,17 @@ wasm_thread_detach()
 
   wasm_thread_tlr_destroy (self);
 
-  bh_free(self);
+  wasm_free(self);
 
   wasm_runtime_set_tlr(NULL);
 
   /* TODO: unlock thread list */
 
-  vmci_thread_detach(handle);
+  wsci_thread_detach(handle);
 }
 
 void
 wasm_thread_wait_for_instance(WASMVmInstance *ilr, int mills)
 {
-  vmci_thread_join(ilr->main_tlr.handle, NULL, mills);
+  wsci_thread_join(ilr->main_tlr.handle, NULL, mills);
 }

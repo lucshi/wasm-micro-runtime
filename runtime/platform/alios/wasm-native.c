@@ -25,9 +25,9 @@
 
 #include "wasm-native.h"
 #include "wasm-runtime.h"
-#include "bh_log.h"
-#include "bh_memory.h"
-#include "bh_platform_log.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
+#include "wasm_platform_log.h"
 
 
 #if 0
@@ -60,7 +60,7 @@ _printf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
   va_list va_args = get_va_list(args + 1);
-  *args = bh_vprintf(fmt, va_args);
+  *args = wasm_vprintf(fmt, va_args);
 }
 
 static void
@@ -91,7 +91,7 @@ _puts_wrapper(WASMThread *self, uint32 *args)
 static void
 _malloc_wrapper(WASMThread *self, uint32 *args)
 {
-  *args = (uint32)bh_malloc(args[0]);
+  *args = (uint32)wasm_malloc(args[0]);
 }
 
 static void
@@ -105,7 +105,7 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
     return;
   }
 
-  if ((ptr = bh_malloc(total_size)))
+  if ((ptr = wasm_malloc(total_size)))
     memset(ptr, 0, total_size);
 
   *args = (uint32)ptr;
@@ -114,7 +114,7 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
 static void
 _free_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_free((void*)args[0]);
+  wasm_free((void*)args[0]);
 }
 
 static void

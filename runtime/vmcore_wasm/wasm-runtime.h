@@ -29,7 +29,7 @@
 #include "wasm.h"
 #include "wasm-import.h"
 #include "wasm-thread.h"
-#include "bh_hashmap.h"
+#include "wasm_hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -156,7 +156,7 @@ typedef struct WASMInterpFrame WASMRuntimeFrame;
 static inline WASMThread*
 wasm_runtime_get_self()
 {
-  return (WASMThread*)vmci_get_tl_root();
+  return (WASMThread*)wsci_get_tl_root();
 }
 
 /**
@@ -167,7 +167,7 @@ wasm_runtime_get_self()
 static inline void
 wasm_runtime_set_tlr(WASMThread *self)
 {
-  vmci_set_tl_root(self);
+  wsci_set_tl_root(self);
 }
 
 /**

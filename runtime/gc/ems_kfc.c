@@ -70,7 +70,7 @@ int gci_check_platform()
 
 /* Return GC_ERROR if any errors occur.*/
 /* Return GC_SUCCESS otherwise.*/
-BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
+WASM_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 {
 	void *base_addr = NULL;
 	hmu_normal_node_t *p = NULL;
@@ -78,7 +78,7 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 	int i = 0;
 	int ret = 0;
 
-	bh_assert(heap);
+	wasm_assert(heap);
 
 	if(heap_max_size < 1024) {
 		LOG_ERROR("[GC_ERROR]heap_init_size(%d) < 1024 ", heap_max_size);
@@ -104,7 +104,7 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 	heap_max_size = (heap_max_size + 7) & ~(unsigned int)7;
 
 	/* alloc memory for this heap*/
-	base_addr = bh_malloc(heap_max_size + GC_HEAD_PADDING);
+	base_addr = wasm_malloc(heap_max_size + GC_HEAD_PADDING);
 	if(!base_addr)
 	{
 		LOG_ERROR("[GC_ERROR]reserve heap with size(%u) failed", heap_max_size);
@@ -118,11 +118,11 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 	}
 #endif
 
-#ifdef BH_FOOTPRINT
+#ifdef WASM_FOOTPRINT
 	printf("\nINIT HEAP 0x%08x %d\n", base_addr, heap_max_size);
 #endif
 
-	bh_assert(((int) base_addr & 7) == 4);
+	wasm_assert(((int) base_addr & 7) == 4);
 
 	/* init all data structures*/
 	heap->max_size = heap_max_size;
@@ -168,9 +168,9 @@ BH_STATIC int init_heap(gc_heap_t *heap, gc_size_t heap_max_size)
 /* 	VALGRIND_MAKE_MEM_NOACCESS (base_addr, heap_max_size); */
 /* #endif */
 
-	bh_assert(root->size <= HMU_FC_NORMAL_MAX_SIZE && HMU_FC_NORMAL_MAX_SIZE < q->size); /*@NOTIFY*/
+	wasm_assert(root->size <= HMU_FC_NORMAL_MAX_SIZE && HMU_FC_NORMAL_MAX_SIZE < q->size); /*@NOTIFY*/
 
-#if BEIHAI_ENABLE_MEMORY_PROFILING != 0
+#if WASM_ENABLE_MEMORY_PROFILING != 0
 	LOG_INFO_APP_DEV("heap is successfully initialized with max_size=%u.", heap_max_size);
 #endif
 	return GC_SUCCESS;
@@ -212,7 +212,7 @@ int gc_destroy(gc_handle_t heap)
 		return GC_ERROR;
 
 #if !defined(__ZEPHYR__) && !defined(__ALIOS__)
-	bh_free ((gc_uint8*)shared_heap.base_addr - GC_HEAD_PADDING);
+	wasm_free ((gc_uint8*)shared_heap.base_addr - GC_HEAD_PADDING);
 #else
     memset (&shared_heap_buf, 0, sizeof(shared_heap_buf));
 #endif
@@ -279,7 +279,7 @@ int gc_destroy_for_instance(gc_handle_t instance_heap)
 #endif
 
 	heap->base_addr = (gc_uint8 *) heap->base_addr - GC_HEAD_PADDING;
-	bh_free(heap->base_addr);
+	wasm_free(heap->base_addr);
 
 	gct_vm_mutex_destroy(&heap->lock);
 
@@ -326,7 +326,7 @@ void gci_verify_heap(gc_heap_t *heap)
 {
 	hmu_t *cur = NULL, *end = NULL;
 
-	bh_assert(heap && gci_is_heap_valid(heap));
+	wasm_assert(heap && gci_is_heap_valid(heap));
 	cur = (hmu_t *)heap->base_addr;
 	end = (hmu_t *)(heap->base_addr + heap->current_size);
 	while(cur < end)
@@ -334,7 +334,7 @@ void gci_verify_heap(gc_heap_t *heap)
 		hmu_verify(cur);
 		cur = (hmu_t *)((gc_uint8*)cur + hmu_get_size(cur));
 	}
-	bh_assert(cur == end);
+	wasm_assert(cur == end);
 }
 #endif
 

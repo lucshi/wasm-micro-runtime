@@ -26,7 +26,7 @@
 #ifndef _WASM_EXPORT_H
 #define _WASM_EXPORT_H
 
-#include "bh_platform.h"
+#include "wasm_platform.h"
 
 #ifdef __cplusplus
 extern "C" {

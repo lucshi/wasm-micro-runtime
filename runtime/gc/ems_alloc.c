@@ -35,12 +35,12 @@ static int hmu_is_in_heap(gc_heap_t* heap, hmu_t* hmu)
 /* Node @p will be removed from the tree and left,right,parent pointers of node @p will be*/
 /*  set to be NULL. Other fields will not be touched.*/
 /* The tree will be re-organized so that the order conditions are still satisified.*/
-BH_STATIC void remove_tree_node(hmu_tree_node_t *p)
+WASM_STATIC void remove_tree_node(hmu_tree_node_t *p)
 {
 	hmu_tree_node_t *q = NULL, **slot = NULL;
 
-	bh_assert(p);
-	bh_assert(p->parent); /* @p can not be the ROOT node*/
+	wasm_assert(p);
+	wasm_assert(p->parent); /* @p can not be the ROOT node*/
 
 	/* get the slot which holds pointer to node p*/
 	if(p == p->parent->right)
@@ -49,7 +49,7 @@ BH_STATIC void remove_tree_node(hmu_tree_node_t *p)
 	}
 	else
 	{
-		bh_assert(p == p->parent->left); /* @p should be a child of its parent*/
+		wasm_assert(p == p->parent->left); /* @p should be a child of its parent*/
 		slot = &p->parent->left;
 	}
 
@@ -97,9 +97,9 @@ BH_STATIC void remove_tree_node(hmu_tree_node_t *p)
 static void unlink_hmu(gc_heap_t *heap, hmu_t *hmu) {
 	gc_size_t size;
 
-	bh_assert(gci_is_heap_valid(heap));
-	bh_assert(hmu && (gc_uint8*)hmu >= heap->base_addr && (gc_uint8*)hmu < heap->base_addr + heap->current_size);
-	bh_assert(hmu_get_ut(hmu) == HMU_FC);
+	wasm_assert(gci_is_heap_valid(heap));
+	wasm_assert(hmu && (gc_uint8*)hmu >= heap->base_addr && (gc_uint8*)hmu < heap->base_addr + heap->current_size);
+	wasm_assert(hmu_get_ut(hmu) == HMU_FC);
 
 	size = hmu_get_size(hmu);
 
@@ -127,7 +127,7 @@ static void unlink_hmu(gc_heap_t *heap, hmu_t *hmu) {
 static void hmu_set_free_size(hmu_t *hmu)
 {
 	gc_size_t size;
-	bh_assert(hmu && hmu_get_ut(hmu) == HMU_FC);
+	wasm_assert(hmu && hmu_get_ut(hmu) == HMU_FC);
 
 	size = hmu_get_size(hmu);
 	*((int*)((char*)hmu + size) - 1 ) = size;
@@ -147,11 +147,11 @@ void gci_add_fc(gc_heap_t *heap, hmu_t *hmu, gc_size_t size)
 	hmu_tree_node_t *root = NULL, *tp = NULL, *node=NULL;
 	int node_idx;
 
-	bh_assert(gci_is_heap_valid(heap));
-	bh_assert(hmu && (gc_uint8*)hmu >= heap->base_addr && (gc_uint8*)hmu < heap->base_addr + heap->current_size);
-	bh_assert(((gc_uint32)hmu_to_obj(hmu) & 7) == 0);
-	bh_assert(size > 0 && ((gc_uint8*)hmu) + size <= heap->base_addr + heap->current_size);
-	bh_assert(!(size & 7));
+	wasm_assert(gci_is_heap_valid(heap));
+	wasm_assert(hmu && (gc_uint8*)hmu >= heap->base_addr && (gc_uint8*)hmu < heap->base_addr + heap->current_size);
+	wasm_assert(((gc_uint32)hmu_to_obj(hmu) & 7) == 0);
+	wasm_assert(size > 0 && ((gc_uint8*)hmu) + size <= heap->base_addr + heap->current_size);
+	wasm_assert(!(size & 7));
 
 	hmu_set_ut(hmu, HMU_FC);
 	hmu_set_size(hmu, size);
@@ -175,7 +175,7 @@ void gci_add_fc(gc_heap_t *heap, hmu_t *hmu, gc_size_t size)
 	/* find proper node to link this new node to*/
 	root =  &heap->kfc_tree_root;
 	tp = root;
-	bh_assert(tp->size < size);
+	wasm_assert(tp->size < size);
 	while(1)
 	{
 		if(tp->size < size)
@@ -212,15 +212,15 @@ void gci_add_fc(gc_heap_t *heap, hmu_t *hmu, gc_size_t size)
 
 /* A proper HMU will be returned. This HMU can include the header and given size. The returned HMU will be aligned to 8 bytes.*/
 /* NULL will be returned if there are no proper HMU.*/
-BH_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
+WASM_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
 {
 	hmu_normal_node_t *node = NULL, *p = NULL;
 	int node_idx = 0, init_node_idx = 0;
 	hmu_tree_node_t *root = NULL, *tp = NULL, *last_tp = NULL;
 	hmu_t *next, *rest;
 
-	bh_assert(gci_is_heap_valid(heap));
-	bh_assert(size > 0 && !(size & 7));
+	wasm_assert(gci_is_heap_valid(heap));
+	wasm_assert(size > 0 && !(size & 7));
 
 	if (size < GC_SMALLEST_SIZE)
 		size = GC_SMALLEST_SIZE;
@@ -239,11 +239,11 @@ BH_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
 
 		/* not found in normal list*/
 		if(node) {
-			bh_assert(node_idx >= init_node_idx);
+			wasm_assert(node_idx >= init_node_idx);
 
 			p = node->next;
 			node->next = p->next;
-			bh_assert(((gc_int32)hmu_to_obj(p) & 7)==0);
+			wasm_assert(((gc_int32)hmu_to_obj(p) & 7)==0);
 
 			if((gc_size_t)node_idx != init_node_idx && ((gc_size_t)node_idx << 3) >= size + GC_SMALLEST_SIZE) {  /* with bigger size*/
 				rest = (hmu_t*)(((char *)p) + size);
@@ -271,7 +271,7 @@ BH_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
 	root = &heap->kfc_tree_root;
 
 	/* find the best node*/
-	bh_assert(root);
+	wasm_assert(root);
 	tp = root->right;
 	while(tp)
 	{
@@ -288,7 +288,7 @@ BH_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
 
 	if(last_tp)
 	{
-		bh_assert(last_tp->size >= size);
+		wasm_assert(last_tp->size >= size);
 
 		/* alloc in last_p*/
 
@@ -331,12 +331,12 @@ BH_STATIC hmu_t *alloc_hmu(gc_heap_t *heap, gc_size_t size)
 
 /* A proper HMU will be returned. This HMU can include the header and given size. The returned HMU will be aligned to 8 bytes.*/
 /* NULL will be returned if there are no proper HMU.*/
-BH_STATIC hmu_t* alloc_hmu_ex(gc_heap_t *heap, gc_size_t size)
+WASM_STATIC hmu_t* alloc_hmu_ex(gc_heap_t *heap, gc_size_t size)
 {
 	hmu_t *ret = NULL;
 
-	bh_assert(gci_is_heap_valid(heap));
-	bh_assert(size > 0 && !(size & 7));
+	wasm_assert(gci_is_heap_valid(heap));
+	wasm_assert(size > 0 && !(size & 7));
 
 	if(&shared_heap == heap)
 		return alloc_hmu(heap, size);
@@ -376,7 +376,7 @@ gc_object_t _gc_alloc_vo_i_heap(void *vheap, gc_size_t size ALLOC_EXTRA_PARAMETE
 
 #ifdef GC_NATIVE_SHARE_HEAP
 	if (vheap == NULL || vheap == &shared_heap)
-		return bh_malloc (size);
+		return wasm_malloc (size);
 #endif
 
         /* FIXME: remove this after refactor.  */
@@ -405,7 +405,7 @@ gc_object_t _gc_alloc_vo_i_heap(void *vheap, gc_size_t size ALLOC_EXTRA_PARAMETE
         /* VALGRIND_PRINTF ("XXX %x %d\n", ret, size); */
 #endif
 
-#if BEIHAI_ENABLE_MEMORY_PROFILING != 0
+#if WASM_ENABLE_MEMORY_PROFILING != 0
     LOG_PROFILE_HEAP_ALLOC ((unsigned)heap, tot_size);
 #endif
 
@@ -419,7 +419,7 @@ FINISH:
 gc_object_t _gc_alloc_vo_i(gc_size_t size, gc_mm_t mmt ALLOC_EXTRA_PARAMETERS)
 {
   (void)mmt;
-    bh_assert (mmt == MMT_SHARED);
+    wasm_assert (mmt == MMT_SHARED);
     return gc_alloc_vo_i_heap (&shared_heap, size ALLOC_EXTRA_ARGUMENTS);
 }
 
@@ -431,8 +431,8 @@ gc_object_t _gc_alloc_jo_i_heap(void *vheap, gc_size_t size ALLOC_EXTRA_PARAMETE
 	hmu_t *hmu = NULL;
 	gc_size_t tot_size = 0;
 
-	bh_assert(!heap->is_shared_heap);
-	bh_assert(gci_is_heap_valid(heap));
+	wasm_assert(!heap->is_shared_heap);
+	wasm_assert(gci_is_heap_valid(heap));
 
 	/* align size*/
 	tot_size = GC_ALIGN_8(size + HMU_SIZE + OBJ_PREFIX_SIZE + OBJ_SUFFIX_SIZE); /* hmu header, prefix, suffix*/
@@ -460,7 +460,7 @@ gc_object_t _gc_alloc_jo_i_heap(void *vheap, gc_size_t size ALLOC_EXTRA_PARAMETE
         /* VALGRIND_PRINTF ("jjj %x %d\n", ret, size); */
 #endif
 
-#if BEIHAI_ENABLE_MEMORY_PROFILING != 0
+#if WASM_ENABLE_MEMORY_PROFILING != 0
     LOG_PROFILE_HEAP_NEW ((unsigned)heap, tot_size);
 #endif
 
@@ -475,7 +475,7 @@ gc_object_t gc_alloc_jo_i(void* cls,  gc_size_t size, gc_mm_t mmt ALLOC_EXTRA_PA
   (void)cls;
   (void)size;
   (void)mmt;
-    bh_assert (0);
+    wasm_assert (0);
     return NULL;
 }
 
@@ -508,7 +508,7 @@ int gc_free_i_heap(void *vheap, gc_object_t obj ALLOC_EXTRA_PARAMETERS)
 
 #ifdef GC_NATIVE_SHARE_HEAP
     if (vheap == NULL || vheap == &shared_heap) {
-        bh_free (obj);
+        wasm_free (obj);
         return GC_SUCCESS;
     }
 #endif
@@ -531,7 +531,7 @@ int gc_free_i_heap(void *vheap, gc_object_t obj ALLOC_EXTRA_PARAMETERS)
         if(ut == HMU_VO)
         {
             if(hmu_is_vo_freed(hmu)) {
-                bh_assert(0);
+                wasm_assert(0);
                 ret = GC_ERROR;
                 goto out;
             }
@@ -541,7 +541,7 @@ int gc_free_i_heap(void *vheap, gc_object_t obj ALLOC_EXTRA_PARAMETERS)
 #if GC_STAT_DATA != 0
             heap->total_free_size += size;
 #endif
-#if BEIHAI_ENABLE_MEMORY_PROFILING != 0
+#if WASM_ENABLE_MEMORY_PROFILING != 0
             LOG_PROFILE_HEAP_FREE ((unsigned)heap, size);
 #endif
 
@@ -627,7 +627,7 @@ void gci_dump(char* buf, gc_heap_t *heap)
 		else if(ut == HMU_FC)
 			inuse = 'F';
 
-		bh_assert(size > 0);
+		wasm_assert(size > 0);
 
 		buf += sprintf(buf, "#%d %08x %x %x %d %c %d\n", i, (char*) cur - (char*) heap->base_addr, ut, p, mark, inuse, hmu_obj_size(size));
 		
@@ -635,7 +635,7 @@ void gci_dump(char* buf, gc_heap_t *heap)
 		i++;
 	}
 
-	bh_assert(cur == end);
+	wasm_assert(cur == end);
 }
 
 #endif

@@ -26,27 +26,27 @@
 #ifndef _WASM_IMPORT_H
 #define _WASM_IMPORT_H
 
-#include "bh_platform.h"
-#include "bh_thread.h"
+#include "wasm_platform.h"
+#include "wasm_thread.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #ifdef __ZEPHYR__
-typedef korp_thread vmci_thread_data_t;
+typedef korp_thread wsci_thread_data_t;
 #endif
-typedef korp_tid vmci_thread_t;
-typedef korp_mutex vmci_thread_mutex_t;
-typedef thread_start_routine_t vmci_thread_start_routine_t;
+typedef korp_tid wsci_thread_t;
+typedef korp_mutex wsci_thread_mutex_t;
+typedef thread_start_routine_t wsci_thread_start_routine_t;
 
-#define vmci_thread_start_routine_modifier BH_ROUTINE_MODIFIER
+#define wsci_thread_start_routine_modifier WASM_ROUTINE_MODIFIER
 
-#define vmci_reserved_native_stack_size \
-    BH_APPLET_PRESERVED_NATIVE_STACK_SIZE
+#define wsci_reserved_native_stack_size \
+    WASM_APPLET_PRESERVED_NATIVE_STACK_SIZE
 
-#define vmci_reserved_wasm_stack_size \
-    BH_APPLET_PRESERVED_WASM_STACK_SIZE
+#define wsci_reserved_wasm_stack_size \
+    WASM_APPLET_PRESERVED_WASM_STACK_SIZE
 
 /**
  * Initialize the thread system.
@@ -54,13 +54,13 @@ typedef thread_start_routine_t vmci_thread_start_routine_t;
  * @return true if success, false otherwise.
  */
 bool
-vmci_thread_sys_init();
+wsci_thread_sys_init();
 
 /**
  * Destroy the thread system.
  */
 void
-vmci_thread_sys_destroy();
+wsci_thread_sys_destroy();
 
 /**
  * Return a thread local pointer.
@@ -68,7 +68,7 @@ vmci_thread_sys_destroy();
  * @return the thread local pointer
  */
 void*
-vmci_get_tl_root(void);
+wsci_get_tl_root(void);
 
 /**
  * Set the thread local pointer.
@@ -76,48 +76,49 @@ vmci_get_tl_root(void);
  * @param tlr the pointer to be stored in the thread local storage
  */
 void
-vmci_set_tl_root(void *tlr);
+wsci_set_tl_root(void *tlr);
 
 int
-vmci_thread_create_with_prio(vmci_thread_t *thread,
-                             vmci_thread_start_routine_t start_routine,
+wsci_thread_create_with_prio(wsci_thread_t *thread,
+                             wsci_thread_start_routine_t start_routine,
                              void *arg,
                              unsigned stack_size, int prio);
 
 int
-vmci_thread_create(vmci_thread_t *thread,
-                   vmci_thread_start_routine_t start_routine, void *arg,
+wsci_thread_create(wsci_thread_t *thread,
+                   wsci_thread_start_routine_t start_routine, void *arg,
                    unsigned stack_size);
 
 int
-vmci_thread_cancel(vmci_thread_t thread);
+wsci_thread_cancel(wsci_thread_t thread);
 
 int
-vmci_thread_join(vmci_thread_t thread, void **value_ptr, int mills);
+wsci_thread_join(wsci_thread_t thread, void **value_ptr, int mills);
 
 int
-vmci_thread_detach(vmci_thread_t thread);
+wsci_thread_detach(wsci_thread_t thread);
 
 void
-vmci_thread_exit(void *value_ptr);
+wsci_thread_exit(void *value_ptr);
 
-vmci_thread_t
-vmci_thread_self();
+wsci_thread_t
+wsci_thread_self();
 
-int
-vmci_thread_mutex_init(vmci_thread_mutex_t *mutex, bool is_recursive);
+int wsci_thread_mutex_init (wsci_thread_mutex_t *mutex);
 
-void
-vmci_thread_mutex_lock(vmci_thread_mutex_t *mutex);
-
-int
-vmci_thread_mutex_trylock(vmci_thread_mutex_t *mutex);
+int wsci_thread_mutex_init_recursive (wsci_thread_mutex_t *mutex);
 
 void
-vmci_thread_mutex_unlock(vmci_thread_mutex_t *mutex);
+wsci_thread_mutex_lock(wsci_thread_mutex_t *mutex);
 
 int
-vmci_thread_mutex_destroy(vmci_thread_mutex_t *mutex);
+wsci_thread_mutex_trylock(wsci_thread_mutex_t *mutex);
+
+void
+wsci_thread_mutex_unlock(wsci_thread_mutex_t *mutex);
+
+int
+wsci_thread_mutex_destroy(wsci_thread_mutex_t *mutex);
 
 #ifdef __cplusplus
 }

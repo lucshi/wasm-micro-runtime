@@ -23,11 +23,11 @@
  * Intel in writing.
  */
 
-#ifndef _WASM_THREAD_H
-#define _WASM_THREAD_H
+#ifndef _WASM_RUNTIME_THREAD_H
+#define _WASM_RUNTIME_THREAD_H
 
 #include "wasm-import.h"
-#include "bh_assert.h"
+#include "wasm_assert.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,7 +57,7 @@ typedef struct WASMThread {
   struct WASMVmInstance *vm_instance;
 
   /* The native thread handle of this VM thread. */
-  vmci_thread_t handle;
+  wsci_thread_t handle;
 
   /* The start routine of this thread.  The main thread of instance is
      set to the WASM thread's start routine to denote that it's a WASM
@@ -191,12 +191,12 @@ wasm_thread_detach();
 static inline void
 wasm_thread_set_native_stack_boundary(WASMThread *self)
 {
-  bh_assert(!self->native_stack_boundary);
+  wasm_assert(!self->native_stack_boundary);
 
   /* TODO: this depends on stack growing direction. */
   self->native_stack_boundary =
     (uint8 *)&self - (self->vm_instance->native_stack_size -
-                      vmci_reserved_native_stack_size);
+                      wsci_reserved_native_stack_size);
 }
 
 /**
@@ -213,14 +213,14 @@ wasm_thread_alloc_wasm_frame(WASMThread *tlr, unsigned size)
 {
   uint8 *addr = tlr->wasm_stack.s.top;
 
-  bh_assert(!(size & 3));
+  wasm_assert(!(size & 3));
 
   /* The outs area size cannot be larger than the frame size, so
      multiplying by 2 is enough. */
   if (addr + size * 2 > tlr->wasm_stack.s.top_boundary) {
     /* WASM stack overflow. */
     /* When throwing SOE, the preserved space must be enough. */
-    /*bh_assert(!tlr->throwing_soe);*/
+    /*wasm_assert(!tlr->throwing_soe);*/
     return NULL;
   }
 
@@ -232,7 +232,7 @@ wasm_thread_alloc_wasm_frame(WASMThread *tlr, unsigned size)
 static inline void
 wasm_thread_free_wasm_frame(WASMThread *tlr, void *prev_top)
 {
-  bh_assert((uint8 *)prev_top >= tlr->wasm_stack.s.bottom);
+  wasm_assert((uint8 *)prev_top >= tlr->wasm_stack.s.bottom);
   tlr->wasm_stack.s.top = (uint8 *)prev_top;
 }
 
@@ -287,4 +287,4 @@ wasm_thread_get_cur_frame(WASMThread *tlr)
 }
 #endif
 
-#endif /* end of _WASM_THREAD_H */
+#endif /* end of _WASM_RUNTIME_THREAD_H */

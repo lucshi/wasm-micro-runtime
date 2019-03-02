@@ -53,13 +53,13 @@ extern "C" {
 #	error "Can not define GC_EMBEDDED and GC_STANDALONE at the same time"
 #endif
 
-#ifdef BH_TEST
+#ifdef WASM_TEST
 #	ifndef GC_TEST
 #		define GC_TEST
 #	endif
 #endif
 
-#ifdef BH_DEBUG
+#ifdef WASM_DEBUG
 /*instrument mode ignore GC_DEBUG feature, for instrument testing gc_alloc_vo_i_heap only has func_name parameter*/
 #if !defined INSTRUMENT_TEST_ENABLED && !defined GC_DEBUG
 #		define GC_DEBUG
@@ -91,7 +91,7 @@ typedef void *gc_object_t;
 #define GC_TRUE (1)
 #define GC_FALSE (0)
 
-#define GC_MAX_HEAP_SIZE (256 * BH_KB)
+#define GC_MAX_HEAP_SIZE (256 * WASM_KB)
 
 typedef int64 gc_int64;
 

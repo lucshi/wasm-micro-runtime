@@ -29,8 +29,8 @@
 #include "wasm-loader.h"
 #include "wasm-native.h"
 #include "wasm-interp.h"
-#include "bh_log.h"
-#include "bh_memory.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
 #if defined(__ZEPHYR__) || defined(__ALIOS__)
 #include "ems_gc.h"
 #endif
@@ -40,7 +40,7 @@
 static WASMVmInstance *supervisor_instance;
 
 /* The mutex for protecting the VM instance list. */
-static vmci_thread_mutex_t instance_list_lock;
+static wsci_thread_mutex_t instance_list_lock;
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
@@ -55,7 +55,7 @@ wasm_runtime_create_supervisor_il_env()
   WASMVmInstance *ilr;
 
   /* Ensure this is a new thread that has not been initialized. */
-  bh_assert(!wasm_runtime_get_self());
+  wasm_assert(!wasm_runtime_get_self());
 
   if (!(ilr = wasm_thread_create_ilr(NULL,
                                      0,
@@ -73,6 +73,7 @@ wasm_runtime_create_supervisor_il_env()
 }
 
 #ifdef __ZEPHYR__
+#ifndef CONFIG_AEE
 static int
 _stdout_hook_iwasm(int c)
 {
@@ -82,29 +83,34 @@ _stdout_hook_iwasm(int c)
 
 extern void __stdout_hook_install(int (*hook)(int));
 #endif
+#endif
 
 bool
 wasm_runtime_init()
 {
 #ifdef __ZEPHYR__
+#ifndef CONFIG_AEE
   /* Enable printf() in Zephyr */
   __stdout_hook_install(_stdout_hook_iwasm);
 #endif
+#endif
 
 #if defined(__ZEPHYR__) || defined(__ALIOS__)
+#ifndef CONFIG_AEE
   if (!gc_init(16 * 1024 * 1024))
     return false;
 #endif
+#endif
 
-  if (bh_log_init() != 0)
+  if (wasm_log_init() != 0)
     return false;
 
-  if (vmci_thread_sys_init() != 0)
+  if (wsci_thread_sys_init() != 0)
     return false;
 
   wasm_runtime_set_tlr(NULL);
 
-  if (vmci_thread_mutex_init(&instance_list_lock, false))
+  if (wsci_thread_mutex_init(&instance_list_lock))
     goto fail1;
 
   if (!wasm_runtime_create_supervisor_il_env())
@@ -114,10 +120,10 @@ wasm_runtime_init()
   return true;
 
 fail2:
-  vmci_thread_mutex_destroy(&instance_list_lock);
+  wsci_thread_mutex_destroy(&instance_list_lock);
 
 fail1:
-  vmci_thread_sys_destroy();
+  wsci_thread_sys_destroy();
 
   return false;
 }
@@ -128,10 +134,10 @@ wasm_runtime_destroy()
   wasm_thread_destroy_ilr(supervisor_instance);
   supervisor_instance = NULL;
 
-  vmci_thread_mutex_destroy(&instance_list_lock);
+  wsci_thread_mutex_destroy(&instance_list_lock);
 
   wasm_runtime_set_tlr(NULL);
-  vmci_thread_sys_destroy();
+  wsci_thread_sys_destroy();
 }
 
 void
@@ -185,8 +191,8 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
   if (memories) {
     for (i = 0; i < count; i++)
       if (memories[i])
-        bh_free(memories[i]);
-    bh_free(memories);
+        wasm_free(memories[i]);
+    wasm_free(memories);
   }
 }
 
@@ -214,7 +220,7 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
                       addr_data_size + global_data_size +
                       thunk_argv_data_size + sizeof(uint32) * argc;
 
-  if (!(memory = bh_malloc(total_size))) {
+  if (!(memory = wasm_malloc(total_size))) {
     set_error_buf(error_buf, error_buf_size,
                   "Instantiate memory failed: "
                   "allocate memory failed.");
@@ -274,7 +280,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
     memory_count = 1;
 
   total_size = sizeof(WASMMemoryInstance*) * memory_count;
-  memories = bh_malloc(total_size);
+  memories = wasm_malloc(total_size);
 
   if (!memories) {
     set_error_buf(error_buf, error_buf_size,
@@ -332,7 +338,7 @@ memories_instantiate(const WASMModule *module, uint32 addr_data_size,
     }
   }
 
-  bh_assert(mem_index == memory_count);
+  wasm_assert(mem_index == memory_count);
   return memories;
 }
 
@@ -346,8 +352,8 @@ tables_deinstantiate(WASMTableInstance **tables, uint32 count)
   if (tables) {
     for (i = 0; i < count; i++)
       if (tables[i])
-        bh_free(tables[i]);
-    bh_free(tables);
+        wasm_free(tables[i]);
+    wasm_free(tables);
   }
 }
 
@@ -362,7 +368,7 @@ tables_instantiate(const WASMModule *module,
   uint32 table_index = 0, i, table_count =
     module->import_table_count + module->table_count;
   uint32 total_size = sizeof(WASMTableInstance*) * table_count;
-  WASMTableInstance **tables = bh_malloc(total_size), *table;
+  WASMTableInstance **tables = wasm_malloc(total_size), *table;
 
   if (!tables) {
     set_error_buf(error_buf, error_buf_size,
@@ -378,7 +384,7 @@ tables_instantiate(const WASMModule *module,
   for (i = 0; i < module->import_table_count; i++, import++) {
     total_size = offsetof(WASMTableInstance, base_addr) +
                  sizeof(uint32) * import->u.table.init_size;
-    if (!(table = tables[table_index++] = bh_malloc(total_size))) {
+    if (!(table = tables[table_index++] = wasm_malloc(total_size))) {
       set_error_buf(error_buf, error_buf_size,
                     "Instantiate table failed: "
                     "allocate memory failed.");
@@ -395,7 +401,7 @@ tables_instantiate(const WASMModule *module,
   for (i = 0; i < module->table_count; i++) {
     total_size = offsetof(WASMTableInstance, base_addr) +
                  sizeof(uint32) * module->tables[i].init_size;
-    if (!(table = tables[table_index++] = bh_malloc(total_size))) {
+    if (!(table = tables[table_index++] = wasm_malloc(total_size))) {
       set_error_buf(error_buf, error_buf_size,
                     "Instantiate table failed: "
                     "allocate memory failed.");
@@ -408,7 +414,7 @@ tables_instantiate(const WASMModule *module,
     table->max_size = module->tables[i].max_size;
   }
 
-  bh_assert(table_index == table_count);
+  wasm_assert(table_index == table_count);
   return tables;
 }
 
@@ -423,8 +429,8 @@ functions_deinstantiate(WASMFunctionInstance *functions, uint32 count)
 
     for (i = 0; i < count; i++)
       if (functions[i].local_offsets)
-        bh_free(functions[i].local_offsets);
-    bh_free(functions);
+        wasm_free(functions[i].local_offsets);
+    wasm_free(functions);
   }
 }
 
@@ -439,7 +445,7 @@ function_init_local_offsets(WASMFunctionInstance *func)
   uint8 *local_types = func->u.func->local_types;
   uint32 i, total_size = (param_count + local_count) * sizeof(uint16);
 
-  if (!(func->local_offsets = bh_malloc(total_size)))
+  if (!(func->local_offsets = wasm_malloc(total_size)))
     return false;
 
   for (i = 0; i < param_count; i++) {
@@ -452,7 +458,7 @@ function_init_local_offsets(WASMFunctionInstance *func)
     local_offset += wasm_value_type_cell_num(local_types[i]);
   }
 
-  bh_assert(local_offset == func->param_cell_num + func->local_cell_num);
+  wasm_assert(local_offset == func->param_cell_num + func->local_cell_num);
   return true;
 }
 
@@ -467,7 +473,7 @@ functions_instantiate(const WASMModule *module,
   uint32 i, function_count =
     module->import_function_count + module->function_count;
   uint32 total_size = sizeof(WASMFunctionInstance) * function_count;
-  WASMFunctionInstance *functions = bh_malloc(total_size), *function;
+  WASMFunctionInstance *functions = wasm_malloc(total_size), *function;
 
   if (!functions) {
     set_error_buf(error_buf, error_buf_size,
@@ -515,7 +521,7 @@ functions_instantiate(const WASMModule *module,
     function++;
   }
 
-  bh_assert((uint32)(function - functions) == function_count);
+  wasm_assert((uint32)(function - functions) == function_count);
   return functions;
 }
 
@@ -526,7 +532,7 @@ static void
 globals_deinstantiate(WASMGlobalInstance *globals)
 {
   if (globals)
-    bh_free(globals);
+    wasm_free(globals);
 }
 
 /**
@@ -543,7 +549,7 @@ globals_instantiate(const WASMModule *module,
   uint32 i, global_count =
     module->import_global_count + module->global_count;
   uint32 total_size = sizeof(WASMGlobalInstance) * global_count;
-  WASMGlobalInstance *globals = bh_malloc(total_size), *global;
+  WASMGlobalInstance *globals = wasm_malloc(total_size), *global;
 
   if (!globals) {
     set_error_buf(error_buf, error_buf_size,
@@ -587,7 +593,7 @@ globals_instantiate(const WASMModule *module,
     global++;
   }
 
-  bh_assert((uint32)(global - globals) == global_count);
+  wasm_assert((uint32)(global - globals) == global_count);
   *p_addr_data_size = addr_data_offset;
   *p_global_data_size = global_data_offset;
   return globals;
@@ -637,7 +643,7 @@ globals_instantiate_fix(WASMGlobalInstance *globals,
     InitializerExpression *init_expr = &module->globals[i].init_expr;
 
     if (init_expr->init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL) {
-      bh_assert(init_expr->u.global_index < module->import_global_count);
+      wasm_assert(init_expr->u.global_index < module->import_global_count);
       global->initial_value = globals[init_expr->u.global_index].initial_value;
     }
     else {
@@ -670,7 +676,7 @@ static void
 export_functions_deinstantiate(WASMExportFuncInstance *functions)
 {
   if (functions)
-    bh_free(functions);
+    wasm_free(functions);
 }
 
 /**
@@ -686,7 +692,7 @@ export_functions_instantiate(const WASMModule *module,
   WASMExport *export = module->exports;
   uint32 i, total_size = sizeof(WASMExportFuncInstance) * export_func_count;
 
-  if (!(export_func = export_funcs = bh_malloc(total_size))) {
+  if (!(export_func = export_funcs = wasm_malloc(total_size))) {
     set_error_buf(error_buf, error_buf_size,
                   "Instantiate export function failed: "
                   "allocate memory failed.");
@@ -697,7 +703,7 @@ export_functions_instantiate(const WASMModule *module,
 
   for (i = 0; i < module->export_count; i++, export++)
     if (export->kind == EXPORT_KIND_FUNC) {
-      bh_assert(export->index >= module->import_function_count
+      wasm_assert(export->index >= module->import_function_count
                 && export->index < module->import_function_count
                                    + module->function_count);
       export_func->name = export->name;
@@ -705,7 +711,7 @@ export_functions_instantiate(const WASMModule *module,
       export_func++;
     }
 
-  bh_assert((uint32)(export_func - export_funcs) == export_func_count);
+  wasm_assert((uint32)(export_func - export_funcs) == export_func_count);
   return export_funcs;
 }
 
@@ -741,7 +747,7 @@ wasm_runtime_instantiate(const WASMModule *module,
     return NULL;
 
   /* Allocate the memory */
-  if (!(module_inst = bh_malloc(sizeof(WASMModuleInstance)))) {
+  if (!(module_inst = wasm_malloc(sizeof(WASMModuleInstance)))) {
     set_error_buf(error_buf, error_buf_size,
                   "Instantiate module failed: "
                   "allocate memory failed.");
@@ -814,16 +820,16 @@ wasm_runtime_instantiate(const WASMModule *module,
           break;
         case VALUE_TYPE_I64:
         case VALUE_TYPE_F64:
-          bh_assert(!global->is_addr);
+          wasm_assert(!global->is_addr);
           memcpy(global_data, &global->initial_value.i64, sizeof(int64));
           global_data += sizeof(int64);
           break;
         default:
-          bh_assert(0);
+          wasm_assert(0);
       }
     }
-    bh_assert(addr_data == addr_data_end);
-    bh_assert(global_data == global_data_end);
+    wasm_assert(addr_data == addr_data_end);
+    wasm_assert(global_data == global_data_end);
 
     global = globals + module->import_global_count;
     for (i = 0; i < module->global_count; i++, global++) {
@@ -842,14 +848,14 @@ wasm_runtime_instantiate(const WASMModule *module,
     if (module_inst->default_memory->cur_page_count > 0) {
       for (i = 0; i < module->data_seg_count; i++) {
         data_seg = module->data_segments[i];
-        bh_assert(data_seg->memory_index == 0);
-        bh_assert(data_seg->base_offset.init_expr_type ==
+        wasm_assert(data_seg->memory_index == 0);
+        wasm_assert(data_seg->base_offset.init_expr_type ==
                   INIT_EXPR_TYPE_I32_CONST
                   || data_seg->base_offset.init_expr_type ==
                      INIT_EXPR_TYPE_GET_GLOBAL);
 
         if (data_seg->base_offset.init_expr_type == INIT_EXPR_TYPE_GET_GLOBAL) {
-          bh_assert(data_seg->base_offset.u.global_index < global_count
+          wasm_assert(data_seg->base_offset.u.global_index < global_count
                     && globals[data_seg->base_offset.u.global_index].type ==
                        VALUE_TYPE_I32);
           data_seg->base_offset.u.i32 =
@@ -879,15 +885,15 @@ wasm_runtime_instantiate(const WASMModule *module,
     table_data = (uint32*)module_inst->default_table->base_addr;
     table_seg = module->table_segments;
     for (i = 0; i < module->table_seg_count; i++, table_seg++) {
-      bh_assert(table_seg->table_index == 0);
-      bh_assert(table_seg->base_offset.init_expr_type ==
+      wasm_assert(table_seg->table_index == 0);
+      wasm_assert(table_seg->base_offset.init_expr_type ==
                 INIT_EXPR_TYPE_I32_CONST
                 || table_seg->base_offset.init_expr_type ==
                    INIT_EXPR_TYPE_GET_GLOBAL);
 
       if (table_seg->base_offset.init_expr_type ==
           INIT_EXPR_TYPE_GET_GLOBAL) {
-        bh_assert(table_seg->base_offset.u.global_index < global_count
+        wasm_assert(table_seg->base_offset.u.global_index < global_count
                   && globals[table_seg->base_offset.u.global_index].type ==
                      VALUE_TYPE_I32);
         table_seg->base_offset.u.i32 =
@@ -910,7 +916,7 @@ wasm_runtime_instantiate(const WASMModule *module,
   }
 
   if (module->start_function) {
-    bh_assert(module->start_function >= module->import_function_count);
+    wasm_assert(module->start_function >= module->import_function_count);
     module_inst->start_function =
       &module_inst->functions[module->start_function];
   }
@@ -942,7 +948,7 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   globals_deinstantiate(module_inst->globals);
   export_functions_deinstantiate(module_inst->export_functions);
 
-  bh_free(module_inst);
+  wasm_free(module_inst);
 }
 
 static void*
@@ -959,11 +965,11 @@ app_instance_cleanup(WASMVmInstance *ilr)
   /* Remove vm from the VM instance list before it's actually
      destroyed to avoid operations by other threads after it's
      destroyed.  */
-  vmci_thread_mutex_lock(&instance_list_lock);
+  wsci_thread_mutex_lock(&instance_list_lock);
   ilr->prev->next = ilr->next;
   ilr->next->prev = ilr->prev;
   ilr->next = ilr->prev = NULL;
-  vmci_thread_mutex_unlock(&instance_list_lock);
+  wsci_thread_mutex_unlock(&instance_list_lock);
 
   /* Set the cleanup routine.  */
   cleanup_routine = ilr->cleanup_routine;
@@ -983,13 +989,13 @@ insert_ilr_to_list(WASMVmInstance *ilr)
 {
   WASMVmInstance *p;
 
-  vmci_thread_mutex_lock(&instance_list_lock);
+  wsci_thread_mutex_lock(&instance_list_lock);
 
   /* Check if inserted already */
   p = supervisor_instance->next;
   while (p != supervisor_instance) {
     if (p == ilr) {
-      vmci_thread_mutex_unlock(&instance_list_lock);
+      wsci_thread_mutex_unlock(&instance_list_lock);
       return;
     }
     p = p->next;
@@ -999,7 +1005,7 @@ insert_ilr_to_list(WASMVmInstance *ilr)
   ilr->next = supervisor_instance->next;
   ilr->prev = supervisor_instance;
   supervisor_instance->next = ilr;
-  vmci_thread_mutex_unlock(&instance_list_lock);
+  wsci_thread_mutex_unlock(&instance_list_lock);
 }
 
 /**
@@ -1010,18 +1016,18 @@ insert_ilr_to_list(WASMVmInstance *ilr)
  * @return return value of the start routine (pointed to by
  * start_routine) of the instance or NULL if initialization fails
  */
-static void* vmci_thread_start_routine_modifier
+static void* wsci_thread_start_routine_modifier
 app_instance_start (void *arg)
 {
   void *retval = NULL;
   WASMVmInstance *ilr = (WASMVmInstance*)arg;
   WASMThread *self = &ilr->main_tlr;
-  vmci_thread_t handle = self->handle;
+  wsci_thread_t handle = self->handle;
 
   insert_ilr_to_list(ilr);
 
   /* This must be a new thread that has not been initialized. */
-  bh_assert(!wasm_runtime_get_self());
+  wasm_assert(!wasm_runtime_get_self());
 
   /* Set the native stack boundary for this thread. */
   wasm_thread_set_native_stack_boundary(self);
@@ -1033,7 +1039,7 @@ app_instance_start (void *arg)
   retval = (*ilr->start_routine)(ilr->start_routine_arg);
 
   /* WASM stack must be empty.  */
-  bh_assert(self->wasm_stack.s.top == self->wasm_stack.s.bottom);
+  wasm_assert(self->wasm_stack.s.top == self->wasm_stack.s.bottom);
 
   /* Change to ZOMBIE state before dying (and locks being destroyed)
      so that possible destroying thread won't be blocked.  If the
@@ -1048,11 +1054,11 @@ app_instance_start (void *arg)
   app_instance_cleanup(ilr);
 
   /* Release system resource by ourselves when exit normally. */
-  vmci_thread_detach(handle);
+  wsci_thread_detach(handle);
 
   /* Call exit explicitly because some systems may need to do
      something in the exit function.  */
-  vmci_thread_exit(retval);
+  wsci_thread_exit(retval);
   return NULL;
 }
 
@@ -1065,9 +1071,9 @@ wasm_runtime_create_instance(WASMModuleInstance *module_inst,
 {
   WASMVmInstance *ilr;
   uint32 native_stack_size1 = native_stack_size +
-                              vmci_reserved_native_stack_size;
+                              wsci_reserved_native_stack_size;
   uint32 wasm_stack_size1 = wasm_stack_size +
-                            vmci_reserved_wasm_stack_size;
+                            wsci_reserved_wasm_stack_size;
 
   if (!(ilr = wasm_thread_create_ilr(module_inst,
                                      native_stack_size1, wasm_stack_size1,
@@ -1077,7 +1083,7 @@ wasm_runtime_create_instance(WASMModuleInstance *module_inst,
   /* Set this to make the main thread to be a WASM thread. */
   ilr->main_tlr.start_routine = wasm_thread_start;
 
-  if (vmci_thread_create(&ilr->main_tlr.handle,
+  if (wsci_thread_create(&ilr->main_tlr.handle,
                          &app_instance_start, ilr,
                          ilr->native_stack_size)) {
     wasm_thread_destroy_ilr(ilr);
@@ -1095,7 +1101,7 @@ wasm_runtime_destroy_instance(WASMVmInstance *ilr)
   WASMVmInstance *self_ilr = self->vm_instance;
 
   /* We cannot destroy ourselves. */
-  bh_assert(self_ilr != ilr);
+  wasm_assert(self_ilr != ilr);
 
   (void)self_ilr;
 }
@@ -1119,7 +1125,7 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
                       memory->thunk_argv_data_size +
                       sizeof(uint32) * memory->thunk_argc;
 
-  if (!(new_memory = bh_malloc(total_size))) {
+  if (!(new_memory = wasm_malloc(total_size))) {
     wasm_runtime_set_exception("alloc memory for enlarge memory failed.");
     return false;
   }
@@ -1154,7 +1160,7 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
   memset(new_memory->memory_data + NumBytesPerPage * memory->cur_page_count,
          0, NumBytesPerPage * (total_page_count - memory->cur_page_count));
 
-  bh_free(memory);
+  wasm_free(memory);
   module->memories[0] = module->default_memory = new_memory;
   return true;
 }

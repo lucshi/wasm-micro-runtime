@@ -27,7 +27,7 @@
 #define _WASM_LOADER_H
 
 #include "wasm.h"
-#include "bh_hashmap.h"
+#include "wasm_hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {

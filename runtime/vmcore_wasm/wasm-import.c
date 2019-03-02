@@ -24,122 +24,127 @@
  */
 
 #include "wasm-import.h"
-#include "bh_memory.h"
+#include "wasm_memory.h"
 
 
 bool
-vmci_thread_sys_init()
+wsci_thread_sys_init()
 {
-  return vm_thread_sys_init();
+  return ws_thread_sys_init();
 }
 
 void
-vmci_thread_sys_destroy()
+wsci_thread_sys_destroy()
 {
-  vm_thread_sys_destroy();
+  ws_thread_sys_destroy();
 }
 
 int
-vmci_thread_create_with_prio(vmci_thread_t *thread,
-                             vmci_thread_start_routine_t start_routine, void *arg,
+wsci_thread_create_with_prio(wsci_thread_t *thread,
+                             wsci_thread_start_routine_t start_routine, void *arg,
                              unsigned stack_size, int prio)
 {
 #ifndef __ZEPHYR__
-  return vm_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
+  return ws_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
 #else
   int ret;
-  struct k_thread *kthread = bh_malloc(sizeof(struct k_thread));
+  struct k_thread *kthread = wasm_malloc(sizeof(struct k_thread));
   if (!kthread)
     return BHT_ERROR;
 
   memset(kthread, 0, sizeof(struct k_thread));
-  *thread = (vmci_thread_t)kthread;
-  ret = vm_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
+  *thread = (wsci_thread_t)kthread;
+  ret = ws_thread_create_with_prio(thread, start_routine, arg, stack_size, prio);
   if (ret != BHT_OK)
-    bh_free(kthread);
+    wasm_free(kthread);
   return ret;
 #endif
 }
 
 int
-vmci_thread_create(vmci_thread_t *thread,
-                   vmci_thread_start_routine_t start_routine, void *arg,
+wsci_thread_create(wsci_thread_t *thread,
+                   wsci_thread_start_routine_t start_routine, void *arg,
                    unsigned stack_size)
 {
 #ifndef __ZEPHYR__
-  return vm_thread_create(thread, start_routine, arg, stack_size);
+  return ws_thread_create(thread, start_routine, arg, stack_size);
 #else
   int ret;
-  struct k_thread *kthread = bh_malloc(sizeof(struct k_thread));
+  struct k_thread *kthread = wasm_malloc(sizeof(struct k_thread));
   if (!kthread)
     return BHT_ERROR;
 
   memset(kthread, 0, sizeof(struct k_thread));
-  *thread = (vmci_thread_t)kthread;
-  ret = vm_thread_create(thread, start_routine, arg, stack_size);
+  *thread = (wsci_thread_t)kthread;
+  ret = ws_thread_create(thread, start_routine, arg, stack_size);
   if (ret != BHT_OK)
-    bh_free(kthread);
+    wasm_free(kthread);
   return ret;
 #endif
 }
 
 int
-vmci_thread_cancel(vmci_thread_t thread)
+wsci_thread_cancel(wsci_thread_t thread)
 {
-  return vm_thread_cancel(thread);
+  return ws_thread_cancel(thread);
 }
 
 int
-vmci_thread_join(vmci_thread_t thread, void **value_ptr, int mills)
+wsci_thread_join(wsci_thread_t thread, void **value_ptr, int mills)
 {
-  return vm_thread_join(thread, value_ptr, mills);
+  return ws_thread_join(thread, value_ptr, mills);
 }
 
 int
-vmci_thread_detach(vmci_thread_t thread)
+wsci_thread_detach(wsci_thread_t thread)
 {
-  return vm_thread_detach(thread);
+  return ws_thread_detach(thread);
 }
 
 void
-vmci_thread_exit(void *value_ptr)
+wsci_thread_exit(void *value_ptr)
 {
-  vm_thread_exit(value_ptr);
+  ws_thread_exit(value_ptr);
 }
 
-vmci_thread_t
-vmci_thread_self()
+wsci_thread_t
+wsci_thread_self()
 {
-  return vm_self_thread();
+  return ws_self_thread();
 }
 
 int
-vmci_thread_mutex_init(vmci_thread_mutex_t *mutex, bool is_recursive)
+wsci_thread_mutex_init(wsci_thread_mutex_t *mutex)
 {
-  return vm_mutex_init(mutex, is_recursive);
+  return ws_mutex_init(mutex, false);
+}
+
+int wsci_thread_mutex_init_recursive(wsci_thread_mutex_t *mutex)
+{
+  return ws_mutex_init(mutex, true);
 }
 
 void
-vmci_thread_mutex_lock(vmci_thread_mutex_t *mutex)
+wsci_thread_mutex_lock(wsci_thread_mutex_t *mutex)
 {
-  vm_mutex_lock(mutex);
+  ws_mutex_lock(mutex);
 }
 
 int
-vmci_thread_mutex_trylock(vmci_thread_mutex_t *mutex)
+wsci_thread_mutex_trylock(wsci_thread_mutex_t *mutex)
 {
-  return vm_mutex_trylock(mutex);
+  return ws_mutex_trylock(mutex);
 }
 
 void
-vmci_thread_mutex_unlock(vmci_thread_mutex_t *mutex)
+wsci_thread_mutex_unlock(wsci_thread_mutex_t *mutex)
 {
-  vm_mutex_unlock(mutex);
+  ws_mutex_unlock(mutex);
 }
 
 int
-vmci_thread_mutex_destroy(vmci_thread_mutex_t *mutex)
+wsci_thread_mutex_destroy(wsci_thread_mutex_t *mutex)
 {
-  return vm_mutex_destroy(mutex);
+  return ws_mutex_destroy(mutex);
 }
 

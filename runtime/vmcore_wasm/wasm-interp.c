@@ -28,8 +28,8 @@
 #include "wasm-thread.h"
 #include "wasm-opcode.h"
 #include "wasm-loader.h"
-#include "bh_log.h"
-#include "bh_memory.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
 
 typedef int32 CellType_I32;
 typedef int64 CellType_I64;
@@ -293,7 +293,7 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
   } while (0)
 
 #define PUSH_CSP(type, ret_type, start, else_, end) do {\
-    bh_assert(frame_csp < frame->csp_boundary);         \
+    wasm_assert(frame_csp < frame->csp_boundary);         \
     frame_csp->block_type = type;                       \
     frame_csp->return_type = ret_type;                  \
     frame_csp->start_addr = start;                      \
@@ -312,7 +312,7 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
 #define POP_F64() (frame_sp -= 2, GET_F64_FROM_ADDR(frame_sp))
 
 #define POP_CSP_CHECK_OVERFLOW(n) do {                          \
-    bh_assert(frame_csp - n >= frame->csp_bottom);              \
+    wasm_assert(frame_csp - n >= frame->csp_bottom);              \
   } while (0)
 
 #define POP_CSP() do {                                          \
@@ -530,7 +530,7 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
     param_count = cur_func->u.func->func_type->param_count;         \
     local_count = cur_func->u.func->local_count;                    \
     read_leb_uint32(frame_ip, frame_ip_end, local_idx);             \
-    bh_assert(local_idx < param_count + local_count);               \
+    wasm_assert(local_idx < param_count + local_count);               \
     if (local_idx < param_count)                                    \
       local_type = cur_func->u.func->func_type->types[local_idx];   \
     else                                                            \
@@ -645,7 +645,7 @@ wasm_interp_call_func_native(WASMThread *self,
   if (argc <= 32)
     argv = argv_buf;
   else {
-    if (!(argv = bh_malloc(sizeof(uint32) * argc))) {
+    if (!(argv = wasm_malloc(sizeof(uint32) * argc))) {
       wasm_runtime_set_exception("WASM call native failed: "
                                  "alloc memory for argv failed.");
       return;
@@ -696,7 +696,7 @@ wasm_interp_call_func_native(WASMThread *self,
   }
 
   if (argc > 32)
-    bh_free(argv);
+    wasm_free(argv);
 
   FREE_FRAME(self, frame);
   wasm_thread_set_cur_frame(self, prev_frame);
@@ -858,7 +858,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         if (count <= BR_TABLE_TMP_BUF_LEN)
           depths = depth_buf;
         else {
-          if (!(depths = bh_malloc(sizeof(uint32) * count))) {
+          if (!(depths = wasm_malloc(sizeof(uint32) * count))) {
             wasm_runtime_set_exception("WASM interp failed, "
                                        "alloc block memory for br_table failed.");
             goto got_exception;
@@ -873,7 +873,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           depth = depths[didx];
         }
         if (depths != depth_buf) {
-          bh_free(depths);
+          wasm_free(depths);
           depths = NULL;
         }
         POP_CSP_N(depth);
@@ -888,7 +888,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_CALL):
         read_leb_uint32(frame_ip, frame_ip_end, fidx);
-        bh_assert(fidx < module->function_count);
+        wasm_assert(fidx < module->function_count);
         cur_func = module->functions + fidx;
         goto call_func_from_interp;
 
@@ -1079,7 +1079,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
 
           global = get_global(module, global_idx);
-          bh_assert(global && global_idx < module->global_count);
+          wasm_assert(global && global_idx < module->global_count);
 
           switch (global->type) {
             case VALUE_TYPE_I32:
@@ -1110,7 +1110,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
 
           global = get_global(module, global_idx);
-          bh_assert(global && global_idx < module->global_count);
+          wasm_assert(global && global_idx < module->global_count);
 
           global_addr = get_global_addr(memory, global);
           switch (global->type) {
@@ -2108,7 +2108,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
   got_exception:
     if (depths && depths != depth_buf) {
-      bh_free(depths);
+      wasm_free(depths);
       depths = NULL;
     }
     return;
@@ -2135,7 +2135,7 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
      frame here.  */
   unsigned frame_size = wasm_interp_interp_frame_size(all_cell_num);
 
-  bh_assert(argc == function->param_cell_num);
+  wasm_assert(argc == function->param_cell_num);
 
   /* TODO: check stack overflow. */
 

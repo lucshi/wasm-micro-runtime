@@ -28,8 +28,8 @@
 #include "wasm-native.h"
 #include "wasm-opcode.h"
 #include "wasm-runtime.h"
-#include "bh_log.h"
-#include "bh_memory.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
 
 /* Read a value of given type from the address pointed to by the given
    pointer and increase the pointer to the position just after the
@@ -146,7 +146,7 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module,
                      char* error_buf, uint32 error_buf_size)
 {
   HashMap *set = module->const_str_set;
-  char *c_str = bh_malloc(len + 1), *value;
+  char *c_str = wasm_malloc(len + 1), *value;
 
   if (!c_str) {
     set_error_buf(error_buf, error_buf_size,
@@ -158,16 +158,16 @@ const_str_set_insert(const uint8 *str, int32 len, WASMModule *module,
   memcpy(c_str, str, len);
   c_str[len] = '\0';
 
-  if ((value = bh_hash_map_find(set, c_str))) {
-    bh_free(c_str);
+  if ((value = wasm_hash_map_find(set, c_str))) {
+    wasm_free(c_str);
     return value;
   }
 
-  if (!bh_hash_map_insert(set, c_str, c_str)) {
+  if (!wasm_hash_map_insert(set, c_str, c_str)) {
     set_error_buf(error_buf, error_buf_size,
                   "WASM module load failed: "
                   "insert string to hash map failed.");
-    bh_free(c_str);
+    wasm_free(c_str);
     return NULL;
   }
 
@@ -243,7 +243,7 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
 
   if (type_count) {
     module->type_count = type_count;
-    if (!(module->types = bh_malloc(sizeof(WASMType*) * type_count))) {
+    if (!(module->types = wasm_malloc(sizeof(WASMType*) * type_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load type section failed: "
                     "alloc memory failed.");
@@ -269,11 +269,11 @@ load_type_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module,
       CHECK_BUF(p, p_end, param_count);
       p += param_count;
       read_leb_uint32(p, p_end, result_count);
-      bh_assert(result_count <= 1);
+      wasm_assert(result_count <= 1);
       CHECK_BUF(p, p_end, result_count);
       p = p_org;
 
-      if (!(type = module->types[i] = bh_malloc(offsetof(WASMType, types) +
+      if (!(type = module->types[i] = wasm_malloc(offsetof(WASMType, types) +
               sizeof(uint8) * (param_count + result_count))))
         return false;
 
@@ -311,7 +311,7 @@ load_table_import(const uint8 **p_buf, const uint8 *buf_end, WASMTableImport *ta
   const uint8 *p = *p_buf, *p_end = buf_end;
 
   read_leb_uint8(p, p_end, table->elem_type);
-  bh_assert(table->elem_type == TABLE_ELEM_TYPE_ANY_FUNC);
+  wasm_assert(table->elem_type == TABLE_ELEM_TYPE_ANY_FUNC);
   read_leb_uint32(p, p_end, table->flags);
   read_leb_uint32(p, p_end, table->init_size);
   if (table->flags & 1)
@@ -348,7 +348,7 @@ load_table(const uint8 **p_buf, const uint8 *buf_end, WASMTable *table,
   const uint8 *p = *p_buf, *p_end = buf_end;
 
   read_leb_uint8(p, p_end, table->elem_type);
-  bh_assert(table->elem_type == TABLE_ELEM_TYPE_ANY_FUNC);
+  wasm_assert(table->elem_type == TABLE_ELEM_TYPE_ANY_FUNC);
   read_leb_uint32(p, p_end, table->flags);
   read_leb_uint32(p, p_end, table->init_size);
   if (table->flags & 1)
@@ -387,7 +387,7 @@ resolve_sym(const char *module_name, const char *field_name)
     return NULL;
 
   if (field_name[0] == '_'
-      && (sym = bh_dlsym(NULL, field_name + 1)))
+      && (sym = wasm_dlsym(NULL, field_name + 1)))
     return sym;
 
   return NULL;
@@ -411,7 +411,7 @@ load_import_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 
   if (import_count) {
     module->import_count = import_count;
-    if (!(module->imports = bh_malloc(sizeof(WASMImport) * import_count))) {
+    if (!(module->imports = wasm_malloc(sizeof(WASMImport) * import_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load import section failed: "
                     "alloc memory failed.");
@@ -673,7 +673,7 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
 
   if (func_count) {
     module->function_count = func_count;
-    if (!(module->functions = bh_malloc(sizeof(WASMFunction*) * func_count))) {
+    if (!(module->functions = wasm_malloc(sizeof(WASMFunction*) * func_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load function section failed: "
                     "alloc memory failed.");
@@ -717,7 +717,7 @@ load_function_section(const uint8 **p_buf, const uint8 *buf_end,
       code_size = p_code_end - p_code;
       total_size = offsetof(WASMFunction, code) + code_size + local_count;
 
-      if (!(func = module->functions[i] = bh_malloc(total_size))) {
+      if (!(func = module->functions[i] = wasm_malloc(total_size))) {
         set_error_buf(error_buf, error_buf_size,
                       "Load function section failed: "
                       "alloc memory failed.");
@@ -771,7 +771,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
   read_leb_uint32(p, p_end, section_size);
   *p_buf = p;
   read_leb_uint32(p, p_end, table_count);
-  bh_assert(table_count == 1);
+  wasm_assert(table_count == 1);
 
   if (table_count) {
     if (table_count > 1) {
@@ -779,7 +779,7 @@ load_table_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *module
       return false;
     }
     module->table_count = table_count;
-    if (!(module->tables = bh_malloc(sizeof(WASMTable) * table_count))) {
+    if (!(module->tables = wasm_malloc(sizeof(WASMTable) * table_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load table section failed: "
                     "alloc memory failed.");
@@ -818,7 +818,7 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
   read_leb_uint32(p, p_end, section_size);
   *p_buf = p;
   read_leb_uint32(p, p_end, memory_count);
-  bh_assert(memory_count == 1);
+  wasm_assert(memory_count == 1);
 
   if (memory_count) {
     if (memory_count > 1) {
@@ -826,7 +826,7 @@ load_memory_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
       return false;
     }
     module->memory_count = memory_count;
-    if (!(module->memories = bh_malloc(sizeof(WASMMemory) * memory_count))) {
+    if (!(module->memories = wasm_malloc(sizeof(WASMMemory) * memory_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load memory section failed: "
                     "alloc memory failed.");
@@ -869,7 +869,7 @@ load_global_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 
   if (global_count) {
     module->global_count = global_count;
-    if (!(module->globals = bh_malloc(sizeof(WASMGlobal) * global_count))) {
+    if (!(module->globals = wasm_malloc(sizeof(WASMGlobal) * global_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load global section failed: "
                     "alloc memory failed.");
@@ -920,7 +920,7 @@ load_export_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule *modul
 
   if (export_count) {
     module->export_count = export_count;
-    if (!(module->exports = bh_malloc(sizeof(WASMExport) * export_count))) {
+    if (!(module->exports = wasm_malloc(sizeof(WASMExport) * export_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load export section failed: "
                     "alloc memory failed.");
@@ -1016,7 +1016,7 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
 
   if (table_segment_count) {
     module->table_seg_count = table_segment_count;
-    if (!(module->table_segments = bh_malloc(sizeof(WASMTableSeg) * table_segment_count))) {
+    if (!(module->table_segments = wasm_malloc(sizeof(WASMTableSeg) * table_segment_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load table segment section failed: "
                     "alloc memory failed.");
@@ -1036,7 +1036,7 @@ load_table_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule
 
       read_leb_uint32(p, p_end, function_count);
       table_segment->function_count = function_count;
-      if (!(table_segment->func_indexes = (uint32 *)bh_malloc(sizeof(uint32) * function_count))) {
+      if (!(table_segment->func_indexes = (uint32 *)wasm_malloc(sizeof(uint32) * function_count))) {
         set_error_buf(error_buf, error_buf_size,
                       "Load table segment section failed: "
                       "alloc memory failed.");
@@ -1077,7 +1077,7 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
 
   if (data_seg_count) {
     module->data_seg_count = data_seg_count;
-    if (!(module->data_segments = bh_malloc(sizeof(WASMDataSeg*) * data_seg_count))) {
+    if (!(module->data_segments = wasm_malloc(sizeof(WASMDataSeg*) * data_seg_count))) {
       set_error_buf(error_buf, error_buf_size,
                     "Load data segment section failed, "
                     "alloc memory failed.");
@@ -1094,7 +1094,7 @@ load_data_segment_section(const uint8 **p_buf, const uint8 *buf_end, WASMModule 
 
       read_leb_uint32(p, p_end, data_seg_len);
 
-      if (!(dataseg = module->data_segments[i] = bh_malloc(offsetof(WASMDataSeg, data) + data_seg_len))) {
+      if (!(dataseg = module->data_segments[i] = wasm_malloc(offsetof(WASMDataSeg, data) + data_seg_len))) {
         set_error_buf(error_buf, error_buf_size,
                       "Load data segment section failed: "
                       "alloc memory failed.");
@@ -1316,13 +1316,13 @@ branch_set_key_equal(void *start_addr1, void *start_addr2)
 static void
 branch_set_value_destroy(void *value)
 {
-  bh_free(value);
+  wasm_free(value);
 }
 
 WASMModule*
 wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size)
 {
-  WASMModule *module = bh_malloc(sizeof(WASMModule));
+  WASMModule *module = wasm_malloc(sizeof(WASMModule));
 
   if (!module) {
     set_error_buf(error_buf, error_buf_size,
@@ -1333,14 +1333,14 @@ wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_bu
 
   memset(module, 0, sizeof(WASMModule));
 
-  if (!(module->const_str_set = bh_hash_map_create(32, false,
+  if (!(module->const_str_set = wasm_hash_map_create(32, false,
           (HashFunc)wasm_string_hash,
           (KeyEqualFunc)wasm_string_equal,
           NULL,
-          bh_free)))
+          wasm_free)))
     goto fail;
 
-  if (!(module->branch_set = bh_hash_map_create(64, true,
+  if (!(module->branch_set = wasm_hash_map_create(64, true,
                                                 branch_set_hash,
                                                 branch_set_key_equal,
                                                 NULL,
@@ -1368,57 +1368,57 @@ wasm_loader_unload(WASMModule *module)
   if (module->types) {
     for (i = 0; i < module->type_count; i++) {
       if (module->types[i])
-        bh_free(module->types[i]);
+        wasm_free(module->types[i]);
     }
-    bh_free(module->types);
+    wasm_free(module->types);
   }
 
   if (module->imports)
-    bh_free(module->imports);
+    wasm_free(module->imports);
 
   if (module->functions) {
     for (i = 0; i < module->function_count; i++) {
       if (module->functions[i])
-        bh_free(module->functions[i]);
+        wasm_free(module->functions[i]);
     }
-    bh_free(module->functions);
+    wasm_free(module->functions);
   }
 
   if (module->tables)
-    bh_free(module->tables);
+    wasm_free(module->tables);
 
   if (module->memories)
-    bh_free(module->memories);
+    wasm_free(module->memories);
 
   if (module->globals)
-    bh_free(module->globals);
+    wasm_free(module->globals);
 
   if (module->exports)
-    bh_free(module->exports);
+    wasm_free(module->exports);
 
   if (module->table_segments) {
     for (i = 0; i < module->table_seg_count; i++) {
       if (module->table_segments[i].func_indexes)
-        bh_free(module->table_segments[i].func_indexes);
+        wasm_free(module->table_segments[i].func_indexes);
     }
-    bh_free(module->table_segments);
+    wasm_free(module->table_segments);
   }
 
   if (module->data_segments) {
     for (i = 0; i < module->data_seg_count; i++) {
       if (module->data_segments[i])
-        bh_free(module->data_segments[i]);
+        wasm_free(module->data_segments[i]);
     }
-    bh_free(module->data_segments);
+    wasm_free(module->data_segments);
   }
 
   if (module->const_str_set)
-    bh_hash_map_destroy(module->const_str_set);
+    wasm_hash_map_destroy(module->const_str_set);
 
   if (module->branch_set)
-    bh_hash_map_destroy(module->branch_set);
+    wasm_hash_map_destroy(module->branch_set);
 
-  bh_free(module);
+  wasm_free(module);
 }
 
 typedef struct block_addr {
@@ -1443,7 +1443,7 @@ wasm_loader_find_block_addr(HashMap *branch_set,
   uint8 opcode, u8;
   block_addr *block;
 
-  if ((block = bh_hash_map_find(branch_set, (void*)start_addr))) {
+  if ((block = wasm_hash_map_find(branch_set, (void*)start_addr))) {
     if (block->block_type != block_type)
       return false;
     if (block_type == BLOCK_TYPE_IF) /* if block */
@@ -1478,14 +1478,14 @@ wasm_loader_find_block_addr(HashMap *branch_set,
             *p_else_addr = else_addr;
           *p_end_addr = (uint8*)(p - 1);
 
-          if ((block = bh_malloc(sizeof(block_addr)))) {
+          if ((block = wasm_malloc(sizeof(block_addr)))) {
             block->block_type = block_type;
             if (block_type == BLOCK_TYPE_IF)
               block->else_addr = else_addr;
             block->end_addr = (uint8*)(p - 1);
 
-            if (!bh_hash_map_insert(branch_set, (void*)start_addr, block))
-              bh_free(block);
+            if (!wasm_hash_map_insert(branch_set, (void*)start_addr, block))
+              wasm_free(block);
           }
 
           return true;
@@ -1737,11 +1737,11 @@ static void*
 memory_realloc(void *mem_old, uint32 size_old, uint32 size_new)
 {
   uint8 *mem_new;
-  bh_assert(size_new > size_old);
-  if ((mem_new = bh_malloc(size_new))) {
+  wasm_assert(size_new > size_old);
+  if ((mem_new = wasm_malloc(size_new))) {
     memcpy(mem_new, mem_old, size_old);
     memset(mem_new + size_old, 0, size_new - size_old);
-    bh_free(mem_old);
+    wasm_free(mem_old);
   }
   return mem_new;
 }
@@ -2085,7 +2085,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   param_cell_num = wasm_get_cell_num(param_types, param_count);
   local_cell_num = wasm_get_cell_num(local_types, local_count);
 
-  if (!(frame_lp_ref_bottom = bh_malloc(param_cell_num + local_cell_num))) {
+  if (!(frame_lp_ref_bottom = wasm_malloc(param_cell_num + local_cell_num))) {
     set_error_buf(error_buf, error_buf_size,
                   "WASM loader prepare bytecode failed: alloc memory failed");
     goto fail;
@@ -2093,7 +2093,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   memset(frame_lp_ref_bottom, 0, param_cell_num + local_cell_num);
 
   frame_ref_size = 32;
-  if (!(frame_ref_bottom = frame_ref = bh_malloc(frame_ref_size))) {
+  if (!(frame_ref_bottom = frame_ref = wasm_malloc(frame_ref_size))) {
     set_error_buf(error_buf, error_buf_size,
                   "WASM loader prepare bytecode failed: alloc memory failed");
     goto fail;
@@ -2102,7 +2102,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
   frame_ref_boundary = frame_ref_bottom + frame_ref_size;
 
   frame_csp_size = sizeof(BranchBlock) * 8;
-  if (!(frame_csp_bottom = frame_csp = bh_malloc(frame_csp_size))) {
+  if (!(frame_csp_bottom = frame_csp = wasm_malloc(frame_csp_size))) {
     set_error_buf(error_buf, error_buf_size,
                   "WASM loader prepare bytecode failed: alloc memory failed");
     goto fail;
@@ -2187,10 +2187,10 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           if (csp_num > 0) {
             frame_csp->end_addr = p - 1;
 
-            if (bh_hash_map_find(branch_set, (void*)frame_csp->start_addr))
+            if (wasm_hash_map_find(branch_set, (void*)frame_csp->start_addr))
               break;
 
-            if (!(block = bh_malloc(sizeof(block_addr)))) {
+            if (!(block = wasm_malloc(sizeof(block_addr)))) {
               set_error_buf(error_buf, error_buf_size,
                             "WASM loader prepare bytecode failed: "
                             "alloc memory failed");
@@ -2201,12 +2201,12 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
             block->else_addr = (void*)frame_csp->else_addr;
             block->end_addr = (void*)frame_csp->end_addr;
 
-            if (!bh_hash_map_insert(branch_set, (void*)frame_csp->start_addr,
+            if (!wasm_hash_map_insert(branch_set, (void*)frame_csp->start_addr,
                                     block)) {
               set_error_buf(error_buf, error_buf_size,
                             "WASM loader prepare bytecode failed: "
                             "alloc memory failed");
-              bh_free(block);
+              wasm_free(block);
               goto fail;
             }
           }
@@ -2840,11 +2840,11 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
 
 fail:
   if (frame_lp_ref_bottom)
-    bh_free(frame_lp_ref_bottom);
+    wasm_free(frame_lp_ref_bottom);
   if (frame_ref_bottom)
-    bh_free(frame_ref_bottom);
+    wasm_free(frame_ref_bottom);
   if (frame_csp_bottom)
-    bh_free(frame_csp_bottom);
+    wasm_free(frame_csp_bottom);
 
   (void)u8;
   (void)u32;

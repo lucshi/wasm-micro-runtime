@@ -34,10 +34,10 @@
 #include "wasm-interp.h"
 #include "wasm-runtime.h"
 #include "wasm-thread.h"
-#include "bh_assert.h"
-#include "bh_log.h"
-#include "bh_memory.h"
-#include "bh_platform_log.h"
+#include "wasm_assert.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
+#include "wasm_platform_log.h"
 
 
 bool
@@ -49,7 +49,7 @@ wasm_application_execute_start(void)
   if (!func)
     return true;
 
-  bh_assert(!func->is_import_func && func->param_cell_num == 0
+  wasm_assert(!func->is_import_func && func->param_cell_num == 0
             && func->ret_cell_num == 0);
 
   wasm_runtime_call_wasm(func, 0, NULL);
@@ -188,7 +188,7 @@ wasm_application_execute_func(int argc, char *argv[])
   int32 i, p;
   const char *exception;
 
-  bh_assert(argc >= 1);
+  wasm_assert(argc >= 1);
   func = resolve_function(module_inst, argv[0]);
   if (!func || func->is_import_func)
     return false;
@@ -198,7 +198,7 @@ wasm_application_execute_func(int argc, char *argv[])
     return false;
 
   argc1 = func->param_cell_num;
-  argv1 = bh_malloc(sizeof(uint32) * (argc1 > 2 ? argc1 : 2));
+  argv1 = wasm_malloc(sizeof(uint32) * (argc1 > 2 ? argc1 : 2));
   if (argv1 == NULL) {
     LOG_ERROR("Wasm prepare param failed: malloc failed.\n");
     return false;
@@ -207,7 +207,7 @@ wasm_application_execute_func(int argc, char *argv[])
   /* Parse arguments */
   for (i = 1, p = 0; i < argc; i++) {
     char *endptr;
-    bh_assert(argv[i] != NULL);
+    wasm_assert(argv[i] != NULL);
     if (argv[i][0] == '\0') {
       LOG_ERROR("Wasm prepare param failed: invalid num (%s).\n", argv[i]);
       goto fail;
@@ -275,47 +275,47 @@ wasm_application_execute_func(int argc, char *argv[])
       goto fail;
     }
   }
-  bh_assert(p == (int32)argc1);
+  wasm_assert(p == (int32)argc1);
 
   wasm_runtime_set_exception(NULL);
   wasm_runtime_call_wasm(func, argc1, argv1);
   exception = wasm_runtime_get_exception();
   if (exception) {
-    bh_printf("%s\n", exception);
+    wasm_printf("%s\n", exception);
     goto fail;
   }
   /* print return value */
   switch (type->types[type->param_count]) {
     case VALUE_TYPE_I32:
-      bh_printf("0x%x:i32", argv1[0]);
+      wasm_printf("0x%x:i32", argv1[0]);
       break;
     case VALUE_TYPE_I64:
       {
         union { uint64 val; uint32 parts[2]; } u;
         u.parts[0] = argv1[0];
         u.parts[1] = argv1[1];
-        bh_printf("0x%llx:i64", u.val);
+        wasm_printf("0x%llx:i64", u.val);
         break;
       }
     case VALUE_TYPE_F32:
-      bh_printf("%.7g:f32", *(float32*)argv1);
+      wasm_printf("%.7g:f32", *(float32*)argv1);
       break;
     case VALUE_TYPE_F64:
       {
         union { float64 val; uint32 parts[2]; } u;
         u.parts[0] = argv1[0];
         u.parts[1] = argv1[1];
-        bh_printf("%.7g:f64", u.val);
+        wasm_printf("%.7g:f64", u.val);
         break;
       }
   }
-  bh_printf("\n");
+  wasm_printf("\n");
 
-  bh_free(argv1);
+  wasm_free(argv1);
   return true;
 
 fail:
-  bh_free(argv1);
+  wasm_free(argv1);
   return false;
 }
 #endif /* WASM_ENABLE_REPL */

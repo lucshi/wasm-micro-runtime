@@ -26,10 +26,10 @@
 #ifndef _WASM_H_
 #define _WASM_H_
 
-#include "bh_platform.h"
-#include "bh_hashmap.h"
+#include "wasm_platform.h"
+#include "wasm_hashmap.h"
 #include "wasm-import.h"
-#include "bh_assert.h"
+#include "wasm_assert.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -331,7 +331,7 @@ wasm_value_type_size(uint8 value_type)
     case VALUE_TYPE_F64:
       return sizeof(int64);
     default:
-      bh_assert(0);
+      wasm_assert(0);
   }
   return 0;
 }
@@ -347,7 +347,7 @@ wasm_value_type_cell_num(uint8 value_type)
     case VALUE_TYPE_F64:
       return 2;
     default:
-      bh_assert(0);
+      wasm_assert(0);
   }
   return 0;
 }

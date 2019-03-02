@@ -29,11 +29,11 @@ void hmu_init_prefix_and_suffix(hmu_t *hmu, gc_size_t tot_size, const char *file
 	gc_object_suffix_t *suffix = NULL;
 	gc_uint32 i = 0;
 
-	bh_assert(hmu);
-	bh_assert(hmu_get_ut(hmu) == HMU_JO || hmu_get_ut(hmu) == HMU_VO);
-	bh_assert(tot_size >= OBJ_EXTRA_SIZE);
-	bh_assert(!(tot_size & 7));
-	bh_assert(hmu_get_ut(hmu) != HMU_VO || hmu_get_size(hmu) >= tot_size);
+	wasm_assert(hmu);
+	wasm_assert(hmu_get_ut(hmu) == HMU_JO || hmu_get_ut(hmu) == HMU_VO);
+	wasm_assert(tot_size >= OBJ_EXTRA_SIZE);
+	wasm_assert(!(tot_size & 7));
+	wasm_assert(hmu_get_ut(hmu) != HMU_VO || hmu_get_size(hmu) >= tot_size);
 
 	prefix = (gc_object_prefix_t *)(hmu + 1);
 	suffix = (gc_object_suffix_t *)((gc_uint8*)hmu + tot_size - OBJ_SUFFIX_SIZE);
@@ -59,9 +59,9 @@ void hmu_verify(hmu_t *hmu)
 	gc_size_t size = 0;
 	int is_padding_ok = 1;
 
-	bh_assert(hmu);
+	wasm_assert(hmu);
 	ut = hmu_get_ut(hmu);
-	bh_assert(hmu_is_ut_valid(ut));
+	wasm_assert(hmu_is_ut_valid(ut));
 
 	prefix = (gc_object_prefix_t *)(hmu + 1);
         size = prefix->size;
@@ -91,7 +91,7 @@ void hmu_verify(hmu_t *hmu)
 		{
 			LOG_ERROR("Invalid padding for object created at %s:%d", (prefix->file_name ? prefix->file_name : ""), prefix->line_no);
 		}
-		bh_assert(is_padding_ok);
+		wasm_assert(is_padding_ok);
 	}
 }
 #endif

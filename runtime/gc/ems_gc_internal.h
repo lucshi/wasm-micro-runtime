@@ -22,11 +22,11 @@
 extern "C" {
 #endif
 
-#include "bh_thread.h"
-#include "bh_memory.h"
-#include "bh_assert.h"
+#include "wasm_thread.h"
+#include "wasm_memory.h"
+#include "wasm_assert.h"
 #include "ems_gc.h"
-#include "bh_log.h"
+#include "wasm_log.h"
 
 /*////// Synchronization related APIs*/
 /*
@@ -280,11 +280,11 @@ extern gc_handle_t (*gct_vm_get_gc_handle_for_current_instance)(void);
 extern int (*gct_vm_begin_rootset_enumeration)(void* heap);
 extern int (*gct_vm_gc_finished)(void);
 #else
-#define gct_vm_get_java_object_ref_list		vm_get_java_object_ref_list
-#define gct_vm_mutex_init(m)				vm_mutex_init(m, true)
-#define gct_vm_mutex_destroy				vm_mutex_destroy
-#define gct_vm_mutex_lock					vm_mutex_lock
-#define gct_vm_mutex_unlock					vm_mutex_unlock
+#define gct_vm_get_java_object_ref_list		ws_get_java_object_ref_list
+#define gct_vm_mutex_init(m)				ws_mutex_init(m, true)
+#define gct_vm_mutex_destroy				ws_mutex_destroy
+#define gct_vm_mutex_lock					ws_mutex_lock
+#define gct_vm_mutex_unlock					ws_mutex_unlock
 #define gct_vm_get_gc_handle_for_current_instance	app_manager_get_cur_applet_heap
 #define gct_vm_begin_rootset_enumeration			vm_begin_rootset_enumeration
 #define gct_vm_gc_finished			jeff_runtime_gc_finished

@@ -25,13 +25,13 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "bh_assert.h"
-#include "bh_log.h"
-#include "bh_platform.h"
-#include "bh_platform_log.h"
-#include "bh_thread.h"
+#include "wasm_assert.h"
+#include "wasm_log.h"
+#include "wasm_platform.h"
+#include "wasm_platform_log.h"
+#include "wasm_thread.h"
 #include "wasm-export.h"
-#include "bh_memory.h"
+#include "wasm_memory.h"
 #include "test_wasm.h"
 #include "ems_gc.h"
 
@@ -40,15 +40,15 @@ static int app_argc;
 static char **app_argv;
 
 void*
-vmci_get_tl_root(void)
+wsci_get_tl_root(void)
 {
-  return vm_tls_get(0);
+  return ws_tls_get(0);
 }
 
 void
-vmci_set_tl_root(void *tlr)
+wsci_set_tl_root(void *tlr)
 {
-  vm_tls_put(0, tlr);
+  ws_tls_put(0, tlr);
 }
 
 static void
@@ -67,13 +67,13 @@ app_instance_main(void *arg)
 
   res = wasm_application_execute_start();
   if ((exception = wasm_runtime_get_exception()))
-    bh_printf("%s\n", exception);
+    wasm_printf("%s\n", exception);
   if (!res)
     return NULL;
 
   wasm_application_execute_main(app_argc, app_argv);
   if ((exception = wasm_runtime_get_exception()))
-    bh_printf("%s\n", exception);
+    wasm_printf("%s\n", exception);
   return NULL;
 }
 
@@ -96,7 +96,7 @@ void iwasm_main(void *arg1)
     return;
 
 #if WASM_ENABLE_LOG != 0
-  bh_log_set_verbose_level(log_verbose_level);
+  wasm_log_set_verbose_level(log_verbose_level);
 #endif
 
   /* load WASM byte buffer from byte buffer of include file */
@@ -106,7 +106,7 @@ void iwasm_main(void *arg1)
   /* load WASM module */
   if (!(wasm_module = wasm_runtime_load(wasm_file_buf, wasm_file_size,
                                         error_buf, sizeof(error_buf)))) {
-    bh_printf("%s\n", error_buf);
+    wasm_printf("%s\n", error_buf);
     goto fail1;
   }
 
@@ -115,7 +115,7 @@ void iwasm_main(void *arg1)
                                                     0, NULL,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
-    bh_printf("%s\n", error_buf);
+    wasm_printf("%s\n", error_buf);
     goto fail2;
   }
 

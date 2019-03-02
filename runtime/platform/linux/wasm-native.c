@@ -28,9 +28,9 @@
 
 #include "wasm-native.h"
 #include "wasm-runtime.h"
-#include "bh_log.h"
-#include "bh_memory.h"
-#include "bh_platform_log.h"
+#include "wasm_log.h"
+#include "wasm_memory.h"
+#include "wasm_platform_log.h"
 
 #include <sys/ioctl.h>
 #include <sys/uio.h>
@@ -52,7 +52,7 @@
 static void
 _print_i32_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_printf("%d\n", *args);
+  wasm_printf("%d\n", *args);
 }
 
 static void
@@ -60,13 +60,13 @@ _print_i64_wrapper(WASMThread *self, uint32 *args)
 {
   uint64 value;
   memcpy(&value, args, sizeof(uint64));
-  bh_printf("%lld\n", value);
+  wasm_printf("%lld\n", value);
 }
 
 static void
 _print_f32_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_printf("%f\n", *(float*)args);
+  wasm_printf("%f\n", *(float*)args);
 }
 
 static void
@@ -74,7 +74,7 @@ _print_f64_wrapper(WASMThread *self, uint32 *args)
 {
   float64 value;
   memcpy(&value, args, sizeof(float64));
-  bh_printf("%f\n", value);
+  wasm_printf("%f\n", value);
 }
 #endif
 
@@ -93,7 +93,7 @@ _printf_wrapper(WASMThread *self, uint32 *args)
 {
   const char *fmt = (const char*)args[0];
   va_list va_args = get_va_list(args + 1);
-  *args = bh_vprintf(fmt, va_args);
+  *args = wasm_vprintf(fmt, va_args);
 }
 
 static void
@@ -154,7 +154,7 @@ _sscanf_wrapper(WASMThread *self, uint32 *args)
 static void
 _malloc_wrapper(WASMThread *self, uint32 *args)
 {
-  *(uintptr_t*)args = (uintptr_t)bh_malloc(args[0]);
+  *(uintptr_t*)args = (uintptr_t)wasm_malloc(args[0]);
 }
 
 static void
@@ -168,7 +168,7 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
     return;
   }
 
-  if ((ptr = bh_malloc(total_size)))
+  if ((ptr = wasm_malloc(total_size)))
     memset(ptr, 0, total_size);
   *(uintptr_t*)args = (uintptr_t)ptr;
 }
@@ -182,7 +182,7 @@ _free_wrapper(WASMThread *self, uint32 *args)
   #elif __x86_64__
     memcpy(&ptr, args, 8);
   #endif
-  bh_free(ptr);
+  wasm_free(ptr);
 }
 
 static void
@@ -334,7 +334,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
           }
         }
 #elif __x86_64__
-        vec_begin = vec = (struct iovec*)bh_malloc(sizeof(struct iovec) * iovcnt);
+        vec_begin = vec = (struct iovec*)wasm_malloc(sizeof(struct iovec) * iovcnt);
         memset(vec, 0, sizeof(struct iovec) * iovcnt);
         for (i = 0; i < iovcnt; i++, vec++) {
           vec->iov_base = (void*)(uintptr_t)(*(uint32*)(MEMORY_BASE(self) + args[2] + 8 * i));
@@ -349,7 +349,7 @@ __syscall3_wrapper(WASMThread *self, uint32 *args)
         else
           *args = writev(args[1], vec_begin, args[3]);
 #ifdef __x86_64__
-        bh_free(vec_begin);
+        wasm_free(vec_begin);
 #endif
         break;
       }
@@ -512,13 +512,13 @@ _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
 static void
 print_i32_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_printf("%d\n", *args);
+  wasm_printf("%d\n", *args);
 }
 
 static void
 print_wrapper(WASMThread *self, uint32 *args)
 {
-  bh_printf("%d\n", *args);
+  wasm_printf("%d\n", *args);
 }
 #endif
 

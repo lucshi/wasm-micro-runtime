@@ -14,21 +14,20 @@ include_directories (${IWASM_ROOT}/runtime/include
                      ${IWASM_ROOT}/runtime/platform/zephyr
                      ${IWASM_ROOT}/runtime/vmcore_wasm)
 
-set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/bh_hashmap.c
-                ${IWASM_ROOT}/runtime/utils/bh_log.c
+set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/wasm_hashmap.c
+                ${IWASM_ROOT}/runtime/utils/wasm_log.c
                 ${IWASM_ROOT}/runtime/gc/ems_alloc.c
                 ${IWASM_ROOT}/runtime/gc/ems_kfc.c
                 ${IWASM_ROOT}/runtime/gc/ems_hmu.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_assert.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_definition.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_memory.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_math.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_dlfcn.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_platform_log.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_time.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/bh_thread.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_assert.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_definition.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_memory.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_math.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_dlfcn.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_platform_log.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_time.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_thread.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm-native.c
-                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-application.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-import.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-interp.c
