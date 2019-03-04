@@ -2,6 +2,7 @@
 
 void invokeNative(uint32 argv[], uint32 argc, void (*native_code)())
 {
+  WASMThread *self;
   switch(argc) {
     case 0:
       native_code();
@@ -68,7 +69,8 @@ void invokeNative(uint32 argv[], uint32 argc, void (*native_code)())
       break;
     default:
       /* FIXME: If this happen, add more cases. */
-      wasm_runtime_set_exception("the argument number of native function exceeds maximum");
+      self = wasm_runtime_get_self();
+      wasm_runtime_set_exception(self->module_inst, "the argument number of native function exceeds maximum");
       return;
   }
 }

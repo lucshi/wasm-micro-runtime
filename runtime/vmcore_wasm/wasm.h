@@ -28,7 +28,6 @@
 
 #include "wasm_platform.h"
 #include "wasm_hashmap.h"
-#include "wasm-import.h"
 #include "wasm_assert.h"
 
 #ifdef __cplusplus

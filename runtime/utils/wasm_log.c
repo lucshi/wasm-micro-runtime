@@ -18,7 +18,6 @@
 
 #include "wasm_platform_log.h"
 #include "wasm_thread.h"
-#include "wasm_time.h"
 
 
 /**
@@ -50,9 +49,6 @@ bool
 _wasm_log_begin (int level)
 {
   korp_tid self;
-#if !defined(__ZEPHYR__) && !defined(__ALIOS__)
-  char buf[32];
-#endif
 
   if (level > log_verbose_level) {
     return false;
@@ -61,13 +57,7 @@ _wasm_log_begin (int level)
   /* Try to own the log stream and start the log output.  */
   ws_mutex_lock (&log_stream_lock);
   self = ws_self_thread ();
-#if !defined(__ZEPHYR__) && !defined(__ALIOS__)
-  wasm_time_strftime (buf, 32, "%Y-%m-%d %H:%M:%S",
-                      wasm_time_get_millisecond_from_1970 ());
-  wasm_printf ("[%s - %X]: ", buf, (int)self);
-#else
   wasm_printf ("[%X]: ", (int)self);
-#endif
 
   return true;
 }

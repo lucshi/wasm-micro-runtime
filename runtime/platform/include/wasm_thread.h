@@ -39,21 +39,15 @@ extern "C" {
 #include "wasm_config.h"
 #include "wasm_platform.h"
 
-#define WASM_MAX_THREAD 32
-#define WASM_MAX_TLS_NUM 2
 
 #define BHT_ERROR (-1)
-#define BHT_TIMED_OUT (1)
 #define BHT_OK (0)
-
-#define BHT_NO_WAIT 0x00000000
-#define BHT_WAIT_FOREVER 0xFFFFFFFF
 
 /**
  * Initialization function for vm thread system.
  * Invoked at the beginning of runtime initialization.
  *
- * @return WASM_SUCCESS if succuess.
+ * @return BHT_OK if succuess.
  */
 int ws_thread_sys_init(void);
 
@@ -63,40 +57,6 @@ int ws_thread_sys_init(void);
 void ws_thread_sys_destroy();
 
 /**
- * This function creates a thread
- *
- * @param p_tid  [OUTPUT] the pointer of tid
- * @param start  main routine of the thread
- * @param arg  argument passed to main routine
- * @param stack_size  bytes of stack size
- *
- * @return WASM_SUCCESS if success.
- */
-int ws_thread_create(korp_tid *p_tid, thread_start_routine_t start,
-                     void *arg, unsigned int stack_size);
-
-/**
- * This function creates a thread
- *
- * @param p_tid  [OUTPUT] the pointer of tid
- * @param start  main routine of the thread
- * @param arg  argument passed to main routine
- * @param stack_size  bytes of stack size
- * @param prio the priority
- *
- * @return WASM_SUCCESS if success.
- */
-int ws_thread_create_with_prio(korp_tid *p_tid, thread_start_routine_t start,
-                               void *arg, unsigned int stack_size, int prio);
-
-/**
- * This function never returns.
- *
- * @param code not used
- */
-void ws_thread_exit(void *code);
-
-/**
  * This function gets current thread id
  *
  * @return current thread id
@@ -104,53 +64,21 @@ void ws_thread_exit(void *code);
 korp_tid ws_self_thread(void);
 
 /**
- * This function send a cancellation request to a thread
- *
- * @param thread the thread id
- *
- * @return WASM_SUCCESS if success.
- */
-int ws_thread_cancel(korp_tid thread);
-
-/**
- * This function waits for the thread specified by thread to terminate.
- *
- * @param thread the thread id
- * @value_ptr if not NULL, return the exit status of the target thread
- * @mills maximum waiting timeout in milliseconds
- *
- * @return WASM_SUCCESS if success.
- */
-int ws_thread_join(korp_tid thread, void **value_ptr, int mills);
-
-/**
- * This function marks the thread identified by thread as detached.
- *
- * @param thread the thread id
- *
- * @return WASM_SUCCESS if success.
- */
-int ws_thread_detach(korp_tid thread);
-
-/**
  * This function saves a pointer in thread local storage.
  * One thread can only save one pointer.
  *
- * @param idx  tls array index
  * @param ptr  pointer need save as TLS
  *
- * @return WASM_SUCCESS if success
+ * @return BHT_OK if success
  */
-int ws_tls_put(unsigned idx, void *ptr);
+int ws_tls_put(void *ptr);
 
 /**
  * This function gets a pointer saved in TLS.
  *
- * @param idx  tls array index
- *
 * @return the pointer saved in TLS.
  */
-void *ws_tls_get(unsigned idx);
+void *ws_tls_get();
 
 /**
  * This function creates a mutex
@@ -158,7 +86,7 @@ void *ws_tls_get(unsigned idx);
  * @param mutex [OUTPUT] pointer to mutex initialized.
  * @param is_recursive whether the mutex is recursive
  *
- * @return WASM_SUCCESS if success
+ * @return BHT_OK if success
  */
 int ws_mutex_init(korp_mutex *mutex, bool is_recursive);
 
@@ -167,7 +95,7 @@ int ws_mutex_init(korp_mutex *mutex, bool is_recursive);
  *
  * @param mutex  pointer to mutex need destory
  *
- * @return WASM_SUCCESS if success
+ * @return BHT_OK if success
  */
 int ws_mutex_destroy(korp_mutex *mutex);
 
@@ -179,15 +107,6 @@ int ws_mutex_destroy(korp_mutex *mutex);
  * @return Void
  */
 void ws_mutex_lock(korp_mutex *mutex);
-
-/**
- * This function locks the mutex without waiting
- *
- * @param mutex  pointer to mutex need lock
- *
- * @return WASM_SUCCESS if success
- */
-int ws_mutex_trylock(korp_mutex *mutex);
 
 /**
  * This function unlocks the mutex

@@ -25,22 +25,13 @@
 
 #include "wasm-runtime.h"
 #include "wasm-thread.h"
-#include "wasm-import.h"
 #include "wasm-loader.h"
 #include "wasm-native.h"
 #include "wasm-interp.h"
 #include "wasm_log.h"
+#include "wasm_platform_log.h"
 #include "wasm_memory.h"
-#if defined(__ZEPHYR__) || defined(__ALIOS__)
-#include "ems_gc.h"
-#endif
 
-
-/* The supervisor VM instance. */
-static WASMVmInstance *supervisor_instance;
-
-/* The mutex for protecting the VM instance list. */
-static wsci_thread_mutex_t instance_list_lock;
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
@@ -49,128 +40,110 @@ set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
     snprintf(error_buf, error_buf_size, "%s", string);
 }
 
-static bool
-wasm_runtime_create_supervisor_il_env()
-{
-  WASMVmInstance *ilr;
-
-  /* Ensure this is a new thread that has not been initialized. */
-  wasm_assert(!wasm_runtime_get_self());
-
-  if (!(ilr = wasm_thread_create_ilr(NULL,
-                                     0,
-                                     0,
-                                     NULL, NULL, NULL)))
-    return false;
-
-  /* Set thread local root. */
-  wasm_runtime_set_tlr(&ilr->main_tlr);
-  /* The current instance is the supervisor instance. */
-  supervisor_instance = ilr;
-  /* Initialize the circular linked list of VM instances. */
-  ilr->prev = ilr->next = ilr;
-  return true;
-}
-
-#ifdef __ZEPHYR__
-#ifndef CONFIG_AEE
-static int
-_stdout_hook_iwasm(int c)
-{
-  printk("%c", (char)c);
-  return 1;
-}
-
-extern void __stdout_hook_install(int (*hook)(int));
-#endif
-#endif
-
 bool
 wasm_runtime_init()
 {
-#ifdef __ZEPHYR__
-#ifndef CONFIG_AEE
-  /* Enable printf() in Zephyr */
-  __stdout_hook_install(_stdout_hook_iwasm);
-#endif
-#endif
-
-#if defined(__ZEPHYR__) || defined(__ALIOS__)
-#ifndef CONFIG_AEE
-  if (!gc_init(16 * 1024 * 1024))
+  if (wasm_platform_init() != 0)
     return false;
-#endif
-#endif
 
   if (wasm_log_init() != 0)
     return false;
 
-  if (wsci_thread_sys_init() != 0)
+  if (ws_thread_sys_init() != 0)
     return false;
 
   wasm_runtime_set_tlr(NULL);
 
-  if (wsci_thread_mutex_init(&instance_list_lock))
-    goto fail1;
-
-  if (!wasm_runtime_create_supervisor_il_env())
-    goto fail2;
-
   wasm_native_init();
   return true;
-
-fail2:
-  wsci_thread_mutex_destroy(&instance_list_lock);
-
-fail1:
-  wsci_thread_sys_destroy();
-
-  return false;
 }
 
 void
 wasm_runtime_destroy()
 {
-  wasm_thread_destroy_ilr(supervisor_instance);
-  supervisor_instance = NULL;
-
-  wsci_thread_mutex_destroy(&instance_list_lock);
-
   wasm_runtime_set_tlr(NULL);
-  wsci_thread_sys_destroy();
+  ws_thread_sys_destroy();
 }
 
-void
-wasm_runtime_call_wasm(WASMFunctionInstance *function,
+static void
+init_wasm_stack(WASMStack *wasm_stack, uint8 *stack, uint32 stack_size)
+{
+  wasm_stack->top = wasm_stack->bottom = stack;
+  wasm_stack->top_boundary = stack + stack_size;
+}
+
+bool
+wasm_runtime_call_wasm(WASMModuleInstance *module_inst,
+                       WASMExecEnv *exec_env,
+                       WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[])
 {
+  /* Set thread local root. */
+  wasm_runtime_set_tlr(&module_inst->main_tlr);
+
+  if (!exec_env) {
+    if (!module_inst->wasm_stack) {
+      if (!(module_inst->wasm_stack =
+            wasm_malloc(module_inst->wasm_stack_size))) {
+        wasm_runtime_set_exception(module_inst, "allocate memory failed.");
+        return false;
+      }
+    }
+
+    init_wasm_stack(&module_inst->main_tlr.wasm_stack,
+                    module_inst->wasm_stack, module_inst->wasm_stack_size);
+  }
+  else {
+    uintptr_t stack = (uintptr_t)exec_env->stack;
+    uint32 stack_size;
+
+    /* Set to 8 bytes align */
+    stack = (stack + 7) & ~7;
+    stack_size = exec_env->stack_size - (stack - (uintptr_t)exec_env->stack);
+
+    if (!exec_env->stack || exec_env->stack_size <= 0
+        || exec_env->stack_size < stack - (uintptr_t)exec_env->stack) {
+        wasm_runtime_set_exception(module_inst, "Invalid execution stack info.");
+        return false;
+    }
+
+    init_wasm_stack(&module_inst->main_tlr.wasm_stack, (uint8*)stack, stack_size);
+  }
+
   wasm_interp_call_wasm(function, argc, argv);
+  return !wasm_runtime_get_exception(module_inst) ? true : false;
 }
 
 void
-wasm_runtime_set_exception(const char *exception)
+wasm_runtime_set_exception(WASMModuleInstance *module_inst,
+                           const char *exception)
 {
-  WASMThread *self = wasm_runtime_get_self();
-
   if (exception)
-    snprintf(self->cur_exception, sizeof(self->cur_exception), "Exception: %s", exception);
+    snprintf(module_inst->cur_exception,
+             sizeof(module_inst->cur_exception),
+             "Exception: %s", exception);
   else
-    self->cur_exception[0] = '\0';
+    module_inst->cur_exception[0] = '\0';
 }
 
 const char*
-wasm_runtime_get_exception()
+wasm_runtime_get_exception(WASMModuleInstance *module_inst)
 {
-  WASMThread *self = wasm_runtime_get_self();
-
-  if (self->cur_exception[0] == '\0')
+  if (module_inst->cur_exception[0] == '\0')
     return NULL;
   else
-    return self->cur_exception;
+    return module_inst->cur_exception;
+}
+
+void
+wasm_runtime_clear_exception(WASMModuleInstance *module_inst)
+{
+  wasm_runtime_set_exception(module_inst, NULL);
 }
 
 WASMModule*
-wasm_runtime_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size)
+wasm_runtime_load(const uint8 *buf, uint32 size,
+                  char *error_buf, uint32 error_buf_size)
 {
   return wasm_loader_load(buf, size, error_buf, error_buf_size);
 }
@@ -222,8 +195,7 @@ memory_instantiate(uint32 init_page_count, uint32 max_page_count,
 
   if (!(memory = wasm_malloc(total_size))) {
     set_error_buf(error_buf, error_buf_size,
-                  "Instantiate memory failed: "
-                  "allocate memory failed.");
+                  "Instantiate memory failed: allocate memory failed.");
     return NULL;
   }
 
@@ -718,12 +690,26 @@ export_functions_instantiate(const WASMModule *module,
 void
 wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
 
+static bool
+execute_start_function(WASMModuleInstance *module_inst)
+{
+  WASMFunctionInstance *func = module_inst->start_function;
+
+  if (!func)
+    return true;
+
+  wasm_assert(!func->is_import_func && func->param_cell_num == 0
+              && func->ret_cell_num == 0);
+
+  return wasm_runtime_call_wasm(module_inst, NULL, func, 0, NULL);
+}
+
 /**
  * Instantiate module
  */
 WASMModuleInstance*
 wasm_runtime_instantiate(const WASMModule *module,
-                         int argc, const char **argv,
+                         uint32 stack_size,
                          char *error_buf, uint32 error_buf_size)
 {
   WASMModuleInstance *module_inst;
@@ -734,6 +720,11 @@ wasm_runtime_instantiate(const WASMModule *module,
   uint8 *global_data, *global_data_end, *addr_data, *addr_data_end;
   uint8 *memory_data;
   uint32 *table_data;
+  /* Haven't processed argument info currently; it may be needed for main()
+     function in emcc non SIDE_MODULE=1 mode, which the argument list of
+     the main() function may need to be copied to the thunk data area */
+  int argc = 0;
+  const char **argv = NULL;
 
   if (!module)
     return NULL;
@@ -749,8 +740,7 @@ wasm_runtime_instantiate(const WASMModule *module,
   /* Allocate the memory */
   if (!(module_inst = wasm_malloc(sizeof(WASMModuleInstance)))) {
     set_error_buf(error_buf, error_buf_size,
-                  "Instantiate module failed: "
-                  "allocate memory failed.");
+                  "Instantiate module failed: allocate memory failed.");
     globals_deinstantiate(globals);
     return NULL;
   }
@@ -925,6 +915,21 @@ wasm_runtime_instantiate(const WASMModule *module,
   module_inst->module = module;
   module_inst->dylink_flag = module->dylink_flag;
 
+  /* module instance type */
+  module_inst->module_type = Wasm_Module_Bytecode;
+
+  /* Initialize the thread related data */
+  module_inst->wasm_stack_size = stack_size;
+  module_inst->main_tlr.module_inst = module_inst;
+
+  /* Execute start function */
+  if (!execute_start_function(module_inst)) {
+    const char *exception = wasm_runtime_get_exception(module_inst);
+    wasm_printf("%s\n", exception);
+    wasm_runtime_deinstantiate(module_inst);
+    return NULL;
+  }
+
   (void)addr_data_end;
   (void)global_data_end;
   return module_inst;
@@ -948,168 +953,10 @@ wasm_runtime_deinstantiate(WASMModuleInstance *module_inst)
   globals_deinstantiate(module_inst->globals);
   export_functions_deinstantiate(module_inst->export_functions);
 
+  if (module_inst->wasm_stack)
+    wasm_free(module_inst->wasm_stack);
+
   wasm_free(module_inst);
-}
-
-static void*
-wasm_thread_start(void *arg)
-{
-  return NULL;
-}
-
-static void
-app_instance_cleanup(WASMVmInstance *ilr)
-{
-  void (*cleanup_routine)();
-
-  /* Remove vm from the VM instance list before it's actually
-     destroyed to avoid operations by other threads after it's
-     destroyed.  */
-  wsci_thread_mutex_lock(&instance_list_lock);
-  ilr->prev->next = ilr->next;
-  ilr->next->prev = ilr->prev;
-  ilr->next = ilr->prev = NULL;
-  wsci_thread_mutex_unlock(&instance_list_lock);
-
-  /* Set the cleanup routine.  */
-  cleanup_routine = ilr->cleanup_routine;
-
-  /* Release resources in vm and set it to destroyed state (whose
-     main_file is set to NULL). */
-  wasm_thread_destroy_ilr(ilr);
-
-  /* Call the cleanup routine at the last step after unlock.  */
-  if (cleanup_routine)
-    (*cleanup_routine)();
-}
-
-/* Insert the new VM instance to the VM instance list. */
-static void
-insert_ilr_to_list(WASMVmInstance *ilr)
-{
-  WASMVmInstance *p;
-
-  wsci_thread_mutex_lock(&instance_list_lock);
-
-  /* Check if inserted already */
-  p = supervisor_instance->next;
-  while (p != supervisor_instance) {
-    if (p == ilr) {
-      wsci_thread_mutex_unlock(&instance_list_lock);
-      return;
-    }
-    p = p->next;
-  }
-
-  supervisor_instance->next->prev = ilr;
-  ilr->next = supervisor_instance->next;
-  ilr->prev = supervisor_instance;
-  supervisor_instance->next = ilr;
-  wsci_thread_mutex_unlock(&instance_list_lock);
-}
-
-/**
- * Entry point of the main thread of VM instance.
- *
- * @param arg pointer to the current VM instance
- *
- * @return return value of the start routine (pointed to by
- * start_routine) of the instance or NULL if initialization fails
- */
-static void* wsci_thread_start_routine_modifier
-app_instance_start (void *arg)
-{
-  void *retval = NULL;
-  WASMVmInstance *ilr = (WASMVmInstance*)arg;
-  WASMThread *self = &ilr->main_tlr;
-  wsci_thread_t handle = self->handle;
-
-  insert_ilr_to_list(ilr);
-
-  /* This must be a new thread that has not been initialized. */
-  wasm_assert(!wasm_runtime_get_self());
-
-  /* Set the native stack boundary for this thread. */
-  wasm_thread_set_native_stack_boundary(self);
-
-  /* Set the thread local root. */
-  wasm_runtime_set_tlr(self);
-
-  /* Run the start routine. */
-  retval = (*ilr->start_routine)(ilr->start_routine_arg);
-
-  /* WASM stack must be empty.  */
-  wasm_assert(self->wasm_stack.s.top == self->wasm_stack.s.bottom);
-
-  /* Change to ZOMBIE state before dying (and locks being destroyed)
-     so that possible destroying thread won't be blocked.  If the
-     destroying thread find that the main thread of an instance is in
-     ZOMBIE state, it should't cancel the threads of that instance
-     though ZOMBIE is a safe state because in this case that "ZOMBIE"
-     thread is doing cleanup, which shall not be killed.  */
-  /*TODO: modify to wasm_runtime_change_state(WASM_THREAD_ZOMBIE);*/
-  self->state = WASM_THREAD_ZOMBIE;
-
-  /* Cleanup app instance */
-  app_instance_cleanup(ilr);
-
-  /* Release system resource by ourselves when exit normally. */
-  wsci_thread_detach(handle);
-
-  /* Call exit explicitly because some systems may need to do
-     something in the exit function.  */
-  wsci_thread_exit(retval);
-  return NULL;
-}
-
-WASMVmInstance*
-wasm_runtime_create_instance(WASMModuleInstance *module_inst,
-                             uint32 native_stack_size,
-                             uint32 wasm_stack_size,
-                             void *(*start_routine)(void*), void *arg,
-                             void (*cleanup_routine)(void))
-{
-  WASMVmInstance *ilr;
-  uint32 native_stack_size1 = native_stack_size +
-                              wsci_reserved_native_stack_size;
-  uint32 wasm_stack_size1 = wasm_stack_size +
-                            wsci_reserved_wasm_stack_size;
-
-  if (!(ilr = wasm_thread_create_ilr(module_inst,
-                                     native_stack_size1, wasm_stack_size1,
-                                     start_routine, arg, cleanup_routine)))
-    return NULL;
-
-  /* Set this to make the main thread to be a WASM thread. */
-  ilr->main_tlr.start_routine = wasm_thread_start;
-
-  if (wsci_thread_create(&ilr->main_tlr.handle,
-                         &app_instance_start, ilr,
-                         ilr->native_stack_size)) {
-    wasm_thread_destroy_ilr(ilr);
-    return NULL;
-  }
-
-  insert_ilr_to_list(ilr);
-  return ilr;
-}
-
-void
-wasm_runtime_destroy_instance(WASMVmInstance *ilr)
-{
-  WASMThread *self = wasm_runtime_get_self();
-  WASMVmInstance *self_ilr = self->vm_instance;
-
-  /* We cannot destroy ourselves. */
-  wasm_assert(self_ilr != ilr);
-
-  (void)self_ilr;
-}
-
-void
-wasm_runtime_wait_for_instance(WASMVmInstance *ilr, int mills)
-{
-  wasm_thread_wait_for_instance(ilr, mills);
 }
 
 bool
@@ -1126,7 +973,7 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
                       sizeof(uint32) * memory->thunk_argc;
 
   if (!(new_memory = wasm_malloc(total_size))) {
-    wasm_runtime_set_exception("alloc memory for enlarge memory failed.");
+    wasm_runtime_set_exception(module, "alloc memory for enlarge memory failed.");
     return false;
   }
 
@@ -1163,4 +1010,39 @@ wasm_runtime_enlarge_memory(WASMModuleInstance *module, int inc_page_count)
   wasm_free(memory);
   module->memories[0] = module->default_memory = new_memory;
   return true;
+}
+
+PackageType
+get_package_type(const uint8 *buf, uint32 size)
+{
+  if (buf && size > 4) {
+    if (buf[0] == '\0' && buf[1] == 'A' && buf[1] == 'S' && buf[2] == 'M')
+      return Wasm_Module_Bytecode;
+    if (buf[0] == '\0' && buf[1] == 'A' && buf[1] == 'O' && buf[2] == 'T')
+      return Wasm_Module_AoT;
+  }
+  return Package_Type_Unknown;
+}
+
+WASMExecEnv*
+wasm_runtime_create_exec_env(uint32_t stack_size)
+{
+  WASMExecEnv *exec_env = wasm_malloc(sizeof(WASMExecEnv));
+  if (exec_env) {
+    if (!(exec_env->stack = wasm_malloc(stack_size))) {
+      wasm_free(exec_env);
+      return NULL;
+    }
+    exec_env->stack_size = stack_size;
+  }
+  return exec_env;
+}
+
+void
+wasm_runtime_destory_exec_env(WASMExecEnv *env)
+{
+  if (env) {
+    wasm_free(env->stack);
+    wasm_free(env);
+  }
 }

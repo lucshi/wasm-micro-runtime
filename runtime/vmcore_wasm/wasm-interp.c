@@ -87,7 +87,7 @@ GET_F64_FROM_ADDR (uint32 *addr)
     if (flags != 2)                                                             \
       LOG_VERBOSE("unaligned load/store in wasm interp, flag is: %d.\n", flags);\
     if (offset + addr < addr) {                                                 \
-      wasm_runtime_set_exception("out of bounds memory access");                \
+      wasm_runtime_set_exception(module, "out of bounds memory access");        \
       goto got_exception;                                                       \
     }                                                                           \
     if (module->dylink_flag)                                                    \
@@ -96,11 +96,11 @@ GET_F64_FROM_ADDR (uint32 *addr)
       maddr = memory->memory_data + (offset + addr);                            \
     if (!module->dylink_flag) {                                                 \
       if (maddr < memory->base_addr) {                                          \
-        wasm_runtime_set_exception("out of bounds memory access");              \
+        wasm_runtime_set_exception(module, "out of bounds memory access");      \
         goto got_exception;                                                     \
       }                                                                         \
       if (maddr + LOAD_SIZE[opcode - WASM_OP_I32_LOAD] > memory->end_addr) {    \
-        wasm_runtime_set_exception("out of bounds memory access");              \
+        wasm_runtime_set_exception(module, "out of bounds memory access");      \
         goto got_exception;                                                     \
       }                                                                         \
     }                                                                           \
@@ -510,11 +510,12 @@ read_leb(const uint8 *buf, uint32 *p_offset, uint32 maxbits, bool sign)
                      min_cond, max_cond) do {                        \
     src_type value = POP_##src_op_type();                            \
     if (isnan(value)) {                                              \
-      wasm_runtime_set_exception("invalid conversion to integer");   \
+      wasm_runtime_set_exception(module,                             \
+                                 "invalid conversion to integer");   \
       goto got_exception;                                            \
     }                                                                \
     else if (value min_cond || value max_cond) {                     \
-      wasm_runtime_set_exception("integer overflow");                \
+      wasm_runtime_set_exception(module, "integer overflow");        \
       goto got_exception;                                            \
     }                                                                \
     PUSH_##dst_op_type(((dst_type)value));                           \
@@ -593,8 +594,8 @@ ALLOC_FRAME(WASMThread *self, uint32 size, WASMInterpFrame *prev_frame)
   if (frame)
     frame->prev_frame = prev_frame;
   else {
-    wasm_runtime_set_exception("WASM interp failed, "
-                               "alloc frame failed.");
+    wasm_runtime_set_exception(self->module_inst,
+        "WASM interp failed, alloc frame failed.");
   }
 
   return frame;
@@ -646,8 +647,8 @@ wasm_interp_call_func_native(WASMThread *self,
     argv = argv_buf;
   else {
     if (!(argv = wasm_malloc(sizeof(uint32) * argc))) {
-      wasm_runtime_set_exception("WASM call native failed: "
-                                 "alloc memory for argv failed.");
+      wasm_runtime_set_exception(self->module_inst,
+          "WASM call native failed: alloc memory for argv failed.");
       return;
     }
   }
@@ -720,7 +721,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                                WASMFunctionInstance *cur_func,
                                WASMInterpFrame *prev_frame)
 {
-  WASMModuleInstance *module = self->vm_instance->module;
+  WASMModuleInstance *module = self->module_inst;
   WASMMemoryInstance *memory = module->default_memory;
   WASMTableInstance *table = module->default_table;
   uint8 opcode_IMPDEP2 = WASM_OP_IMPDEP2;
@@ -761,7 +762,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 #endif
       /* control instructions */
       HANDLE_OP (WASM_OP_UNREACHABLE):
-        wasm_runtime_set_exception("unreachable");
+        wasm_runtime_set_exception(module, "unreachable");
         goto got_exception;
 
       HANDLE_OP (WASM_OP_NOP):
@@ -774,7 +775,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                                          frame_ip_end, BLOCK_TYPE_BLOCK,
                                          &else_addr, &end_addr,
                                          NULL, 0)) {
-          wasm_runtime_set_exception("wasm loader find block addr failed");
+          wasm_runtime_set_exception(module, "wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -788,7 +789,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                                          frame_ip_end, BLOCK_TYPE_LOOP,
                                          &else_addr, &end_addr,
                                          NULL, 0)) {
-          wasm_runtime_set_exception("wasm loader find block addr failed");
+          wasm_runtime_set_exception(module, "wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -802,7 +803,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
                                          frame_ip_end, BLOCK_TYPE_IF,
                                          &else_addr, &end_addr,
                                          NULL, 0)) {
-          wasm_runtime_set_exception("wasm loader find block addr failed");
+          wasm_runtime_set_exception(module, "wasm loader find block addr failed");
           goto got_exception;
         }
 
@@ -859,7 +860,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           depths = depth_buf;
         else {
           if (!(depths = wasm_malloc(sizeof(uint32) * count))) {
-            wasm_runtime_set_exception("WASM interp failed, "
+            wasm_runtime_set_exception(module, "WASM interp failed, "
                                        "alloc block memory for br_table failed.");
             goto got_exception;
           }
@@ -898,7 +899,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           /* TODO: test */
           read_leb_uint32(frame_ip, frame_ip_end, tidx);
           if (tidx >= module->module->type_count) {
-            wasm_runtime_set_exception("type index is overflow");
+            wasm_runtime_set_exception(module, "type index is overflow");
             goto got_exception;
           }
           cur_type = module->module->types[tidx];
@@ -912,19 +913,20 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 #ifdef __i386__
             val -= (uint32)table->base_addr;
 #elif __x86_64__
-            wasm_runtime_set_exception("unsupported side module mode in 64 bit");
+            wasm_runtime_set_exception(module,
+                "unsupported side module mode in 64 bit");
             goto got_exception;
 #endif
           }
 
           if (val < 0 || val >= (int32)table->cur_size) {
-            wasm_runtime_set_exception("undefined element");
+            wasm_runtime_set_exception(module, "undefined element");
             goto got_exception;
           }
 
           fidx = ((uint32*)table->base_addr)[val];
           if (fidx >= module->function_count) {
-            wasm_runtime_set_exception("function index is overflow");
+            wasm_runtime_set_exception(module, "function index is overflow");
             goto got_exception;
           }
 
@@ -935,7 +937,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           else
             cur_func_type = cur_func->u.func->func_type;
           if (!wasm_type_equal(cur_type, cur_func_type)) {
-            wasm_runtime_set_exception("indirect call type mismatch");
+            wasm_runtime_set_exception(module, "indirect call type mismatch");
             goto got_exception;
           }
           goto call_func_from_interp;
@@ -944,7 +946,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       /* parametric instructions */
       HANDLE_OP (WASM_OP_DROP):
         {
-          wasm_runtime_set_exception("wasm interp failed: unsupported opcode");
+          wasm_runtime_set_exception(module,
+              "wasm interp failed: unsupported opcode");
           goto got_exception;
         }
 
@@ -962,7 +965,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
       HANDLE_OP (WASM_OP_SELECT):
         {
-          wasm_runtime_set_exception("wasm interp failed: unsupported opcode");
+          wasm_runtime_set_exception(module,
+              "wasm interp failed: unsupported opcode");
           goto got_exception;
         }
 
@@ -1008,7 +1012,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUSH_F64(LOCAL_F64(local_idx));
               break;
             default:
-              wasm_runtime_set_exception("get local type is invalid");
+              wasm_runtime_set_exception(module,
+                  "get local type is invalid");
               goto got_exception;
           }
           (void)local_count;
@@ -1036,7 +1041,8 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               SET_LOCAL_F64(local_idx, POP_F64());
               break;
             default:
-              wasm_runtime_set_exception("set local type is invalid");
+              wasm_runtime_set_exception(module,
+                  "set local type is invalid");
               goto got_exception;
           }
           (void)local_count;
@@ -1064,7 +1070,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               SET_LOCAL_F64(local_idx, GET_F64_FROM_ADDR(frame_sp - 2));
               break;
             default:
-              wasm_runtime_set_exception("tee local type is invalid");
+              wasm_runtime_set_exception(module, "tee local type is invalid");
               goto got_exception;
           }
           (void)local_count;
@@ -1095,7 +1101,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUSH_F64(*(float64*)get_global_addr(memory, global));
               break;
             default:
-              wasm_runtime_set_exception("get global type is invalid");
+              wasm_runtime_set_exception(module, "get global type is invalid");
               goto got_exception;
           }
           HANDLE_OP_END ();
@@ -1127,7 +1133,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
               PUT_F64_TO_ADDR((uint32*)global_addr, POP_F64());
               break;
             default:
-              wasm_runtime_set_exception("set global index is overflow");
+              wasm_runtime_set_exception(module, "set global index is overflow");
               goto got_exception;
           }
           HANDLE_OP_END ();
@@ -1483,11 +1489,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (a == (int32)0x80000000 && b == -1) {
-          wasm_runtime_set_exception("integer overflow");
+          wasm_runtime_set_exception(module, "integer overflow");
           goto got_exception;
         }
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a / b);
@@ -1501,7 +1507,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a / b);
@@ -1519,7 +1525,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           HANDLE_OP_END ();
         }
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a % b);
@@ -1533,7 +1539,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I32();
         a = POP_I32();
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I32(a % b);
@@ -1616,11 +1622,11 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (a == (int64)0x8000000000000000LL && b == -1) {
-          wasm_runtime_set_exception("integer overflow");
+          wasm_runtime_set_exception(module, "integer overflow");
           goto got_exception;
         }
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a / b);
@@ -1634,7 +1640,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a / b);
@@ -1652,7 +1658,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
           HANDLE_OP_END ();
         }
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a % b);
@@ -1666,7 +1672,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         b = POP_I64();
         a = POP_I64();
         if (b == 0) {
-          wasm_runtime_set_exception("integer divide by zero");
+          wasm_runtime_set_exception(module, "integer divide by zero");
           goto got_exception;
         }
         PUSH_I64(a % b);
@@ -1988,7 +1994,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
 
 #if WASM_ENABLE_LABELS_AS_VALUES == 0
       default:
-        wasm_runtime_set_exception("wasm interp failed: unsupported opcode");
+        wasm_runtime_set_exception(module, "wasm interp failed: unsupported opcode");
         goto got_exception;
     }
 #endif
@@ -2016,7 +2022,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
       HANDLE_OP (WASM_OP_UNUSED_0x26):
       HANDLE_OP (WASM_OP_UNUSED_0x27):
       {
-        wasm_runtime_set_exception("wasm interp failed: unsupported opcode");
+        wasm_runtime_set_exception(module, "wasm interp failed: unsupported opcode");
         goto got_exception;
       }
 #endif
@@ -2046,7 +2052,7 @@ wasm_interp_call_func_bytecode(WASMThread *self,
         UPDATE_ALL_FROM_FRAME();
 
         memory = module->default_memory;
-        if (wasm_runtime_get_exception())
+        if (wasm_runtime_get_exception(module))
           goto got_exception;
       }
       else {
@@ -2159,7 +2165,7 @@ wasm_interp_call_wasm(WASMFunctionInstance *function,
     wasm_interp_call_func_bytecode(self, function, frame);
 
   /* Output the return value to the caller */
-  if (!wasm_runtime_get_exception()) {
+  if (!wasm_runtime_get_exception(self->module_inst)) {
     for (i = 0; i < function->ret_cell_num; i++)
       argv[i] = *(frame->sp + i - function->ret_cell_num);
   }

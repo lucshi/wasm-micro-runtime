@@ -27,7 +27,6 @@
 #define _WASM_RUNTIME_H
 
 #include "wasm.h"
-#include "wasm-import.h"
 #include "wasm-thread.h"
 #include "wasm_hashmap.h"
 
@@ -118,7 +117,21 @@ typedef struct WASMExportFuncInstance {
   WASMFunctionInstance *function;
 } WASMExportFuncInstance;
 
+/* Package Type */
+typedef enum {
+  Wasm_Module_Bytecode = 0,
+  Wasm_Module_AoT,
+  Package_Type_Unknown = 0xFFFF
+} PackageType;
+
 typedef struct WASMModuleInstance {
+  /* Module instance type, for module instance loaded from
+     WASM bytecode binary, this field is Wasm_Module_Bytecode;
+     for module instance loaded from AOT package, this field is
+     Wasm_Module_AoT, and this structure should be treated as
+     WASMAOTContext structure. */
+  uint32 module_type;
+
   uint32 memory_count;
   uint32 table_count;
   uint32 global_count;
@@ -143,7 +156,28 @@ typedef struct WASMModuleInstance {
   bool memory_base_flag;
   bool table_base_flag;
   bool dylink_flag;
+
+  /* Heap of this VM instance.  */
+  void *heap;
+
+  /* Default WASM stack size of threads of this Module instance. */
+  uint32 wasm_stack_size;
+
+  /* Default WASM stack */
+  uint8 *wasm_stack;
+
+  /* The exception buffer of wasm interpreter for current thread. */
+  char cur_exception[128];
+
+  /* Main Thread */
+  WASMThread main_tlr;
 } WASMModuleInstance;
+
+/* Execution environment, e.g. stack info */
+typedef struct WASMExecEnv {
+  uint8_t *stack;
+  uint32_t stack_size;
+} WASMExecEnv;
 
 struct WASMInterpFrame;
 typedef struct WASMInterpFrame WASMRuntimeFrame;
@@ -156,7 +190,7 @@ typedef struct WASMInterpFrame WASMRuntimeFrame;
 static inline WASMThread*
 wasm_runtime_get_self()
 {
-  return (WASMThread*)wsci_get_tl_root();
+  return (WASMThread*)ws_tls_get();
 }
 
 /**
@@ -167,7 +201,7 @@ wasm_runtime_get_self()
 static inline void
 wasm_runtime_set_tlr(WASMThread *self)
 {
-  wsci_set_tl_root(self);
+  ws_tls_put(self);
 }
 
 /**
@@ -198,34 +232,48 @@ wasm_runtime_get_func_code_end(WASMFunctionInstance *func)
 }
 
 /**
- * Call the given WASM function with the arguments.
+ * Call the given WASM function of a WASM module instance with arguments (bytecode and AoT).
  *
+ * @param module_inst the WASM module instance which the function belongs to
+ * @param exec_env the execution environment to call the function. If the module instance
+ *   is created by AoT mode, it is ignored and just set it to NULL. If the module instance
+ *   is created by bytecode mode and it is NULL, a temporary env object will be created
  * @param function the function to be called
  * @param argc the number of arguments
  * @param argv the arguments.  If the function method has return value,
- * the first (or first two in case 64-bit return value) element of
- * argv stores the return value of the called WASM function after this
- * function returns.
+ *   the first (or first two in case 64-bit return value) element of
+ *   argv stores the return value of the called WASM function after this
+ *   function returns.
+ *
+ * @return true if success, false otherwise and exception will be thrown,
+ *   the caller can call wasm_runtime_get_exception to get exception info.
  */
-void
-wasm_runtime_call_wasm(WASMFunctionInstance *function,
+bool
+wasm_runtime_call_wasm(WASMModuleInstance *module,
+                       WASMExecEnv *exec_env,
+                       WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[]);
 
 /**
  * Set current exception string to global exception string.
  *
+ * @param module the wasm module instance
+ *
  * @param exception current exception string
  */
 void
-wasm_runtime_set_exception(const char *exception);
+wasm_runtime_set_exception(WASMModuleInstance *module,
+                           const char *exception);
 
 /**
  * Get current exception string.
  *
+ * @param module the wasm module instance
+ *
  * @return return exception string if exception is thrown, NULL otherwise
  */
 const char*
-wasm_runtime_get_exception();
+wasm_runtime_get_exception(WASMModuleInstance *module);
 
 /**
  * Enlarge wasm memory data space.

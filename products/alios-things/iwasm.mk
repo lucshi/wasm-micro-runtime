@@ -19,16 +19,14 @@ $(NAME)_SOURCES := ${IWASM_ROOT}/runtime/utils/wasm_hashmap.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_memory.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_math.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_dlfcn.c \
+                   ${IWASM_ROOT}/runtime/platform/alios/wasm_platform.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_platform_log.c \
-                   ${IWASM_ROOT}/runtime/platform/alios/wasm_time.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_thread.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm-native.c \
                    ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-application.c \
-                   ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-import.c \
                    ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-interp.c \
                    ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-loader.c \
                    ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-runtime.c \
-                   ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-thread.c \
                    ${IWASM_ROOT}/runtime/vmcore_wasm/invokeNative_general.c \
                    src/main.c
 

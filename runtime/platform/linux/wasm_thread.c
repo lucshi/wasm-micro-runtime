@@ -29,97 +29,18 @@
 #include "wasm_memory.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
 
 
-static korp_mutex thread_list_lock;
-static pthread_key_t thread_local_storage_key[WASM_MAX_TLS_NUM];
+static pthread_key_t thread_local_storage_key;
 
 int ws_thread_sys_init()
 {
-  unsigned i;
-
-  for (i = 0; i < WASM_MAX_TLS_NUM; i++)
-    pthread_key_create(&thread_local_storage_key[i], NULL);
-
-  return ws_mutex_init(&thread_list_lock, false);
+  return pthread_key_create(&thread_local_storage_key, NULL);
 }
 
 void ws_thread_sys_destroy()
 {
-  unsigned i;
-
-  for (i = 0; i < WASM_MAX_TLS_NUM; i++)
-    pthread_key_delete(thread_local_storage_key[i]);
-
-  ws_mutex_destroy(&thread_list_lock);
-}
-
-typedef struct {
-  thread_start_routine_t start;
-  void* stack;
-  int stack_size;
-  void* arg;
-} thread_wrapper_arg;
-
-static void *ws_thread_wrapper(void *arg)
-{
-  thread_wrapper_arg * targ = arg;
-  targ->stack = (void *)((uintptr_t)(&arg) & ~0xfff);
-  ws_tls_put(1, targ);
-  targ->start(targ->arg);
-  wasm_free(targ);
-  ws_tls_put(1, NULL);
-  return NULL;
-}
-
-int ws_thread_create_with_prio(korp_tid *tid,
-                               thread_start_routine_t start, void *arg,
-                               unsigned int stack_size, int prio)
-{
-  pthread_attr_t tattr;
-  thread_wrapper_arg *targ;
-
-  wasm_assert(stack_size > 0);
-  wasm_assert(tid);
-  wasm_assert(start);
-
-  *tid = INVALID_THREAD_ID;
-
-  pthread_attr_init(&tattr);
-  pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_JOINABLE);
-  if(pthread_attr_setstacksize(&tattr, stack_size) != 0) {
-    LOG_ERROR("Invalid thread stack size %u. Min stack size on Linux = %u\n",
-              stack_size, PTHREAD_STACK_MIN);
-    pthread_attr_destroy(&tattr);
-    return BHT_ERROR;
-  }
-
-  targ = (thread_wrapper_arg*) wasm_malloc(sizeof(*targ));
-  if(!targ) {
-    pthread_attr_destroy(&tattr);
-    return BHT_ERROR;
-  }
-
-  targ->start = start;
-  targ->arg = arg;
-  targ->stack_size = stack_size;
-
-  if(pthread_create(tid, &tattr, ws_thread_wrapper, targ) != 0) {
-    pthread_attr_destroy(&tattr);
-    wasm_free(targ);
-    return BHT_ERROR;
-  }
-
-  pthread_attr_destroy(&tattr);
-  return BHT_OK;
-}
-
-int ws_thread_create(korp_tid *tid, thread_start_routine_t start, void *arg,
-                      unsigned int stack_size)
-{
-  return ws_thread_create_with_prio(tid, start, arg, stack_size,
-                                    WASM_THREAD_DEFAULT_PRIORITY);
+  pthread_key_delete(thread_local_storage_key);
 }
 
 korp_tid ws_self_thread()
@@ -127,24 +48,14 @@ korp_tid ws_self_thread()
   return (korp_tid) pthread_self();
 }
 
-void ws_thread_exit(void * code)
+void *ws_tls_get()
 {
-  wasm_free(ws_tls_get(1));
-  ws_tls_put(1, NULL);
-  pthread_exit(code);
+  return pthread_getspecific(thread_local_storage_key);
 }
 
-void *ws_tls_get(unsigned idx)
+int ws_tls_put(void * tls)
 {
-  wasm_assert(idx < WASM_MAX_TLS_NUM);
-  return pthread_getspecific(thread_local_storage_key[idx]);
-}
-
-int ws_tls_put(unsigned idx, void * tls)
-{
-  wasm_assert(idx < WASM_MAX_TLS_NUM);
-  pthread_setspecific(thread_local_storage_key[idx], tls);
-  return BHT_OK;
+  return pthread_setspecific(thread_local_storage_key, tls);
 }
 
 int ws_mutex_init(korp_mutex *mutex, bool is_recursive)
@@ -195,16 +106,6 @@ void ws_mutex_lock(korp_mutex *mutex)
   }
 }
 
-int ws_mutex_trylock(korp_mutex *mutex)
-{
-  int ret;
-
-  wasm_assert(mutex);
-  ret = pthread_mutex_trylock(mutex);
-
-  return ret == 0 ? BHT_OK : BHT_ERROR;
-}
-
 /* Returned error (EINVAL, EAGAIN and EPERM) from
 unlocking the mutex indicates some logic error present
 in the program somewhere.
@@ -219,20 +120,5 @@ void ws_mutex_unlock(korp_mutex *mutex)
     fprintf(stderr, "vm mutex unlock failed (ret=%d)!\n", ret);
     exit(-1);
   }
-}
-
-int ws_thread_cancel(korp_tid thread)
-{
-  return pthread_cancel(thread);
-}
-
-int ws_thread_join(korp_tid thread, void **value_ptr, int mills)
-{
-  return pthread_join(thread, value_ptr);
-}
-
-int ws_thread_detach(korp_tid thread)
-{
-  return pthread_detach(thread);
 }
 

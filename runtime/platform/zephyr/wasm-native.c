@@ -31,7 +31,7 @@
 
 
 #if 0
-#define MEMORY(self) (self->vm_instance->module->default_memory)
+#define MEMORY(self) (self->module_inst->default_memory)
 #define MEMORY_BASE(self) (MEMORY(self)->memory_data)
 #else
 #define MEMORY_BASE(self) (0)
@@ -44,7 +44,7 @@ abort_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.abort(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 static inline va_list
@@ -101,7 +101,8 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
   uint32 total_size = args[0] * args[1];
 
   if (total_size < args[0] || total_size < args[1]) {
-    wasm_runtime_set_exception("calloc failed: memory size out of range.");
+    wasm_runtime_set_exception(self->module_inst,
+        "calloc failed: memory size out of range.");
     return;
   }
 
@@ -135,7 +136,7 @@ abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.abortStackOverflow(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 static void
@@ -145,7 +146,7 @@ nullFunc_X_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.nullFunc_X(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 

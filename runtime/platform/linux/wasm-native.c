@@ -43,7 +43,7 @@
 #include <errno.h>
 
 
-#define MEMORY(self) (self->vm_instance->module->default_memory)
+#define MEMORY(self) (self->module_inst->default_memory)
 #define MEMORY_BASE(self) (MEMORY(self)->memory_data)
 
 #define DEBUG_PRINT 0
@@ -164,7 +164,8 @@ _calloc_wrapper(WASMThread *self, uint32 *args)
   uint32 total_size = args[0] * args[1];
 
   if (total_size < args[0] || total_size < args[1]) {
-    wasm_runtime_set_exception("calloc failed: memory size out of range.");
+    wasm_runtime_set_exception(self->module_inst,
+        "calloc failed: memory size out of range.");
     return;
   }
 
@@ -192,7 +193,7 @@ nullFunc_X_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.nullFunc_X(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 static void
@@ -211,7 +212,7 @@ static void
 _atexit_wrapper(WASMThread *self, uint32 *args)
 {
   /* TODO: implement callback for atexit */
-  wasm_runtime_set_exception("atexit unsupported");
+  wasm_runtime_set_exception(self->module_inst, "atexit unsupported");
 }
 #endif
 
@@ -223,7 +224,7 @@ abort_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.abort(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 static void
@@ -233,7 +234,7 @@ abortStackOverflow_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.abortStackOverflow(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 #endif
 
@@ -439,7 +440,7 @@ _abort_wrapper(WASMThread *self, uint32 *args)
   char buf[32];
 
   snprintf(buf, sizeof(buf), "env.abort(%i)", code);
-  wasm_runtime_set_exception(buf);
+  wasm_runtime_set_exception(self->module_inst, buf);
 }
 
 static void
@@ -457,7 +458,7 @@ ___unlock_wrapper(WASMThread *self, uint32 *args)
 static void
 getTotalMemory_wrapper(WASMThread *self, uint32 *args)
 {
-  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
+  WASMMemoryInstance *memory = self->module_inst->default_memory;
   *args = NumBytesPerPage * memory->cur_page_count;
 }
 
@@ -465,8 +466,8 @@ static void
 enlargeMemory_wrapper(WASMThread *self, uint32 *args)
 {
   bool ret;
-  WASMMemoryInstance *memory = self->vm_instance->module->default_memory;
-  uint32 DYNAMICTOP_PTR_offset = self->vm_instance->module->DYNAMICTOP_PTR_offset;
+  WASMMemoryInstance *memory = self->module_inst->default_memory;
+  uint32 DYNAMICTOP_PTR_offset = self->module_inst->DYNAMICTOP_PTR_offset;
   uint32 addr_data_offset = *(uint32*)(memory->global_data + DYNAMICTOP_PTR_offset);
   uint32 *DYNAMICTOP_PTR = (uint32*)(memory->memory_data + addr_data_offset);
   uint32 memory_size_expected = *DYNAMICTOP_PTR;
@@ -477,7 +478,7 @@ enlargeMemory_wrapper(WASMThread *self, uint32 *args)
     return;
   }
   else {
-    ret = wasm_runtime_enlarge_memory(self->vm_instance->module, total_page_count -
+    ret = wasm_runtime_enlarge_memory(self->module_inst, total_page_count -
                                       memory->cur_page_count);
     *args = ret ? 1 : 0;
     return;
@@ -487,7 +488,8 @@ enlargeMemory_wrapper(WASMThread *self, uint32 *args)
 static void
 abortOnCannotGrowMemory_wrapper(WASMThread *self, uint32 *args)
 {
-  wasm_runtime_set_exception("abort on cannot grow memory");
+  wasm_runtime_set_exception(self->module_inst,
+      "abort on cannot grow memory");
 }
 
 static void

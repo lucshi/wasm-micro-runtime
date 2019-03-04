@@ -25,15 +25,12 @@ set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/wasm_hashmap.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_math.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_dlfcn.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_platform_log.c
-                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_time.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_thread.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm-native.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-application.c
-                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-import.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-interp.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-loader.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-runtime.c
-                ${IWASM_ROOT}/runtime/vmcore_wasm/wasm-thread.c
                 ${IWASM_ROOT}/runtime/vmcore_wasm/invokeNative_general.c
                 ${IWASM_ROOT}/lib/lib-export.c)
 

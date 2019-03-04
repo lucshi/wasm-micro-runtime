@@ -40,23 +40,6 @@
 #include "wasm_platform_log.h"
 
 
-bool
-wasm_application_execute_start(void)
-{
-  WASMThread *self = wasm_runtime_get_self();
-  WASMFunctionInstance *func = self->vm_instance->module->start_function;
-
-  if (!func)
-    return true;
-
-  wasm_assert(!func->is_import_func && func->param_cell_num == 0
-            && func->ret_cell_num == 0);
-
-  wasm_runtime_call_wasm(func, 0, NULL);
-
-  return !wasm_runtime_get_exception() ? true : false;
-}
-
 static WASMFunctionInstance*
 resolve_post_instantiate_function(const WASMModuleInstance *module_inst)
 {
@@ -117,10 +100,9 @@ check_main_func_type(const WASMType *type)
 }
 
 bool
-wasm_application_execute_main(int argc, char *argv[])
+wasm_application_execute_main(WASMModuleInstance *module_inst,
+                              int argc, char *argv[])
 {
-  WASMThread *self = wasm_runtime_get_self();
-  WASMModuleInstance *module_inst = self->vm_instance->module;
   WASMFunctionInstance *func_post_instantiate =
     resolve_post_instantiate_function(module_inst);
   WASMFunctionInstance *func = resolve_main_function(module_inst);
@@ -143,7 +125,8 @@ wasm_application_execute_main(int argc, char *argv[])
       argv1[0] = argc;
       argv1[1] = (uint32)argv;
 #elif __x86_64__
-      wasm_runtime_set_exception("unsupported side module mode in 64 bit");
+      wasm_runtime_set_exception(module_inst,
+          "unsupported side module mode in 64 bit");
       return false;
 #endif
     }
@@ -156,14 +139,12 @@ wasm_application_execute_main(int argc, char *argv[])
   }
 
   if (func_post_instantiate) {
-    wasm_runtime_call_wasm(func_post_instantiate, 0, NULL);
-    if (wasm_runtime_get_exception())
+    if (!wasm_runtime_call_wasm(module_inst, NULL,
+                                func_post_instantiate, 0, NULL))
       return false;
   }
 
-  wasm_runtime_call_wasm(func, argc1, argv1);
-
-  return !wasm_runtime_get_exception() ? true : false;
+  return wasm_runtime_call_wasm(module_inst, NULL, func, argc1, argv1);
 }
 
 #ifdef WASM_ENABLE_REPL
@@ -178,10 +159,9 @@ resolve_function(const WASMModuleInstance *module_inst, char *name)
 }
 
 bool
-wasm_application_execute_func(int argc, char *argv[])
+wasm_application_execute_func(WASMModuleInstance *module_inst,
+                              int argc, char *argv[])
 {
-  WASMThread *self = wasm_runtime_get_self();
-  WASMModuleInstance *module_inst = self->vm_instance->module;
   WASMFunctionInstance *func;
   WASMType *type;
   uint32 argc1, *argv1;
@@ -277,13 +257,13 @@ wasm_application_execute_func(int argc, char *argv[])
   }
   wasm_assert(p == (int32)argc1);
 
-  wasm_runtime_set_exception(NULL);
-  wasm_runtime_call_wasm(func, argc1, argv1);
-  exception = wasm_runtime_get_exception();
-  if (exception) {
+  wasm_runtime_set_exception(module_inst, NULL);
+  if (!wasm_runtime_call_wasm(module_inst, NULL, func, argc1, argv1)) {
+    exception = wasm_runtime_get_exception(module_inst);
     wasm_printf("%s\n", exception);
     goto fail;
   }
+
   /* print return value */
   switch (type->types[type->param_count]) {
     case VALUE_TYPE_I32:
@@ -393,3 +373,4 @@ wasm_runtime_lookup_function(const WASMModuleInstance *module_inst,
       return module_inst->export_functions[i].function;
   return NULL;
 }
+

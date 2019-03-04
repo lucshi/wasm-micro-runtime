@@ -39,32 +39,11 @@ typedef double float64;
 #define offsetof(Type, field) ((size_t)(&((Type *)0)->field))
 #endif
 
-/* Stack size of applet threads's native part.  */
-#define WASM_APPLET_PRESERVED_NATIVE_STACK_SIZE (0 * 1024)
-
-/* Stack size of applet threads's interpreter part.  */
-#define WASM_APPLET_PRESERVED_WASM_STACK_SIZE (0 * 1024)
-
-/* Default thread priority */
-#define WASM_THREAD_DEFAULT_PRIORITY 7
-
-#define WASM_ROUTINE_MODIFIER
-
-#define INVALID_THREAD_ID 0xFFFFFFFF
-
 typedef struct k_thread korp_thread;
 typedef korp_thread *korp_tid;
 typedef struct k_mutex korp_mutex;
-typedef struct k_sem korp_sem;
 
-struct wasm_thread_wait_node;
-typedef struct wasm_thread_wait_node *wasm_thread_wait_list;
-typedef struct korp_cond {
-  struct k_mutex wait_list_lock;
-  wasm_thread_wait_list thread_wait_list;
-} korp_cond;
-
-typedef void* (*thread_start_routine_t)(void*);
+int wasm_platform_init();
 
 #include <string.h>
 

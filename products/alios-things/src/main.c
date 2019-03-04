@@ -39,40 +39,13 @@
 static int app_argc;
 static char **app_argv;
 
-void*
-wsci_get_tl_root(void)
-{
-  return ws_tls_get(0);
-}
-
-void
-wsci_set_tl_root(void *tlr)
-{
-  ws_tls_put(0, tlr);
-}
-
-static void
-app_instance_cleanup(void)
-{
-}
-
-/**
- * The start routine of the main thread of app instance.
- */
 static void*
-app_instance_main(void *arg)
+app_instance_main(wasm_module_inst_t module_inst)
 {
   const char *exception;
-  bool res;
 
-  res = wasm_application_execute_start();
-  if ((exception = wasm_runtime_get_exception()))
-    wasm_printf("%s\n", exception);
-  if (!res)
-    return NULL;
-
-  wasm_application_execute_main(app_argc, app_argv);
-  if ((exception = wasm_runtime_get_exception()))
+  wasm_application_execute_main(module_inst, app_argc, app_argv);
+  if ((exception = wasm_runtime_get_exception(module_inst)))
     wasm_printf("%s\n", exception);
   return NULL;
 }
@@ -83,7 +56,6 @@ void iwasm_main(void *arg1)
   int wasm_file_size;
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
-  wasm_vm_instance_t vm = NULL;
   char error_buf[128];
 #if WASM_ENABLE_LOG != 0
   int log_verbose_level = 1;
@@ -112,28 +84,15 @@ void iwasm_main(void *arg1)
 
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
-                                                    0, NULL,
+                                                    8 * 1024,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
     wasm_printf("%s\n", error_buf);
     goto fail2;
   }
 
-  /* create vm instance */
-  if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                          8 * 1024, /* native stack size */
-                                          8 * 1024, /* wasm stack size */
-                                          app_instance_main, NULL,
-                                          app_instance_cleanup)))
-    goto fail3;
+  app_instance_main(wasm_module_inst);
 
-  /* wait for the instance to terminate */
-  wasm_runtime_wait_for_instance(vm, -1);
-
-  /* destroy the instance */
-  wasm_runtime_destroy_instance(vm);
-
-fail3:
   /* destroy the module instance */
   wasm_runtime_deinstantiate(wasm_module_inst);
 

@@ -39,58 +39,33 @@
 static int app_argc;
 static char **app_argv;
 
-void*
-wsci_get_tl_root(void)
-{
-  return ws_tls_get(0);
-}
-
-void
-wsci_set_tl_root(void *tlr)
-{
-  ws_tls_put(0, tlr);
-}
-
 static int
 print_help()
 {
   wasm_printf("Usage: iwasm [-options] wasm_file [args...]\n");
   wasm_printf("options:\n");
+  /*
   wasm_printf("  -f|--function name     Specify function name to run "
-            "in module rather than main\n");
+              "in module rather than main\n");
+  */ /* TODO */
 #if WASM_ENABLE_LOG != 0
   wasm_printf("  -v=X                   Set log verbose level (0 to 2, default is 1), larger level with more log\n");
 #endif
 #ifdef WASM_ENABLE_REPL
   wasm_printf("  --repl                 Start a very simple REPL (read-eval-print-loop) mode \n"
-            "                         that runs commands in the form of `FUNC ARG...`\n");
+              "                         that runs commands in the form of `FUNC ARG...`\n");
 #endif
 
   return 1;
 }
 
-static void
-app_instance_cleanup(void)
-{
-}
-
-/**
- * The start routine of the main thread of app instance.
- */
 static void*
-app_instance_main(void *arg)
+app_instance_main(wasm_module_inst_t module_inst)
 {
   const char *exception;
-  bool res;
 
-  res = wasm_application_execute_start();
-  if ((exception = wasm_runtime_get_exception()))
-    wasm_printf("%s\n", exception);
-  if (!res)
-    return NULL;
-
-  wasm_application_execute_main(app_argc, app_argv);
-  if ((exception = wasm_runtime_get_exception()))
+  wasm_application_execute_main(module_inst, app_argc, app_argv);
+  if ((exception = wasm_runtime_get_exception(module_inst)))
     wasm_printf("%s\n", exception);
   return NULL;
 }
@@ -125,19 +100,11 @@ split_string(char *str, int *count)
 }
 
 static void*
-app_instance_func(void *arg)
+app_instance_func(wasm_module_inst_t module_inst)
 {
   char *cmd = NULL;
   size_t len = 0;
   ssize_t n;
-  const char *exception;
-  bool res;
-
-  res = wasm_application_execute_start();
-  if ((exception = wasm_runtime_get_exception()))
-    wasm_printf("%s\n", exception);
-  if (!res)
-    return NULL;
 
   while ((wasm_printf("webassembly> "), n = getline(&cmd, &len, stdin)) != -1) {
     wasm_assert(n > 0);
@@ -153,7 +120,7 @@ app_instance_func(void *arg)
       break;
     }
     if (app_argc != 0) {
-      wasm_application_execute_func(app_argc, app_argv);
+      wasm_application_execute_func(module_inst, app_argc, app_argv);
     }
     free(app_argv);
   }
@@ -171,7 +138,6 @@ main(int argc, char *argv[])
   int wasm_file_size;
   wasm_module_t wasm_module = NULL;
   wasm_module_inst_t wasm_module_inst = NULL;
-  wasm_vm_instance_t vm = NULL;
   char error_buf[128];
 #if WASM_ENABLE_LOG != 0
   int log_verbose_level = 1;
@@ -238,7 +204,7 @@ main(int argc, char *argv[])
 
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
-                                                    argc, argv,
+                                                    1024 * 1024,
                                                     error_buf,
                                                     sizeof(error_buf)))) {
     wasm_printf("%s\n", error_buf);
@@ -247,32 +213,13 @@ main(int argc, char *argv[])
 
 #ifdef WASM_ENABLE_REPL
   if (is_repl_mode) {
-    /* create vm instance */
-    if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                            1024 * 1024, /* TODO, define macro */
-                                            1024 * 1024, /* TODO, define macro */
-                                            app_instance_func, NULL,
-                                            app_instance_cleanup)))
-      goto fail4;
+    app_instance_func(wasm_module_inst);
   } else
 #endif
   {
-    /* create vm instance */
-    if (!(vm = wasm_runtime_create_instance(wasm_module_inst,
-                                            32 * 1024, /* TODO, define macro */
-                                            32 * 1024, /* TODO, define macro */
-                                            app_instance_main, NULL,
-                                            app_instance_cleanup)))
-      goto fail4;
+    app_instance_main(wasm_module_inst);
   }
 
-  /* wait for the instance to terminate */
-  wasm_runtime_wait_for_instance(vm, -1);
-
-  /* destroy the instance */
-  wasm_runtime_destroy_instance(vm);
-
-fail4:
   /* destroy the module instance */
   wasm_runtime_deinstantiate(wasm_module_inst);
 

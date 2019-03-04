@@ -8,6 +8,12 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
+int
+wasm_platform_init()
+{
+  return 0;
+}
+
 char*
 wasm_read_file_to_buffer(const char *filename, int *ret_size)
 {

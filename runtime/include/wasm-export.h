@@ -26,23 +26,64 @@
 #ifndef _WASM_EXPORT_H
 #define _WASM_EXPORT_H
 
-#include "wasm_platform.h"
+#include <inttypes.h>
+#include <stdbool.h>
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* Uninstantiated WASM module loaded from WASM binary file */
 struct WASMModule;
 typedef struct WASMModule *wasm_module_t;
 
+/* Instantiated WASM module */
 struct WASMModuleInstance;
 typedef struct WASMModuleInstance *wasm_module_inst_t;
 
-struct WASMVmInstance;
-typedef struct WASMVmInstance *wasm_vm_instance_t;
-
+/* Function instance */
 struct WASMFunctionInstance;
 typedef struct WASMFunctionInstance *wasm_function_inst_t;
+
+/* Execution environment, e.g. stack info */
+typedef struct WASMExecEnv {
+  uint8_t *stack;
+  uint32_t stack_size;
+} *wasm_exec_env_t;
+
+/* Package Type */
+typedef enum {
+  Wasm_Module_Bytecode = 0,
+  Wasm_Module_AoT,
+  Package_Type_Unknown = 0xFFFF
+} package_type_t;
+
+
+/**
+ * Initialize the WASM runtime environment.
+ *
+ * @return true if success, false otherwise
+ */
+bool
+wasm_runtime_init();
+
+/**
+ * Destroy the WASM runtime environment.
+ */
+void
+wasm_runtime_destroy();
+
+/**
+ * Get the package type of a buffer.
+ *
+ * @param buf the package buffer
+ * @param size the package buffer size
+ *
+ * @return the package type, return Package_Type_Unknown if the type is unknown
+ */
+package_type_t
+get_package_type(const uint8_t *buf, uint32_t size);
 
 /**
  * Load a WASM module from a specified byte buffer.
@@ -52,11 +93,11 @@ typedef struct WASMFunctionInstance *wasm_function_inst_t;
  * @param error_buf output of the exception info
  * @param error_buf_size the size of the exception string
  *
- * @return return module loaded, NULL if failed
+ * @return return WASM module loaded, NULL if failed
  */
 wasm_module_t
-wasm_runtime_load(const uint8 *buf, uint32 size,
-                  char *error_buf, uint32 error_buf_size);
+wasm_runtime_load(const uint8_t *buf, uint32_t size,
+                  char *error_buf, uint32_t error_buf_size);
 
 /**
  * Unload a WASM module.
@@ -67,23 +108,25 @@ void
 wasm_runtime_unload(wasm_module_t module);
 
 /**
- * Instantiate a WASM module
+ * Instantiate a WASM module.
  *
  * @param module the WASM module to instantiate
- * @param argc the number of arguments
- * @param argv the arguments array
- * @param error_buf output of the exception info
- * @param error_buf_size the size of the exception string
+ * @param stack_size the default stack size of the module instance, a stack will be created
+ *     when function wasm_runtime_call_wasm() is called to run WASM function and the
+ *     exec_env argument passed to wasm_runtime_call_wasm() is NULL. That means this parameter is
+ *     ignored if exec_env is not NULL.
+ * @param error_buf buffer to output the error info if failed
+ * @param error_buf_size the size of the error buffer
  *
  * @return return the instantiated WASM module instance, NULL if failed
  */
 wasm_module_inst_t
 wasm_runtime_instantiate(const wasm_module_t module,
-                         int argc, char ** argv,
-                         char *error_buf, uint32 error_buf_size);
+                         uint32_t stack_size,
+                         char *error_buf, uint32_t error_buf_size);
 
 /**
- * Destroy a WASM module instance
+ * Deinstantiate a WASM module instance, destroy the resources.
  *
  * @param module_inst the WASM module instance to destroy
  */
@@ -91,114 +134,123 @@ void
 wasm_runtime_deinstantiate(wasm_module_inst_t module_inst);
 
 /**
- * Initialize the runtime environment (global locks,
- * supervisor instance etc.) of the VM.
+ * Load WASM module instance from AOT file.
+ *
+ * @param aot_file the AOT file of a WASM module
+ * @param aot_file_size the AOT file size
+ * @param error_buf buffer to output the error info if failed
+ * @param error_buf_size the size of the error buffer
+ *
+ * @return the instantiated WASM module instance, NULL if failed
  */
-bool
-wasm_runtime_init();
+wasm_module_inst_t
+wasm_runtime_load_aot(char* aot_file, uint32_t aot_file_size,
+                      char *error_buf, uint32_t error_buf_size);
 
 /**
- * Destroy the runtime environment (global locks,
- * supervisor instance etc.) of the VM.
+ * Lookup an exported function in the WASM module instance.
+ *
+ * @param module_inst the module instance
+ * @param name the name of the function
+ * @param signature the signature of the function, use "i32"/"i64"/"f32"/"f64"
+ *        to represent the type of i32/i64/f32/f64, e.g. "(i32i64)" "(i32)f32"
+ *
+ * @return the function instance found, if the module instance is loaded from AOT file,
+ *        the return value is the function pointer
+ */
+wasm_function_inst_t
+wasm_runtime_lookup_function(const wasm_module_inst_t module_inst,
+                             const char *name, const char *signature);
+
+/**
+ * Create execution environment.
+ *
+ * @param stack_size the stack size to execute a WASM function
+ *
+ * @return the execution environment
+ */
+wasm_exec_env_t
+wasm_runtime_create_exec_env(uint32_t stack_size);
+
+/**
+ * Destroy the execution environment.
+ *
+ * @param env the execution environment to destroy
  */
 void
-wasm_runtime_destroy();
+wasm_runtime_destory_exec_env(wasm_exec_env_t env);
 
 /**
- * Create a WASM VM instance with the given WASM module instance.
+ * Call the given WASM function of a WASM module instance with arguments (bytecode and AoT).
+ *
+ * @param module_inst the WASM module instance which the function belongs to
+ * @param exec_env the execution environment to call the function. If the module instance is created
+ *     by AoT mode, it is ignored and just set it to NULL. If the module instance is created by bytecode
+ *     mode and it is NULL, a temporary env object will be created
+ * @param function the function to be called
+ * @param argc the number of arguments
+ * @param argv the arguments.  If the function method has return value,
+ *   the first (or first two in case 64-bit return value) element of
+ *   argv stores the return value of the called WASM function after this
+ *   function returns.
+ *
+ * @return true if success, false otherwise and exception will be thrown,
+ *   the caller can call wasm_runtime_get_exception to get exception info.
+ */
+bool
+wasm_runtime_call_wasm(wasm_module_inst_t module_inst,
+                       wasm_exec_env_t exec_env,
+                       wasm_function_inst_t function,
+                       uint32_t argc, uint32_t argv[]);
+
+/**
+ * Get exception info of the WASM module instance.
  *
  * @param module_inst the WASM module instance
- * @param native_stack_size the stack size of WASM native stack
- * @param wasm_stack_size the stack size of WASM functions of
- * the new instance
- * @param start_routine start routine of the main thread
- * @param arg the instance argument that will be passed to
- * the start routine
- * @param cleanup_routine the optional cleanup routine for the
- * instance, which may be NULL
  *
- * @return the VM instance handle if succeeds, NULL otherwise
+ * @return the exception string
  */
-wasm_vm_instance_t
-wasm_runtime_create_instance(wasm_module_inst_t module_inst,
-                             uint32 native_stack_size,
-                             uint32 wasm_stack_size,
-                             void *(*start_routine)(void*), void *arg,
-                             void (*cleanup_routine)(void));
+const char*
+wasm_runtime_get_exception(wasm_module_inst_t module_inst);
 
 /**
- * Destroy the given VM instance. It can be called from any VM thread.
- * If there are alive threads of the instance, they will be terminated
- * mandatorily and then the cleanup routine is called if it's not NULL.
+ * Clear exception info of the WASM module instance.
  *
- * @param handle the handle of the instance to be destroyed
+ * @param module_inst the WASM module instance
  */
 void
-wasm_runtime_destroy_instance(wasm_vm_instance_t handle);
+wasm_runtime_clear_exception(wasm_module_inst_t module_inst);
 
 /**
- * Wait for the given VM instance to terminate.
- *
- * @param handle the VM instance to be waited for
- * @param mills wait millseconds to return
- */
-void
-wasm_runtime_wait_for_instance(wasm_vm_instance_t handle, int mills);
-
-/**
- * Execute start function of WASM module of current instance.
- *
- * @return true if the start function is called, false otherwise.
- */
-bool
-wasm_application_execute_start(void);
-
-/**
- * Find the unique main function from WASM module of current instance
+ * Find the unique main function from a WASM module instance
  * and execute that function.
  *
+ * @param module_inst the WASM module instance
  * @param argc the number of arguments
  * @param argv the arguments array
  *
  * @return true if the main function is called, false otherwise.
  */
 bool
-wasm_application_execute_main(int argc, char *argv[]);
-
-/**
- * Get current exception string.
- *
- * @return return exception string if exception is thrown, NULL otherwise.
- */
-const char*
-wasm_runtime_get_exception();
+wasm_application_execute_main(wasm_module_inst_t module_inst,
+                              int argc, char *argv[]);
 
 #ifdef WASM_ENABLE_REPL
 /**
  * Find the specified function in argv[0] from WASM module of current instance
  * and execute that function.
  *
+ * @param module_inst the WASM module instance
  * @param argc the number of arguments
  * @param argv the arguments array
  *
  * @return true if the specified function is called, false otherwise.
  */
 bool
-wasm_application_execute_func(int argc, char *argv[]);
+wasm_application_execute_func(wasm_module_inst_t module_inst,
+                              int argc, char *argv[]);
 #endif
 
-/**
- * Lookup a export function in the WASM module instance
- *
- * @param module_inst the module instance
- * @param name the name of the function
- * @param signature the signature of the function, use "i32"/"i64"/"f32"/"f64"
- *        to represent the type of i32/i64/f32/f64, e.g. "(i32i64)" "(i32)f32"
- */
-wasm_function_inst_t
-wasm_runtime_lookup_function(const wasm_module_inst_t module_inst,
-                             const char *name,
-                             const char *signature);
 
 #ifdef __cplusplus
 }
