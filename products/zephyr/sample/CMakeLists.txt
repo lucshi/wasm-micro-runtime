@@ -16,14 +16,15 @@ include_directories (${IWASM_ROOT}/runtime/include
 
 set (IWASM_SRCS ${IWASM_ROOT}/runtime/utils/wasm_hashmap.c
                 ${IWASM_ROOT}/runtime/utils/wasm_log.c
-                ${IWASM_ROOT}/runtime/gc/ems_alloc.c
-                ${IWASM_ROOT}/runtime/gc/ems_kfc.c
-                ${IWASM_ROOT}/runtime/gc/ems_hmu.c
+                ${IWASM_ROOT}/runtime/mem-mgt/ems_alloc.c
+                ${IWASM_ROOT}/runtime/mem-mgt/ems_kfc.c
+                ${IWASM_ROOT}/runtime/mem-mgt/ems_hmu.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_assert.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_definition.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_memory.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_math.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_dlfcn.c
+                ${IWASM_ROOT}/runtime/platform/zephyr/wasm_platform.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_platform_log.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm_thread.c
                 ${IWASM_ROOT}/runtime/platform/zephyr/wasm-native.c

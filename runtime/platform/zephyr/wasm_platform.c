@@ -1,7 +1,7 @@
 #include "wasm_platform.h"
 #include "ems_gc.h"
 
-#ifndef CONFIG_AEE
+#ifndef CONFIG_AEE_ENABLE
 static int
 _stdout_hook_iwasm(int c)
 {
@@ -14,7 +14,7 @@ extern void __stdout_hook_install(int (*hook)(int));
 
 int wasm_platform_init()
 {
-#ifndef CONFIG_AEE
+#ifndef CONFIG_AEE_ENABLE
   /* Enable printf() in Zephyr */
   __stdout_hook_install(_stdout_hook_iwasm);
 

@@ -169,6 +169,9 @@ typedef struct WASMModuleInstance {
   /* The exception buffer of wasm interpreter for current thread. */
   char cur_exception[128];
 
+  /* The thread data of the attaching thread */
+  void *thread_data;
+
   /* Main Thread */
   WASMThread main_tlr;
 } WASMModuleInstance;

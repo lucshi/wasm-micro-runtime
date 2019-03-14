@@ -222,6 +222,41 @@ void
 wasm_runtime_clear_exception(wasm_module_inst_t module_inst);
 
 /**
+ * Attach the current native thread to a WASM module instance.
+ * A native thread cannot be attached simultaneously to two WASM module
+ * instances. The WASM module instance will be attached to the native
+ * thread which it is instantiated in by default.
+ *
+ * @param module_inst the WASM module instance to attach
+ * @param thread_data the thread data that current native thread requires
+ *        the WASM module instance to store
+ *
+ * @return true if SUCCESS, false otherwise
+ */
+bool
+wasm_runtime_attach_current_thread(wasm_module_inst_t module_inst,
+                                   void *thread_data);
+
+/**
+ * Detach the current native thread from a WASM module instance.
+ *
+ * @param module_inst the WASM module instance to detach
+ */
+void
+wasm_runtime_detach_current_thread(wasm_module_inst_t module_inst);
+
+/**
+ * Get the thread data that the current native thread requires the WASM
+ * module instance to store when attaching.
+ *
+ * @param module_inst the WASM module instance
+ *
+ * @return the thread data stored when attaching
+ */
+void*
+wasm_runtime_get_curent_thread_data(wasm_module_inst_t module_inst);
+
+/**
  * Find the unique main function from a WASM module instance
  * and execute that function.
  *

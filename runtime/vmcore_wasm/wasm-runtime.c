@@ -78,9 +78,6 @@ wasm_runtime_call_wasm(WASMModuleInstance *module_inst,
                        WASMFunctionInstance *function,
                        unsigned argc, uint32 argv[])
 {
-  /* Set thread local root. */
-  wasm_runtime_set_tlr(&module_inst->main_tlr);
-
   if (!exec_env) {
     if (!module_inst->wasm_stack) {
       if (!(module_inst->wasm_stack =
@@ -922,6 +919,11 @@ wasm_runtime_instantiate(const WASMModule *module,
   module_inst->wasm_stack_size = stack_size;
   module_inst->main_tlr.module_inst = module_inst;
 
+  /* Bind thread data with current native thread:
+     set thread local root to current thread. */
+  wasm_runtime_set_tlr(&module_inst->main_tlr);
+  module_inst->main_tlr.handle = ws_self_thread();
+
   /* Execute start function */
   if (!execute_start_function(module_inst)) {
     const char *exception = wasm_runtime_get_exception(module_inst);
@@ -1046,3 +1048,26 @@ wasm_runtime_destory_exec_env(WASMExecEnv *env)
     wasm_free(env);
   }
 }
+
+bool
+wasm_runtime_attach_current_thread(WASMModuleInstance *module_inst,
+                                   void *thread_data)
+{
+  wasm_runtime_set_tlr(&module_inst->main_tlr);
+  module_inst->main_tlr.handle = ws_self_thread();
+  module_inst->thread_data = thread_data;
+  return true;
+}
+
+void
+wasm_runtime_detach_current_thread(WASMModuleInstance *module_inst)
+{
+  module_inst->thread_data = NULL;
+}
+
+void*
+wasm_runtime_get_curent_thread_data(WASMModuleInstance *module_inst)
+{
+  return module_inst->thread_data;
+}
+

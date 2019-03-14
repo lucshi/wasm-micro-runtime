@@ -11,9 +11,9 @@ GLOBAL_INCLUDES += ${IWASM_ROOT}/runtime/include \
 
 $(NAME)_SOURCES := ${IWASM_ROOT}/runtime/utils/wasm_hashmap.c \
                    ${IWASM_ROOT}/runtime/utils/wasm_log.c \
-                   ${IWASM_ROOT}/runtime/gc/ems_alloc.c \
-                   ${IWASM_ROOT}/runtime/gc/ems_kfc.c \
-                   ${IWASM_ROOT}/runtime/gc/ems_hmu.c \
+                   ${IWASM_ROOT}/runtime/mem-mgt/ems_alloc.c \
+                   ${IWASM_ROOT}/runtime/mem-mgt/ems_kfc.c \
+                   ${IWASM_ROOT}/runtime/mem-mgt/ems_hmu.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_assert.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_definition.c \
                    ${IWASM_ROOT}/runtime/platform/alios/wasm_memory.c \

@@ -131,7 +131,7 @@ iwasm_init(void)
   return tid ? true : false;
 }
 
-#ifndef CONFIG_AEE
+#ifndef CONFIG_AEE_ENABLE
 void main(void)
 {
   iwasm_init();
