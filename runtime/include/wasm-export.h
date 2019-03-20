@@ -144,7 +144,7 @@ wasm_runtime_deinstantiate(wasm_module_inst_t module_inst);
  * @return the instantiated WASM module instance, NULL if failed
  */
 wasm_module_inst_t
-wasm_runtime_load_aot(char* aot_file, uint32_t aot_file_size,
+wasm_runtime_load_aot(uint8_t *aot_file, uint32_t aot_file_size,
                       char *error_buf, uint32_t error_buf_size);
 
 /**

@@ -2293,7 +2293,7 @@ wasm_loader_prepare_bytecode(WASMModule *module, WASMFunction *func,
           stack_cell_num = (frame_csp - 1)->stack_cell_num;
           frame_ref = frame_ref_bottom + stack_cell_num;
           if ((frame_csp - 1)->block_type == BLOCK_TYPE_IF
-              && p < (frame_csp - 1)->else_addr) {
+              && p <= (frame_csp - 1)->else_addr) {
             p = (frame_csp - 1)->else_addr;
           }
           else {
