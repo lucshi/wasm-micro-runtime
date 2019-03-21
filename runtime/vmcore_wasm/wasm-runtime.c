@@ -1066,8 +1066,15 @@ wasm_runtime_detach_current_thread(WASMModuleInstance *module_inst)
 }
 
 void*
-wasm_runtime_get_curent_thread_data(WASMModuleInstance *module_inst)
+wasm_runtime_get_current_thread_data(WASMModuleInstance *module_inst)
 {
   return module_inst->thread_data;
+}
+
+WASMModuleInstance*
+wasm_runtime_load_aot(uint8_t *aot_file, uint32_t aot_file_size,
+                      char *error_buf, uint32_t error_buf_size)
+{
+  return NULL;
 }
 
