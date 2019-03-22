@@ -34,6 +34,9 @@
 extern "C" {
 #endif
 
+
+#define WASM_DEFAULT_WASM_STACK_SIZE (8 * 1024)
+
 typedef struct WASMMemoryInstance {
   /* Current page count */
   uint32 cur_page_count;

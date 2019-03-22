@@ -41,27 +41,6 @@
 
 
 static WASMFunctionInstance*
-resolve_post_instantiate_function(const WASMModuleInstance *module_inst)
-{
-  uint32 i;
-  for (i = 0; i < module_inst->export_func_count; i++)
-    if (!strcmp(module_inst->export_functions[i].name, "__post_instantiate"))
-      return module_inst->export_functions[i].function;
-  return NULL;
-}
-
-static bool
-check_post_instantiate_func_type(const WASMType *type)
-{
-  if (!(type->param_count == 0 && type->result_count == 0)) {
-    LOG_ERROR("WASM execute application failed: "
-              "invalid __post_instantiate function type.\n");
-    return false;
-  }
-  return true;
-}
-
-static WASMFunctionInstance*
 resolve_main_function(const WASMModuleInstance *module_inst)
 {
   uint32 i;
@@ -103,14 +82,8 @@ bool
 wasm_application_execute_main(WASMModuleInstance *module_inst,
                               int argc, char *argv[])
 {
-  WASMFunctionInstance *func_post_instantiate =
-    resolve_post_instantiate_function(module_inst);
   WASMFunctionInstance *func = resolve_main_function(module_inst);
   uint32 argc1 = 0, argv1[2] = { 0 };
-
-  if (func_post_instantiate &&
-      !check_post_instantiate_func_type(func_post_instantiate->u.func->func_type))
-    return false;
 
   if (!func || func->is_import_func)
     return false;
@@ -136,12 +109,6 @@ wasm_application_execute_main(WASMModuleInstance *module_inst,
       argv1[0] = memory->thunk_argc;
       argv1[1] = memory->thunk_argv_offsets - memory->memory_data;
     }
-  }
-
-  if (func_post_instantiate) {
-    if (!wasm_runtime_call_wasm(module_inst, NULL,
-                                func_post_instantiate, 0, NULL))
-      return false;
   }
 
   return wasm_runtime_call_wasm(module_inst, NULL, func, argc1, argv1);

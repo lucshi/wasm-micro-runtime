@@ -249,12 +249,10 @@ wasm_runtime_detach_current_thread(wasm_module_inst_t module_inst);
  * Get the thread data that the current native thread requires the WASM
  * module instance to store when attaching.
  *
- * @param module_inst the WASM module instance
- *
  * @return the thread data stored when attaching
  */
 void*
-wasm_runtime_get_curent_thread_data(wasm_module_inst_t module_inst);
+wasm_runtime_get_current_thread_data();
 
 /**
  * Find the unique main function from a WASM module instance

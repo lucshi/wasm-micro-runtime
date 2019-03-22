@@ -688,6 +688,32 @@ void
 wasm_runtime_deinstantiate(WASMModuleInstance *module_inst);
 
 static bool
+execute_post_inst_function(WASMModuleInstance *module_inst)
+{
+  WASMFunctionInstance *post_inst_func = NULL;
+  WASMType *post_inst_func_type;
+  uint32 i;
+
+  for (i = 0; i < module_inst->export_func_count; i++)
+    if (!strcmp(module_inst->export_functions[i].name, "__post_instantiate")) {
+      post_inst_func = module_inst->export_functions[i].function;
+      break;
+    }
+
+  if (!post_inst_func)
+    /* Not found */
+    return true;
+
+  post_inst_func_type = post_inst_func->u.func->func_type;
+  if (post_inst_func_type->param_count != 0
+      || post_inst_func_type->result_count != 0)
+    /* Not a valid function type, ignore it */
+    return true;
+
+  return wasm_runtime_call_wasm(module_inst, NULL, post_inst_func, 0, NULL);
+}
+
+static bool
 execute_start_function(WASMModuleInstance *module_inst)
 {
   WASMFunctionInstance *func = module_inst->start_function;
@@ -916,6 +942,8 @@ wasm_runtime_instantiate(const WASMModule *module,
   module_inst->module_type = Wasm_Module_Bytecode;
 
   /* Initialize the thread related data */
+  if (stack_size == 0)
+    stack_size = WASM_DEFAULT_WASM_STACK_SIZE;
   module_inst->wasm_stack_size = stack_size;
   module_inst->main_tlr.module_inst = module_inst;
 
@@ -923,6 +951,15 @@ wasm_runtime_instantiate(const WASMModule *module,
      set thread local root to current thread. */
   wasm_runtime_set_tlr(&module_inst->main_tlr);
   module_inst->main_tlr.handle = ws_self_thread();
+
+  /* Execute __post_instantiate function */
+  if (module_inst->dylink_flag
+      && !execute_post_inst_function(module_inst)) {
+    const char *exception = wasm_runtime_get_exception(module_inst);
+    wasm_printf("%s\n", exception);
+    wasm_runtime_deinstantiate(module_inst);
+    return NULL;
+  }
 
   /* Execute start function */
   if (!execute_start_function(module_inst)) {
@@ -1018,9 +1055,9 @@ PackageType
 get_package_type(const uint8 *buf, uint32 size)
 {
   if (buf && size > 4) {
-    if (buf[0] == '\0' && buf[1] == 'A' && buf[1] == 'S' && buf[2] == 'M')
+    if (buf[0] == '\0' && buf[1] == 'a' && buf[2] == 's' && buf[3] == 'm')
       return Wasm_Module_Bytecode;
-    if (buf[0] == '\0' && buf[1] == 'A' && buf[1] == 'O' && buf[2] == 'T')
+    if (buf[0] == '\0' && buf[1] == 'a' && buf[2] == 'o' && buf[3] == 't')
       return Wasm_Module_AoT;
   }
   return Package_Type_Unknown;
@@ -1066,15 +1103,20 @@ wasm_runtime_detach_current_thread(WASMModuleInstance *module_inst)
 }
 
 void*
-wasm_runtime_get_current_thread_data(WASMModuleInstance *module_inst)
+wasm_runtime_get_current_thread_data()
 {
-  return module_inst->thread_data;
+  WASMThread *tlr = wasm_runtime_get_self();
+  return tlr->module_inst->thread_data;
 }
 
 WASMModuleInstance*
 wasm_runtime_load_aot(uint8_t *aot_file, uint32_t aot_file_size,
                       char *error_buf, uint32_t error_buf_size)
 {
+  (void)aot_file;
+  (void)aot_file_size;
+  (void)error_buf;
+  (void)error_buf_size;
   return NULL;
 }
 
