@@ -15,28 +15,28 @@
 //
 //   Author: Ivan Volosyuk
 //
-	.text
-	.align 2
+    .text
+    .align 2
 .globl invokeNative
-	.type	invokeNative, @function
+    .type   invokeNative, @function
 invokeNative:
 
-	push	%ebp
-	movl	%esp, %ebp
-	push	%ecx
-	movl	8(%ebp), %eax           ; eax = argv
-	movl	12(%ebp), %ecx          ; ecx = argc
-	test	%ecx, %ecx
-	je	restore_ecx             /* if ecx == 0, skip pushing arguments */
-	leal	-4(%eax,%ecx,4), %eax   ; eax = eax + ecx * 4 - 4
-	subl	%esp, %eax              ; eax = eax - esp
+    push    %ebp
+    movl    %esp, %ebp
+    push    %ecx
+    movl    8(%ebp), %eax           /* eax = argv */
+    movl    12(%ebp), %ecx          /* ecx = argc */
+    test    %ecx, %ecx
+    je      restore_ecx             /* if ecx == 0, skip pushing arguments */
+    leal    -4(%eax,%ecx,4), %eax   /* eax = eax + ecx * 4 - 4 */
+    subl    %esp, %eax              /* eax = eax - esp */
 1:
-	push	0(%esp,%eax)
-	loop 1b                         /* loop ecx counts */
+    push    0(%esp,%eax)
+    loop    1b                      /* loop ecx counts */
 restore_ecx:
-	movl	-4(%ebp), %ecx          /* restore ecx */
-	movl	16(%ebp), %eax          ; eax = func_ptr
-	call	*%eax
-	leave
-	ret
+    movl    -4(%ebp), %ecx          /* restore ecx */
+    movl    16(%ebp), %eax          /* eax = func_ptr */
+    call    *%eax
+    leave
+    ret
 

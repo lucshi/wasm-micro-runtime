@@ -52,9 +52,12 @@ add_executable (iwasm main.c)
 
 target_link_libraries (iwasm vmlib -lm -ldl -lpthread)
 
-add_library (libiwasm SHARED main.c)
+add_library (libiwasm SHARED
+             ${PLATFORM_LIB_SOURCE}
+             ${UTILS_LIB_SOURCE}
+             ${VMCORE_LIB_SOURCE})
 
 set_target_properties (libiwasm PROPERTIES OUTPUT_NAME iwasm)
 
-target_link_libraries (libiwasm vmlib -lm -ldl -lpthread)
+target_link_libraries (libiwasm -lm -ldl -lpthread)
 
