@@ -1333,6 +1333,9 @@ wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_bu
 
   memset(module, 0, sizeof(WASMModule));
 
+  /* Set start_function to -1, means no start function */
+  module->start_function = (uint32)-1;
+
   if (!(module->const_str_set = wasm_hash_map_create(32, false,
           (HashFunc)wasm_string_hash,
           (KeyEqualFunc)wasm_string_equal,
