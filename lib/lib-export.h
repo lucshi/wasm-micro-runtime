@@ -11,7 +11,7 @@ typedef struct NativeSymbol {
 } NativeSymbol;
 
 #define EXPORT_WASM_API(symbol)  {#symbol, symbol}
-#define EXPORT_WASM_API2(symbol) {#symbol, symbol##_wrapper}
+#define EXPORT_WASM_API2(symbol) {#symbol, symbol_##wrapper}
 
 #ifdef __cplusplus
 }
