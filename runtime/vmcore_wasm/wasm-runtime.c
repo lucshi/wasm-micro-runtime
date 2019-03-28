@@ -928,7 +928,7 @@ wasm_runtime_instantiate(const WASMModule *module,
     }
   }
 
-  if (module->start_function) {
+  if (module->start_function != (uint32)-1) {
     wasm_assert(module->start_function >= module->import_function_count);
     module_inst->start_function =
       &module_inst->functions[module->start_function];
