@@ -44,17 +44,13 @@ print_help()
 {
   wasm_printf("Usage: iwasm [-options] wasm_file [args...]\n");
   wasm_printf("options:\n");
-  /*
   wasm_printf("  -f|--function name     Specify function name to run "
               "in module rather than main\n");
-  */ /* TODO */
 #if WASM_ENABLE_LOG != 0
   wasm_printf("  -v=X                   Set log verbose level (0 to 2, default is 1), larger level with more log\n");
 #endif
-#ifdef WASM_ENABLE_REPL
   wasm_printf("  --repl                 Start a very simple REPL (read-eval-print-loop) mode \n"
               "                         that runs commands in the form of `FUNC ARG...`\n");
-#endif
 
   return 1;
 }
@@ -70,7 +66,18 @@ app_instance_main(wasm_module_inst_t module_inst)
   return NULL;
 }
 
-#ifdef WASM_ENABLE_REPL
+static void*
+app_instance_func(wasm_module_inst_t module_inst, const char *func_name)
+{
+  const char *exception;
+
+  wasm_application_execute_func(module_inst, func_name,
+                                app_argc - 1, app_argv + 1);
+  if ((exception = wasm_runtime_get_exception(module_inst)))
+    wasm_printf("%s\n", exception);
+  return NULL;
+}
+
 /**
  * Split a space separated strings into an array of strings
  * Returns NULL on failure
@@ -100,7 +107,7 @@ split_string(char *str, int *count)
 }
 
 static void*
-app_instance_func(wasm_module_inst_t module_inst)
+app_instance_repl(wasm_module_inst_t module_inst)
 {
   char *cmd = NULL;
   size_t len = 0;
@@ -120,14 +127,14 @@ app_instance_func(wasm_module_inst_t module_inst)
       break;
     }
     if (app_argc != 0) {
-      wasm_application_execute_func(module_inst, app_argc, app_argv);
+      wasm_application_execute_func(module_inst, app_argv[0],
+                                    app_argc - 1, app_argv + 1);
     }
     free(app_argv);
   }
   free(cmd);
   return NULL;
 }
-#endif /* WASM_ENABLE_REPL */
 
 int
 main(int argc, char *argv[])
@@ -142,9 +149,7 @@ main(int argc, char *argv[])
 #if WASM_ENABLE_LOG != 0
   int log_verbose_level = 1;
 #endif
-#ifdef WASM_ENABLE_REPL
   bool is_repl_mode = false;
-#endif
 
   /* Process options.  */
   for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -164,10 +169,8 @@ main(int argc, char *argv[])
         return print_help ();
     }
 #endif
-#ifdef WASM_ENABLE_REPL
     else if (!strcmp(argv[0], "--repl"))
       is_repl_mode = true;
-#endif
     else
       return print_help();
   }
@@ -197,11 +200,6 @@ main(int argc, char *argv[])
     goto fail2;
   }
 
-#ifdef WASM_ENABLE_REPL
-  argc = 0;
-  argv = NULL;
-#endif
-
   /* instantiate the module */
   if (!(wasm_module_inst = wasm_runtime_instantiate(wasm_module,
                                                     1024 * 1024,
@@ -211,14 +209,12 @@ main(int argc, char *argv[])
     goto fail3;
   }
 
-#ifdef WASM_ENABLE_REPL
-  if (is_repl_mode) {
-    app_instance_func(wasm_module_inst);
-  } else
-#endif
-  {
+  if (is_repl_mode)
+    app_instance_repl(wasm_module_inst);
+  else if (func_name)
+    app_instance_func(wasm_module_inst, func_name);
+  else
     app_instance_main(wasm_module_inst);
-  }
 
   /* destroy the module instance */
   wasm_runtime_deinstantiate(wasm_module_inst);
@@ -234,8 +230,6 @@ fail2:
 fail1:
   /* destroy runtime environment */
   wasm_runtime_destroy();
-
-  (void)func_name;
   return 0;
 }
 

@@ -510,7 +510,6 @@ _emscripten_memcpy_big_wrapper(WASMThread *self, uint32 *args)
 }
 #endif
 
-#ifdef WASM_ENABLE_REPL
 static void
 print_i32_wrapper(WASMThread *self, uint32 *args)
 {
@@ -522,7 +521,6 @@ print_wrapper(WASMThread *self, uint32 *args)
 {
   wasm_printf("%d\n", *args);
 }
-#endif
 
 /* TODO: add function parameter/result types check */
 #define REG_NATIVE_FUNC(module_name, func_name) \
@@ -592,10 +590,8 @@ static WASMNativeFuncDef native_func_defs[] = {
   REG_NATIVE_FUNC(env, __syscall4),
   REG_NATIVE_FUNC(env, __syscall5),
 #endif
-#ifdef WASM_ENABLE_REPL
   REG_NATIVE_FUNC(spectest, print_i32),
   REG_NATIVE_FUNC(spectest, print),
-#endif
 };
 
 void*
@@ -643,9 +639,7 @@ static WASMNativeGlobalDef native_global_defs[] = {
   { "global", "Infinity", false, .global_data.u64 = 0x7FF0000000000000LL },
 #endif
 
-#ifdef WASM_ENABLE_REPL
   { "spectest", "global_i32", false, .global_data.u32 = 666}
-#endif
 };
 
 bool

@@ -24,10 +24,6 @@
  */
 
 #include <errno.h>
-#ifdef WASM_ENABLE_REPL
-#include <ieee754.h>
-#include <math.h>
-#endif
 #include <stdlib.h>
 #include <string.h>
 #include "wasm.h"
@@ -114,9 +110,8 @@ wasm_application_execute_main(WASMModuleInstance *module_inst,
   return wasm_runtime_call_wasm(module_inst, NULL, func, argc1, argv1);
 }
 
-#ifdef WASM_ENABLE_REPL
 static WASMFunctionInstance*
-resolve_function(const WASMModuleInstance *module_inst, char *name)
+resolve_function(const WASMModuleInstance *module_inst, const char *name)
 {
   uint32 i;
   for (i = 0; i < module_inst->export_func_count; i++)
@@ -125,9 +120,61 @@ resolve_function(const WASMModuleInstance *module_inst, char *name)
   return NULL;
 }
 
+union ieee754_float {
+  float f;
+
+  /* This is the IEEE 754 single-precision format.  */
+  union {
+    struct {
+      unsigned int negative:1;
+      unsigned int exponent:8;
+      unsigned int mantissa:23;
+    } ieee_big_endian;
+    struct {
+      unsigned int mantissa:23;
+      unsigned int exponent:8;
+      unsigned int negative:1;
+    } ieee_little_endian;
+  } ieee;
+};
+
+union ieee754_double {
+  double d;
+
+  /* This is the IEEE 754 double-precision format.  */
+  union {
+    struct {
+      unsigned int negative:1;
+      unsigned int exponent:11;
+      /* Together these comprise the mantissa.  */
+      unsigned int mantissa0:20;
+      unsigned int mantissa1:32;
+    } ieee_big_endian;
+
+    struct {
+      /* Together these comprise the mantissa.  */
+      unsigned int mantissa1:32;
+      unsigned int mantissa0:20;
+      unsigned int exponent:11;
+      unsigned int negative:1;
+    } ieee_little_endian;
+  } ieee;
+};
+
+static bool
+__is_little_endian()
+{
+  union w {
+    int a;
+    char b;
+  } c;
+  c.a = 1;
+  return (c.b == 1);
+}
+
 bool
 wasm_application_execute_func(WASMModuleInstance *module_inst,
-                              int argc, char *argv[])
+                              const char *name, int argc, char *argv[])
 {
   WASMFunctionInstance *func;
   WASMType *type;
@@ -135,14 +182,18 @@ wasm_application_execute_func(WASMModuleInstance *module_inst,
   int32 i, p;
   const char *exception;
 
-  wasm_assert(argc >= 1);
-  func = resolve_function(module_inst, argv[0]);
-  if (!func || func->is_import_func)
+  wasm_assert(argc >= 0);
+  func = resolve_function(module_inst, name);
+  if (!func || func->is_import_func) {
+    LOG_ERROR("Wasm lookup function %s failed.\n", name);
     return false;
+  }
 
   type = func->u.func->func_type;
-  if (type->param_count != (uint32)(argc - 1))
+  if (type->param_count != (uint32)argc) {
+    LOG_ERROR("Wasm prepare param failed: invalid param count.\n");
     return false;
+  }
 
   argc1 = func->param_cell_num;
   argv1 = wasm_malloc(sizeof(uint32) * (argc1 > 2 ? argc1 : 2));
@@ -152,14 +203,14 @@ wasm_application_execute_func(WASMModuleInstance *module_inst,
   }
 
   /* Parse arguments */
-  for (i = 1, p = 0; i < argc; i++) {
+  for (i = 0, p = 0; i < argc; i++) {
     char *endptr;
     wasm_assert(argv[i] != NULL);
     if (argv[i][0] == '\0') {
       LOG_ERROR("Wasm prepare param failed: invalid num (%s).\n", argv[i]);
       goto fail;
     }
-    switch (type->types[i - 1]) {
+    switch (type->types[i]) {
       case VALUE_TYPE_I32:
         argv1[p++] = strtoul(argv[i], &endptr, 0);
         break;
@@ -183,7 +234,10 @@ wasm_application_execute_func(WASMModuleInstance *module_inst,
               union ieee754_float u;
               sig = strtoul(endptr + 1, &endptr, 0);
               u.f = f32;
-              u.ieee.mantissa = sig;
+              if (__is_little_endian())
+                u.ieee.ieee_little_endian.mantissa = sig;
+              else
+                u.ieee.ieee_big_endian.mantissa = sig;
               f32 = u.f;
             }
           }
@@ -203,8 +257,14 @@ wasm_application_execute_func(WASMModuleInstance *module_inst,
               union ieee754_double ud;
               sig = strtoull(endptr + 1, &endptr, 0);
               ud.d = u.val;
-              ud.ieee.mantissa0 = sig >> 32;
-              ud.ieee.mantissa1 = sig;
+              if (__is_little_endian()) {
+                ud.ieee.ieee_little_endian.mantissa0 = sig >> 32;
+                ud.ieee.ieee_little_endian.mantissa1 = sig;
+              }
+              else {
+                ud.ieee.ieee_big_endian.mantissa0 = sig >> 32;
+                ud.ieee.ieee_big_endian.mantissa1 = sig;
+              }
               u.val = ud.d;
             }
           }
@@ -265,7 +325,6 @@ fail:
   wasm_free(argv1);
   return false;
 }
-#endif /* WASM_ENABLE_REPL */
 
 static bool
 check_type(uint8 type, const char *p)

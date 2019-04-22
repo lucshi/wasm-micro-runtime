@@ -268,11 +268,11 @@ bool
 wasm_application_execute_main(wasm_module_inst_t module_inst,
                               int argc, char *argv[]);
 
-#ifdef WASM_ENABLE_REPL
 /**
  * Find the specified function in argv[0] from WASM module of current instance
  * and execute that function.
  *
+ * @param name the name of the function to execute
  * @param module_inst the WASM module instance
  * @param argc the number of arguments
  * @param argv the arguments array
@@ -281,8 +281,7 @@ wasm_application_execute_main(wasm_module_inst_t module_inst,
  */
 bool
 wasm_application_execute_func(wasm_module_inst_t module_inst,
-                              int argc, char *argv[]);
-#endif
+                              const char *name, int argc, char *argv[]);
 
 
 #ifdef __cplusplus
